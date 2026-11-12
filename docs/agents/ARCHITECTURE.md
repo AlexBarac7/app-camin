@@ -6,8 +6,9 @@
 <!-- graffino-agentic:end -->
 
 ## Overview
-The repository contains agent instructions only. No application code exists yet.
-Product scope, stack, runtime, and integrations remain open questions.
+Local technical foundation: React/Vite/Tailwind frontend, modular Express backend
+and PostgreSQL using pg, coordinated by Docker Compose. Product behavior remains
+blocked on interviews and approved rules. No business tables or seed data exist.
 
 ## Parts
 | Part | Path | Responsibility | Talks to |
@@ -16,18 +17,30 @@ Product scope, stack, runtime, and integrations remain open questions.
 | Knowledge ledger | `docs/agents/` | Decisions, patterns, contracts, and questions | Working rules |
 | Workflow skills | `.claude/skills/` | Planning and implementation instructions | Agent definitions |
 | Agent definitions | `.claude/agents/` | Planner and builder roles | Workflow skills |
+| Frontend | `frontend/` | English service status page | REST API through Vite proxy |
+| Backend | `backend/src/` | Configuration, database pool, health module | PostgreSQL |
+| Local runtime | `compose.yaml` | Three services, loopback ports, persistent volume | Docker |
 
 ## Data flow
-No application data flow exists yet.
+Browser :5173 → Vite /api proxy → backend :3000 → PostgreSQL db:5432.
+Health API behavior is owned by C-001 in CONTRACTS.md; consumers are the frontend,
+backend tests and Compose healthcheck. Future modules belong alongside health.
 
 ## State and storage
-No application storage has been selected.
+PostgreSQL 17 stores data in the named postgres_data volume, mounted at
+/var/lib/postgresql/data. No migrations or business schema exist yet.
 
 ## Configuration
-No application configuration exists.
+.env.example documents fixed local ports 5173/3000/5432 and demonstrative database
+identifiers. Local .env is ignored. Passwords are supplied through the shell
+environment and never written to configuration files. No credentials reach React.
+Database connection/query limits and the total readiness deadline are 4 seconds.
 
 ## Build, deploy, runtime
-Not configured. See `AGENTS.md` sections 2 and 5.
+See README.md for verified local commands. Compose uses development servers;
+frontend npm run build produces static assets. Railway is a future target only.
 
 ## Boundaries
-No application contracts or integrations exist yet.
+No authentication, reservations, live queue, quotas, no-show policies, maintenance
+tickets, photo storage or push integrations are implemented. No Railway deployment
+configuration or authorization exists yet.

@@ -76,38 +76,59 @@ without new evidence. A rejected proposal is added there with the reason.
 <!-- graffino-agentic:end -->
 
 ## 1. What this repo is
-`app-camin` is a new repository. Application scope and users are not defined yet.
-See `docs/agents/OPEN-QUESTIONS.md` before choosing application behavior or technology.
+`app-camin` is a shared resource management application for a student residence,
+co-working hub or residential building. Only the technical foundation exists.
+No interviews or business policies have been supplied. See
+`docs/agents/OPEN-QUESTIONS.md` before implementing product behavior.
 
 ## 2. Stack and commands
-No application stack or scripts exist yet. Python 3 runs the ledger checker.
+JavaScript: React + Vite + Tailwind CSS in `frontend/`; Node.js + Express + pg
+in `backend/`; PostgreSQL with Docker Compose. Fixed local ports: 5173, 3000, 5432.
+Read README.md for shell-only password configuration and startup instructions.
 
 ```bash
 python3 docs/agents/tools/ledger-lint.py --fix
 python3 docs/agents/tools/ledger-lint.py
+npm --prefix backend ci
+npm --prefix backend test
+npm --prefix frontend ci
+npm --prefix frontend run build
+docker compose up --build -d --wait
 ```
 
-Install, run, build, test, lint, and screenshot commands: not run; no application exists.
-Git fetch succeeded during setup. Git pull could not run: no remote or upstream exists.
-Until an upstream exists, report this limitation and work from the local repository.
+Backend tests and frontend build run locally; Docker verification is described in
+README.md. A browser/screenshot tool is not available in the current environment;
+visual acceptance remains manual. Git fetch and fast-forward pull now succeed.
+Do not print resolved Compose configuration: it contains the shell-supplied password.
 
 ## 3. Layout
 - `.claude/skills/`: plan and build workflows.
 - `.claude/agents/`: planner and builder instructions.
 - `docs/agents/`: knowledge ledger, architecture, guide, and checker.
 - `CONTEXT.md`: project vocabulary once defined.
+- `frontend/`: technical status page and Vite API proxy.
+- `backend/src/modules/`: route modules; only `health/` exists initially.
+- `backend/src/config.js`, `db.js`: configuration and PostgreSQL pool.
+- `compose.yaml`: development services and persistent database volume.
+- `docs/design/DESIGN.md`: minimal status-page guardrails.
 
 ## 4. Rules for this repo
 - The user selected the base setup without Team, ClickUp, or Slack addons.
-- No application behavior, stack, or domain terminology has been approved yet.
-- If a visual interface is confirmed, add design guardrails before UI implementation.
+- Stack and technical health behavior were approved in conversation on 2026-11-12;
+  see Q-002, Q-003 and C-001. DECISIONS.md is deferred to the owner's next review.
+- Product terminology and business rules remain unconfirmed; no fabricated evidence.
+- Mark temporary product values as demonstrative. Do not seed invented business data.
+- PostgreSQL readiness has a total 4-second deadline.
+- Follow docs/design/DESIGN.md for the technical page; approve future product designs first.
 
 ## 5. Release
-The initial local branch is `main`. No commits, remote, or release process exist yet.
+The default branch is `main`; a remote/upstream now exists. Railway is the intended
+future deployment target; production configuration and release process remain open.
 Commits, merges, pushes, tags, releases, and deployments require the user's authorization.
 
 ## 6. Definition of done
 - The ledger checker passes.
 - New documentation has no unresolved template placeholders.
-- Application checks are defined when the stack is approved.
+- Backend tests and frontend build pass; Compose/API/SQL checks are reported honestly.
+- Visual checks are manual until browser automation is available.
 - New practices are candidate patterns; unknown facts are open questions.

@@ -6,5 +6,16 @@
 <!-- graffino-agentic:end -->
 
 ## Index
+- PATTERN-001 · Separate app composition from process startup · candidate
+
+---
+
+## PATTERN-001 · Separate app composition from process startup
+- **Status:** candidate
+- **How:** Keep Express composition injectable and route modules under src/modules;
+  isolate environment loading, the PostgreSQL pool and listening in separate files.
+  Route tests can supply a database check without a real database server.
+- **Example:** backend/src/app.js; backend/src/server.js;
+  backend/src/modules/health/health.routes.js; backend/test/health.test.js.
 
 
