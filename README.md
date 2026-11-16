@@ -1,7 +1,7 @@
 # app-camin
 
 A shared resource management application for a student residence, co-working hub,
-or residential building. The owner has requested reservations for shared resources
+or residential building. Planned capabilities include reservations for shared resources
 (washing machines, study rooms, kitchens, gyms), a live queue, fair-use quotas,
 no-show handling, maintenance tickets with photos, and push notifications.
 
@@ -211,6 +211,26 @@ No business durations, quotas, penalties, priorities, or interview evidence are
 assumed. Any future temporary product values must be explicitly marked
 **demonstrative**. No delivery dates are implied by this roadmap.
 
+## Verification record — 2026-11-16
+
+- Backend: all 5 existing tests passed; no test assertions were changed.
+- Frontend: production build passed with Vite 7.3.8.
+- Dependency installation: `npm ci` completed for both applications.
+  Initial sandbox attempts failed with `EAI_AGAIN registry.npmjs.org`;
+  authorized reruns succeeded. Backend tests initially reported
+  `ERR_TEST_FAILURE` in the sandbox and passed with authorized local socket access.
+- Ledger checker (including `--fix`) and `git diff --check` passed.
+- GitHub Actions: the CI workflow was implemented and reviewed locally.
+  Execution on GitHub has not yet been verified.
+- Local runtime: container inspection showed PostgreSQL healthy and the backend
+  unhealthy. PostgreSQL logs identified password authentication failure.
+  Application recovery was confirmed manually after correcting the password.
+  API/SQL commands and the full manual acceptance procedure were not repeated
+  as part of this verification.
+- Browser: a supplied screenshot showed the status page during the
+  authentication failure. No automated browser, keyboard, or viewport checks
+  were performed.
+
 ## Verification record — 2026-11-12
 
 - Backend: 5 tests passed; the silent TCP peer test completed in approximately 4.01 s.
@@ -234,5 +254,5 @@ assumed. Any future temporary product values must be explicitly marked
 - Browser rendering, keyboard/viewport checks and screenshots were not performed:
   no browser automation tool or installed browser was available. HTTP/build checks
   do not replace the manual acceptance procedure above.
-- The owner subsequently confirmed that all tests, including the manual acceptance
-  checks, passed. This is owner-reported verification; no automated screenshot was taken.
+- Subsequent manual verification confirmed that all acceptance checks passed.
+  No automated screenshot was taken.
