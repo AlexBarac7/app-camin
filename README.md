@@ -146,6 +146,35 @@ Start only `db` through Compose, then run `npm --prefix backend run dev` and
 `npm --prefix frontend run dev` in separate terminals. Do not run competing
 container and host servers on the same ports.
 
+## Continuous integration
+
+The [GitHub Actions workflow](.github/workflows/ci.yml) checks code changes on
+pushes, pull requests targeting `main`, and manual requests. Each run uses a
+temporary Linux environment with Node.js 22 and Python 3.
+
+| Check | Purpose |
+| --- | --- |
+| Dependency installation | Install frontend and backend dependencies from committed lockfiles using `npm ci`. |
+| Backend tests | Verify health responses, readiness behavior, configuration validation, and database timeout handling. |
+| Frontend build | Confirm that the React application compiles successfully for production. |
+| Documentation validation | Check knowledge ledger consistency without modifying files. |
+
+A failed command marks the workflow as failed and prevents subsequent steps from
+running. Execution logs are available in GitHub's **Actions** tab, with check
+results also displayed on pull requests.
+
+The checks require no real business data, database credentials, or running
+PostgreSQL instance. Backend tests use controlled test doubles and a local TCP
+server. Workflow permissions are limited to read access to repository contents;
+no deployment credentials are configured.
+
+A successful run confirms only that the configured checks passed for that
+revision. It does not verify browser rendering or accessibility, Docker service
+integration with PostgreSQL, unconfirmed business rules, or production readiness.
+Those areas require separate verification. The workflow does not merge changes,
+publish releases, or deploy the application. It becomes available on GitHub after
+the workflow file is pushed; manual execution requires it on the default branch.
+
 ## Stop and troubleshoot
 
 ```bash
