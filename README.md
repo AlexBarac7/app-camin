@@ -220,8 +220,7 @@ assumed. Any future temporary product values must be explicitly marked
   authorized reruns succeeded. Backend tests initially reported
   `ERR_TEST_FAILURE` in the sandbox and passed with authorized local socket access.
 - Ledger checker (including `--fix`) and `git diff --check` passed.
-- GitHub Actions: the CI workflow was implemented and reviewed locally.
-  Execution on GitHub has not yet been verified.
+- All CI checks passed on GitHub Actions.
 - Local runtime: container inspection showed PostgreSQL healthy and the backend
   unhealthy. PostgreSQL logs identified password authentication failure.
   Application recovery was confirmed manually after correcting the password.
