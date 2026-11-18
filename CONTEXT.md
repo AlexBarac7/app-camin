@@ -5,4 +5,7 @@
 > of speech given. Never swap in a synonym; never use a word on an _Avoid_ line.
 <!-- graffino-agentic:end -->
 
-No domain terms have been defined. See `docs/agents/OPEN-QUESTIONS.md`.
+**Reservation** (noun) — The act of booking a shared resource for a specific time slot.
+
+**Live-queue** (noun) — A real-time record of who is waiting to use a shared resource.
+_Avoid_: waiting list
