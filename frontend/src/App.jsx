@@ -1,81 +1,109 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+import { ServiceStatus } from './ServiceStatus.jsx';
 
-const initial = { state: 'checking', message: 'Checking service…' };
+const categories = ['Toate', 'Spălătorie', 'Bucătărie', 'Sală de studiu'];
+const resources = [
+  { name: 'Mașină de spălat 1', category: 'Spălătorie', available: true },
+  { name: 'Mașină de spălat 2', category: 'Spălătorie', available: false },
+  { name: 'Bucătărie comună', category: 'Bucătărie', available: true },
+  { name: 'Sală de studiu', category: 'Sală de studiu', available: false },
+];
 
-async function checkService(path, signal) {
-  try {
-    const response = await fetch(path, { signal, cache: 'no-store' });
-    const result = await response.json();
-    if (!response.ok || result.status !== 'ok') {
-      return { state: 'error', message: result.message || 'Service check failed.' };
-    }
-    return { state: 'success', message: result.message };
-  } catch {
-    return { state: 'error', message: 'Unable to reach the service. Check that Docker Compose is running, then try again.' };
-  }
-}
+const categoryIcons = {
+  Spălătorie: '🧺',
+  Bucătărie: '🍳',
+  'Sală de studiu': '📚',
+};
 
-function StatusCard({ title, result }) {
-  const labels = { checking: 'Checking', success: 'Connected', error: 'Unavailable' };
-  const colors = { checking: 'bg-slate-100 text-slate-700', success: 'bg-emerald-100 text-emerald-900', error: 'bg-red-100 text-red-900' };
+function ResidentHeader() {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <span className={`rounded-full px-3 py-1 text-sm font-semibold ${colors[result.state]}`}>{labels[result.state]}</span>
+    <header className="border-b border-teal-950/10">
+      <div className="mx-auto max-w-6xl px-5 py-5">
+        <a href="/" className="rounded text-lg font-bold hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-800">
+          app-camin
+        </a>
       </div>
-      <p className="mt-4 text-sm leading-6 text-slate-600">{result.message}</p>
-    </section>
+    </header>
   );
 }
 
-export default function App() {
-  const [api, setApi] = useState(initial);
-  const [database, setDatabase] = useState(initial);
-  const [checking, setChecking] = useState(true);
-  const active = useRef(null);
-
-  async function refresh() {
-    active.current?.abort();
-    const controller = new AbortController();
-    active.current = controller;
-    const timeout = setTimeout(() => controller.abort(), 6000);
-    setChecking(true);
-    setApi(initial);
-    setDatabase(initial);
-    try {
-      await Promise.all([
-        checkService('/api/health', controller.signal).then(result => {
-          if (active.current === controller) setApi(result);
-        }),
-        checkService('/api/ready', controller.signal).then(result => {
-          if (active.current === controller) setDatabase(result);
-        }),
-      ]);
-    } finally {
-      clearTimeout(timeout);
-      if (active.current === controller) setChecking(false);
-    }
-  }
-
-  useEffect(() => {
-    refresh();
-    return () => { active.current?.abort(); active.current = null; };
-  }, []);
+function ResidentDashboard() {
+  const [category, setCategory] = useState(categories[0]);
+  const visibleResources = category === categories[0]
+    ? resources
+    : resources.filter(resource => resource.category === category);
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-12 sm:py-20">
-      <p className="text-sm font-semibold uppercase tracking-widest text-slate-500">app-camin · Local development</p>
-      <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Service status</h1>
-      <p className="mt-4 max-w-2xl leading-7 text-slate-600">A technical starting point for shared resource management. This page checks the backend and PostgreSQL connection.</p>
-      <div className="mt-8 grid gap-4" aria-live="polite" aria-atomic="true" aria-busy={checking}>
-        <StatusCard title="REST API" result={api} />
-        <StatusCard title="PostgreSQL" result={database} />
-      </div>
-      <button type="button" onClick={refresh} disabled={checking} className="mt-6 rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-900 disabled:opacity-60">
-        {checking ? 'Checking services…' : 'Check again'}
-      </button>
-      <p className="mt-8 border-t border-slate-200 pt-5 text-sm leading-6 text-slate-500">No interview findings or business data are represented here. Authentication, reservations, queues, usage quotas, no-show policies, maintenance tickets and push notifications are not implemented.</p>
-    </main>
+    <div className="min-h-screen bg-[#faf8f3] text-teal-950">
+      <ResidentHeader />
+      <main className="mx-auto max-w-6xl px-5 py-10 sm:py-14">
+        <h1 className="text-3xl font-bold tracking-tight sm:text-5xl">Resursele căminului</h1>
+        <p className="mt-4 text-slate-700">Date demonstrative. Disponibilitatea afișată este un exemplu.</p>
+
+        <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
+          <div>
+            <div role="group" aria-label="Filtrează resursele" className="mb-5 flex flex-wrap gap-2">
+              {categories.map(option => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={category === option}
+                  onClick={() => setCategory(option)}
+                  className="rounded-full border border-teal-800 px-4 py-2 text-sm font-semibold hover:bg-teal-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 aria-pressed:bg-teal-800 aria-pressed:text-white"
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+
+            <ul className="grid gap-4 sm:grid-cols-2" aria-label="Resurse comune" aria-live="polite">
+              {visibleResources.map(resource => (
+                <li key={resource.name} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-teal-950/10 bg-white p-4 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-lg bg-teal-50">
+                      {categoryIcons[resource.category]}
+                    </span>
+                    <h2 className="text-base font-semibold">{resource.name}</h2>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-sm font-medium ${resource.available ? 'bg-teal-100 text-teal-950' : 'bg-amber-100 text-amber-950'}`}>
+                    {resource.available ? 'Disponibilă' : 'Ocupată'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <section aria-labelledby="announcements" className="rounded-2xl border border-teal-900/10 bg-teal-50 p-5">
+            <h2 id="announcements" className="text-xl font-bold">Anunțuri</h2>
+            <p className="mt-3 text-slate-700"><strong>Exemplu demonstrativ:</strong> Întrerupere temporară a apei în cămin.</p>
+          </section>
+        </div>
+      </main>
+    </div>
   );
+}
+
+function WelcomePage() {
+  return (
+    <div className="flex min-h-screen flex-col bg-[#faf8f3] text-teal-950">
+      <ResidentHeader />
+      <main className="mx-auto grid w-full max-w-3xl flex-1 place-items-center px-5 py-12 text-center">
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">Bun venit în cămin!</h1>
+          <p className="mx-auto mt-5 max-w-md text-lg text-slate-700">
+            Locul unde poți rezerva resursele căminului cu un singur click
+          </p>
+          <a href="/resurse" className="mt-8 inline-flex rounded-full bg-teal-800 px-6 py-3 font-semibold text-white hover:bg-teal-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-800">
+            Vezi resursele
+          </a>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export default function App({ page }) {
+  if (page === 'status') return <ServiceStatus />;
+  if (page === 'resources') return <ResidentDashboard />;
+  return <WelcomePage />;
 }

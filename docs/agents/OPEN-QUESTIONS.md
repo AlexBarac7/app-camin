@@ -47,9 +47,9 @@
 - **Status:** open
 - **Blocks:** Upstream synchronization, deployment, and release commands.
 - **Who answers:** Project owner
-- **Answer:** Railway is the owner-selected future deployment target. A remote and
-  upstream now exist (fetch/pull succeed), but the release process and deployment
-  configuration are not approved. The owner authorized a foundation commit and
+- **Answer:** The owner is considering Vercel and Supabase. The deployment platform,
+  configuration and release process remain open. A remote and upstream now exist
+  (fetch/pull succeed). The owner authorized a foundation commit and
   GitHub branch push, with no merge into main. Deployment is not authorized.
 
 ## Q-005 · Which business rules and users should the product support?

@@ -4,7 +4,34 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-19 · Resident frontend pages
+
+**Model:** Codex GPT-6.2-Sol.
+
+**Workflow** — `/plan`, `/build`, and free-form prompts.
+
+**What I asked for** — A resident dashboard based on the [survey](SURVEY.md),
+followed by a welcome page linking to the dashboard and a round of visual refinements.
+
+**What I got** — A welcome page at `/` and a demo dashboard at `/resurse` with
+local filters, category icons, availability labels, and announcements. The
+English service status page stayed at `/status`, in
+[ServiceStatus.jsx](frontend/src/ServiceStatus.jsx).
+
+**What I did with it** — I kept the approved welcome copy and the “Vezi resursele”
+link, and deferred adding a photo. I kept the revised resource cards and the
+announcement layout, beside the resources on desktop and below them on mobile.
+I restored the header link to the welcome page after briefly pointing it to YouTube.
+
+**Verification** — The frontend build, all five backend tests, the Graffino ledger
+check, and `git diff --check` passed. In Docker Compose, all three page routes and
+both health endpoints returned HTTP 200, and PostgreSQL returned `1` for
+`SELECT 1`. Browser checks for mobile layout, filtering, and keyboard navigation
+remain pending.
+
 ## 2026-11-18 — Project decisions, vocabulary, and local acceptance
+
+**Model:** Codex GPT-6.2-Sol.
 
 ### What was asked and done
 
@@ -28,7 +55,7 @@ This included the database status changing to unavailable after a stop and recov
 
 ## 2026-11-16 — GitHub Actions workflow
 
-**Model:** GPT-6.2-Sol (default).
+**Model:** Codex GPT-6.2-Sol.
 
 ### What was asked
 
@@ -63,7 +90,7 @@ All CI checks passed on GitHub Actions.
 
 ## 2026-11-11 — Project setup and implementation proposal
 
-**Model:** GPT-6.2-Sol (default).
+**Model:** Codex GPT-6.2-Sol.
 
 ### What was asked
 

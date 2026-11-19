@@ -17,7 +17,7 @@ blocked on interviews and approved rules. No business tables or seed data exist.
 | Knowledge ledger | `docs/agents/` | Decisions, patterns, contracts, and questions | Working rules |
 | Workflow skills | `.claude/skills/` | Planning and implementation instructions | Agent definitions |
 | Agent definitions | `.claude/agents/` | Planner and builder roles | Workflow skills |
-| Frontend | `frontend/` | English service status page | REST API through Vite proxy |
+| Frontend | `frontend/` | Romanian welcome page at / and resident dashboard with local demo data at /resurse, English service status at /status | REST API through Vite proxy for service status |
 | Backend | `backend/src/` | Configuration, database pool, health module | PostgreSQL |
 | Local runtime | `compose.yaml` | Three services, loopback ports, persistent volume | Docker |
 
@@ -38,9 +38,8 @@ Database connection/query limits and the total readiness deadline are 4 seconds.
 
 ## Build, deploy, runtime
 See README.md for verified local commands. Compose uses development servers;
-frontend npm run build produces static assets. Railway is a future target only.
+frontend npm run build produces static assets. See Q-004 for the open deployment decision.
 
 ## Boundaries
 No authentication, reservations, live queue, quotas, no-show policies, maintenance
-tickets, photo storage or push integrations are implemented. No Railway deployment
-configuration or authorization exists yet.
+tickets, photo storage or push integrations are implemented. Deployment configuration and authorization are pending.

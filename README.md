@@ -12,7 +12,7 @@ The development database name and user are explicitly demonstrative identifiers.
 
 ## Stack and layout
 
-- `frontend/`: JavaScript, React, Vite, Tailwind CSS; technical service status page.
+- `frontend/`: JavaScript, React, Vite, Tailwind CSS; welcome page, resident dashboard, and technical service status.
 - `backend/`: Node.js, Express, REST API, PostgreSQL driver `pg`.
 - `backend/src/modules/health/`: health routes; future business modules can live
   alongside this folder once their requirements are approved.
@@ -22,8 +22,8 @@ The development database name and user are explicitly demonstrative identifiers.
 - `docs/agents/`: knowledge ledger and architectural documentation.
 - `docs/design/DESIGN.md`: guardrails for the technical status page.
 
-Railway is the intended future deployment platform. This Compose setup uses
-development servers; it is not a production deployment configuration. Production
+The deployment platform is still open. Vercel and Supabase are under
+consideration. Docker Compose runs the local development servers. Production
 build serving, platform environment variables, TLS and deployment remain future work.
 
 ## Requirements
@@ -57,7 +57,9 @@ In each new terminal, repeat the password prompt with the same password before
 running Compose commands. Do not generate a different password for an existing
 database volume: PostgreSQL initialization variables apply only to an empty volume.
 
-Open **http://localhost:5173**. The page should show **Connected** for both REST API
+Open **http://localhost:5173/** for the welcome page and follow **Vezi resursele**
+to open the resident dashboard. For service checks, open **http://localhost:5173/status**.
+The page should show **Connected** for both REST API
 and PostgreSQL, with explicit success messages. Use **Check again** to refresh.
 
 ## Configuration
@@ -205,7 +207,7 @@ normal startup or test procedure.
 5. Fair-use quotas and no-show handling after policies and exceptions are confirmed.
 6. Maintenance tickets with photos after access and storage requirements are confirmed.
 7. Push notifications after events, recipients and consent requirements are confirmed.
-8. Railway deployment after production configuration and verification are approved.
+8. Deployment after the platform, production configuration and verification are approved.
 
 No business durations, quotas, penalties, priorities, or interview evidence are
 assumed. Any future temporary product values must be explicitly marked

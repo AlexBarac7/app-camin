@@ -122,8 +122,8 @@ Do not print resolved Compose configuration: it contains the shell-supplied pass
 - Follow docs/design/DESIGN.md for the technical page; approve future product designs first.
 
 ## 5. Release
-The default branch is `main`; a remote/upstream now exists. Railway is the intended
-future deployment target; production configuration and release process remain open.
+The default branch is `main` and has a remote upstream. The deployment platform,
+production configuration and release process remain open. See Q-004.
 Commits, merges, pushes, tags, releases, and deployments require the user's authorization.
 
 ## 6. Definition of done
