@@ -1,9 +1,11 @@
 import express from 'express';
 import { healthRoutes } from './modules/health/health.routes.js';
+import { authRoutes } from './modules/auth/auth.routes.js';
 
-export function createApp(database) {
+export function createApp(database, appOrigins) {
   const app = express();
   app.disable('x-powered-by');
+  app.use('/api/auth', authRoutes(database, appOrigins));
   app.use('/api', healthRoutes(database));
   app.use((_req, res) => res.status(404).json({ status: 'error', message: 'Endpoint not found.' }));
   app.use((_error, _req, res, _next) => {

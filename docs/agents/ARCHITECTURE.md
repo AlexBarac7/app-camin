@@ -7,8 +7,8 @@
 
 ## Overview
 Local technical foundation: React/Vite/Tailwind frontend, modular Express backend
-and PostgreSQL using pg, coordinated by Docker Compose. Product behavior remains
-blocked on interviews and approved rules. No business tables or seed data exist.
+and PostgreSQL using pg, coordinated by Docker Compose. The first product flow
+activates resident accounts by invitation. Rules for shared resources remain open.
 
 ## Parts
 | Part | Path | Responsibility | Talks to |
@@ -17,8 +17,8 @@ blocked on interviews and approved rules. No business tables or seed data exist.
 | Knowledge ledger | `docs/agents/` | Decisions, patterns, contracts, and questions | Working rules |
 | Workflow skills | `.claude/skills/` | Planning and implementation instructions | Agent definitions |
 | Agent definitions | `.claude/agents/` | Planner and builder roles | Workflow skills |
-| Frontend | `frontend/` | English service status page | REST API through Vite proxy |
-| Backend | `backend/src/` | Configuration, database pool, health module | PostgreSQL |
+| Frontend | `frontend/` | English service status page and Romanian resident access screens | REST API through Vite proxy |
+| Backend | `backend/src/` | Configuration, database pool, health and auth modules | PostgreSQL |
 | Local runtime | `compose.yaml` | Three services, loopback ports, persistent volume | Docker |
 
 ## Data flow
@@ -28,7 +28,7 @@ backend tests and Compose healthcheck. Future modules belong alongside health.
 
 ## State and storage
 PostgreSQL 17 stores data in the named postgres_data volume, mounted at
-/var/lib/postgresql/data. Explicit backend commands inspect and apply numbered PostgreSQL migrations. No business schema exists yet.
+/var/lib/postgresql/data. Explicit backend commands inspect and apply numbered PostgreSQL migrations. The resident access migration adds users, invitations, and sessions. No seed data is included.
 
 ## Configuration
 .env.example documents fixed local ports 5173/3000/5432 and demonstrative database
@@ -41,6 +41,6 @@ See README.md for verified local commands. Compose uses development servers;
 frontend npm run build produces static assets. Railway is a future target only.
 
 ## Boundaries
-No authentication, reservations, live queue, quotas, no-show policies, maintenance
-tickets, photo storage or push integrations are implemented. No Railway deployment
+Reservations, live queue, quotas, no-show policies, maintenance tickets, photo
+storage and push integrations remain outside the current implementation. No Railway deployment
 configuration or authorization exists yet.

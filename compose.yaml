@@ -18,6 +18,7 @@ services:
   backend:
     build: ./backend
     environment:
+      APP_ORIGIN: ${APP_ORIGIN:-}
       PORT: ${BACKEND_PORT:?BACKEND_PORT is required}
       PGHOST: ${PGHOST:?PGHOST is required}
       PGPORT: ${PGPORT:?PGPORT is required}

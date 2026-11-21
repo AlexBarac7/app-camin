@@ -5,17 +5,17 @@ or residential building. Planned capabilities include reservations for shared re
 (washing machines, study rooms, kitchens, gyms), a live queue, fair-use quotas,
 no-show handling, maintenance tickets with photos, and push notifications.
 
-**Current implementation: technical foundation only.** None of those product
-features are implemented. No interviews have been conducted or supplied. There
-are no invented interview findings, residents, bookings, quotas or penalties.
+**Current implementation:** the technical foundation and local resident access
+by invitation. The shared-resource features listed above are planned.
 The development database name and user are explicitly demonstrative identifiers.
 
 ## Stack and layout
 
-- `frontend/`: JavaScript, React, Vite, Tailwind CSS; technical service status page.
+- `frontend/`: JavaScript, React, Vite, Tailwind CSS; technical service status page and resident access screens.
 - `backend/`: Node.js, Express, REST API, PostgreSQL driver `pg`.
 - `backend/src/modules/health/`: health routes; future business modules can live
   alongside this folder once their requirements are approved.
+- `backend/src/modules/auth/`: resident activation, login, session and logout.
 - `backend/src/config.js`: server configuration validation.
 - `backend/src/db.js`: shared PostgreSQL pool and bounded readiness check.
 - `compose.yaml`: local frontend, backend and PostgreSQL services.
@@ -199,7 +199,7 @@ normal startup or test procedure.
 
 1. Technical foundation and local verification (this stage).
 2. Interviews: identify real users, roles, resource types and operational constraints.
-3. Confirm the data model and authentication/authorization requirements.
+3. Demonstrate local resident access and confirm remaining authorization requirements.
 4. Reservations and live queue after ordering, availability and concurrency rules
    are approved; choose the live transport then.
 5. Fair-use quotas and no-show handling after policies and exceptions are confirmed.
@@ -301,3 +301,37 @@ npm --prefix backend run test:migrations
 
 The suite leaves its test objects in the disposable database. Use a fresh
 instance for each run.
+
+## Local resident access
+
+With the shell password and Compose configuration from [First run](#first-run),
+start the services, apply the migration and issue an invitation from the backend
+container.
+
+```bash
+docker compose up --build -d --wait
+docker compose exec backend npm run migrate
+docker compose exec backend npm run invite:create
+```
+
+Enter the recipient's email at the prompt. For a demonstration, use an
+`@example.test` address. Verify the recipient and share the printed link
+privately. It expires after 48 hours and can be used once. Issuing a new
+invitation for the same address invalidates the previous one. To revoke an
+unused invitation, run `docker compose exec backend npm run invite:revoke`
+and enter the same email.
+
+Open the link in a browser, choose a password of 15–128 characters and confirm
+it. Sign in at `/autentificare` with the invited email. At `/cont`, verify the
+email remains visible after reloading. Select **Deconectare**, then revisit
+`/cont` to check that it redirects to sign-in. A session lasts 24 hours.
+
+The invitation command prints links for `http://localhost:5173` by default.
+The API accepts that origin and `http://127.0.0.1:5173` in local development.
+When serving the app at a different origin, set `APP_ORIGIN` to its exact
+scheme, host and port, with no trailing slash, and recreate the backend.
+The command uses that origin in links and the API uses it for write requests.
+
+Run the automated access flow on a fresh, disposable PostgreSQL 17 database
+named `app_camin_auth_test`. Configure the same `PG*` variables described for
+the migration tests, then run `npm --prefix backend run test:auth`.

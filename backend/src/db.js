@@ -38,5 +38,10 @@ export function createDatabase(config) {
     }
   }
 
-  return { check, close: () => pool.end() };
+  return {
+    check,
+    connect: () => pool.connect(),
+    query: (sql, parameters) => pool.query(sql, parameters),
+    close: () => pool.end(),
+  };
 }

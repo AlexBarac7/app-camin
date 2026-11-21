@@ -5,7 +5,7 @@ import { createApp } from './app.js';
 try {
   const config = loadConfig();
   const database = createDatabase(config.database);
-  const server = createApp(database).listen(config.port, '0.0.0.0', () => {
+  const server = createApp(database, process.env.APP_ORIGIN ? [process.env.APP_ORIGIN] : undefined).listen(config.port, '0.0.0.0', () => {
     console.log(`Backend listening on port ${config.port}.`);
   });
   server.on('error', () => {

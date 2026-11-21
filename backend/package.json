@@ -10,7 +10,10 @@
     "test": "node --test",
     "migrate": "node src/migrate.js apply",
     "migrate:status": "node src/migrate.js status",
-    "test:migrations": "node --test test-integration/migrations.integration.js"
+    "test:migrations": "node --test test-integration/migrations.integration.js",
+    "invite:create": "node src/invite.js create",
+    "invite:revoke": "node src/invite.js revoke",
+    "test:auth": "node --test test-integration/auth.integration.js"
   },
   "dependencies": { "express": "^5.1.0", "pg": "^8.16.0" }
 }

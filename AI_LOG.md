@@ -4,6 +4,38 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-21 · Local resident access by invitation
+
+**Workflow** — Graffino `/build` from the approved invitation plan.
+
+**What I asked for** — Implement and demonstrate local resident access from
+a separate branch based on the updated main branch. Document the session
+and keep a local explanation before committing.
+
+**What I got** — On `feat/resident-invitations`, the first product migration
+adds users, invitations and sessions. The backend can issue and revoke
+invitations from the terminal, and the Romanian screens let a resident
+activate an account, sign in, see their email and sign out. Invitations
+are single-use and expire after 48 hours. Account creation and invitation
+consumption share one transaction. Sessions expire after 24 hours.
+PostgreSQL stores token digests and scrypt password hashes. The
+[README](README.md#local-resident-access) records the commands and
+[D-006](docs/agents/DECISIONS.md#d-006--activate-local-resident-accounts-by-invitation)
+records the approved access rules.
+
+**What I did with it** — I ran the flow myself in a separate Compose preview
+and confirmed that the observed behavior matched expectations. I asked to
+inspect the PostgreSQL tables and authorized a local commit after documentation
+and final checks.
+
+**Verification** — Backend tests, frontend build, ledger validation and
+`git diff --check` passed. The PostgreSQL 17 integration tests covered the
+migration runner, invitation lifecycle, concurrent activation and session
+expiry and invalidation. The isolated Compose preview passed the CLI and
+API smoke checks. Chrome passed the full flow using the keyboard at 390 px,
+including session persistence after reload and redirection after logout.
+PostgreSQL listed `users`, `invitations`, `sessions` and `schema_migrations`.
+
 ## 2026-11-21 · P20 project brief and PostgreSQL migrations
 
 **Workflow** — Graffino `/plan` and `/build`.
