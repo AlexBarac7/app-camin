@@ -255,3 +255,49 @@ assumed. Any future temporary product values must be explicitly marked
   do not replace the manual acceptance procedure above.
 - Subsequent manual verification confirmed that all acceptance checks passed.
   No automated screenshot was taken.
+
+## PostgreSQL migrations
+
+Keep schema changes in `backend/migrations/`, using numbered filenames such as
+`001_create_resources.sql`. Use transaction-compatible SQL and leave transaction
+control to the runner. After a migration has been applied, add a new migration
+to correct it. The runner checks the SHA-256 checksum of each applied file.
+
+With the normal shell password and Compose configuration in place, start
+PostgreSQL and rebuild the backend image so it includes the current SQL files.
+
+```bash
+docker compose up -d --wait db
+docker compose build backend
+docker compose run --rm --no-deps backend npm run migrate:status
+docker compose run --rm --no-deps backend npm run migrate
+```
+
+### Recover from a failed migration
+
+Suppose `001_create_resources.sql` succeeds and `002_add_location.sql` fails.
+The apply command exits with an error naming `002_add_location.sql`. PostgreSQL
+rolls back that file, including its history entry. Run `migrate:status` to
+confirm that `001` is applied and `002` is pending. Correct the pending SQL,
+run `docker compose build backend` again, then rerun the apply command above.
+A second status check should show both files as applied.
+
+If status reports a history mismatch, restore the original applied file from
+Git. Use a new migration for the desired schema change. If another run is
+active, let it finish before retrying. If the command cannot connect, verify
+that the database is healthy and the shell has the password used to initialize
+its volume.
+
+### Run the migration integration tests
+
+Use a fresh, disposable PostgreSQL 17 instance with a database named
+`app_camin_migrations_test`. Install backend dependencies and point the
+standard `PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE` and `PGPASSWORD` environment
+variables at that instance. Keep the password in the shell. Then run:
+
+```bash
+npm --prefix backend run test:migrations
+```
+
+The suite leaves its test objects in the disposable database. Use a fresh
+instance for each run.

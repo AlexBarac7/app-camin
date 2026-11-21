@@ -28,7 +28,7 @@ backend tests and Compose healthcheck. Future modules belong alongside health.
 
 ## State and storage
 PostgreSQL 17 stores data in the named postgres_data volume, mounted at
-/var/lib/postgresql/data. No migrations or business schema exist yet.
+/var/lib/postgresql/data. Explicit backend commands inspect and apply numbered PostgreSQL migrations. No business schema exists yet.
 
 ## Configuration
 .env.example documents fixed local ports 5173/3000/5432 and demonstrative database

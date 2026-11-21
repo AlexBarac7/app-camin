@@ -11,6 +11,7 @@
 - D-002 · Node.js, Express, REST, and PostgreSQL for the backend
 - D-003 · Docker and Compose for local development
 - D-004 · Keep local environment values out of Git
+- D-005 · Apply versioned PostgreSQL migrations explicitly
 
 ---
 
@@ -71,3 +72,13 @@
 - **Evidence:** [.gitignore](../../.gitignore), [.env.example](../../.env.example),
   [README setup instructions](../../README.md#first-run).
 - **Source:** user · confidence high
+
+## D-005 · Apply versioned PostgreSQL migrations explicitly
+- **Status:** approved
+- **Rule:** Keep PostgreSQL schema changes in numbered SQL files. Apply them
+  with the explicit backend migration command. Correct a successfully applied
+  migration with a new file.
+- **Why:** The local PostgreSQL volume persists between runs, so changes need
+  to apply in order without rebuilding the database.
+- **Evidence:** The project owner approved the migration plan after selecting
+  manual Compose execution and forward corrections.

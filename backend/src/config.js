@@ -11,15 +11,19 @@ function port(env, name) {
   return Number(value);
 }
 
+export function loadDatabaseConfig(env = process.env) {
+  return {
+    host: required(env, 'PGHOST'),
+    port: port(env, 'PGPORT'),
+    database: required(env, 'PGDATABASE'),
+    user: required(env, 'PGUSER'),
+    password: required(env, 'PGPASSWORD'),
+  };
+}
+
 export function loadConfig(env = process.env) {
   return {
     port: port(env, 'PORT'),
-    database: {
-      host: required(env, 'PGHOST'),
-      port: port(env, 'PGPORT'),
-      database: required(env, 'PGDATABASE'),
-      user: required(env, 'PGUSER'),
-      password: required(env, 'PGPASSWORD'),
-    },
+    database: loadDatabaseConfig(env),
   };
 }

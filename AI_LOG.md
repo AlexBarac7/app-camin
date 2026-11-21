@@ -4,6 +4,38 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-21 · P20 project brief and PostgreSQL migrations
+
+**Workflow** — Graffino `/plan` and `/build`.
+
+**What I asked for** — Save the original P20 brief in [CONTEXT.md](CONTEXT.md)
+and prepare PostgreSQL migrations while waiting for the administrator's inventory
+and rules. Plan the migration workflow through a questionnaire and keep the work
+on a separate branch from the resident dashboard.
+
+**What I got** — The full P20 brief and a migration runner on
+`chore/postgres-migrations`. The runner uses the existing Node.js PostgreSQL
+driver. It applies numbered SQL files in order and records the filename and
+SHA-256 checksum of each applied migration. Each file and its history entry
+commit together. A PostgreSQL advisory lock prevents concurrent applications,
+and a separate status command reads the history without changing the database.
+The [README](README.md#postgresql-migrations) documents the Compose commands
+and shows how to recover from a failed migration.
+
+**What I did with it** — I chose manual execution through Docker Compose,
+one transaction per file, a new migration to correct an already-applied
+change, and separate local integration tests. I asked to bring the P20 brief
+and migration work together on the same branch. The migration directory is
+ready for the first product schema once the pilot rules are confirmed.
+
+**Verification** — The PostgreSQL 17 integration tests passed on a disposable
+database, covering read-only status, rollback and retry, checksum mismatch,
+and concurrent runs. The five existing backend tests, frontend build, ledger
+check, and `git diff --check` passed. Compose services became healthy, both API
+health endpoints responded successfully, and `SELECT 1` returned `1`.
+A separate preview stack was started for manual testing. Its status command
+reported `No migration files.`, as expected with an empty migration directory.
+
 ## 2026-11-18 — Project decisions, vocabulary, and local acceptance
 
 ### What was asked and done
