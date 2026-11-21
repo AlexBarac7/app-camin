@@ -15,6 +15,7 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   t.after(() => db.close());
   assert.deepEqual(await runMigrations(db, fileURLToPath(new URL('../migrations/', import.meta.url)), 'apply'), [
     { filename: '001_resident_access.sql', state: 'newly applied' },
+    { filename: '002_laundry_machines.sql', state: 'newly applied' },
   ]);
   const server = createApp(db).listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -73,6 +74,25 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   const activeLogin = await request('login', { email, password });
   assert.equal(activeLogin.status, 200);
   const activeCookie = activeLogin.headers.get('set-cookie').split(';')[0];
+  const catalog = cookie => fetch(base + '/api/laundry-machines', {
+    headers: cookie ? { cookie } : {},
+  });
+  assert.equal((await catalog()).status, 401);
+  assert.equal((await catalog(expiredCookie)).status, 401);
+  const emptyCatalog = await catalog(activeCookie);
+  assert.equal(emptyCatalog.status, 200);
+  assert.deepEqual(await emptyCatalog.json(), []);
+  await db.query(
+    'INSERT INTO laundry_machines (id, name, location) OVERRIDING SYSTEM VALUE VALUES ($1, $2, $3), ($4, $5, $6)',
+    [2, 'Mașină test B', 'Etaj test B', 1, 'Mașină test A', 'Etaj test A'],
+  );
+  const populatedCatalog = await catalog(activeCookie);
+  assert.equal(populatedCatalog.status, 200);
+  assert.deepEqual(await populatedCatalog.json(), [
+    { id: 1, name: 'Mașină test A', location: 'Etaj test A' },
+    { id: 2, name: 'Mașină test B', location: 'Etaj test B' },
+  ]);
+
   const cleanup = () => execFileSync('npm', ['--silent', 'run', 'sessions:cleanup'], {
     cwd: fileURLToPath(new URL('../', import.meta.url)),
     encoding: 'utf8',

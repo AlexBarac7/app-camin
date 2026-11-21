@@ -14,6 +14,22 @@ function readSession(req) {
   return validToken(token) ? tokenHash(token) : null;
 }
 
+export function requireSession(database) {
+  return async (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    const digest = readSession(req);
+    if (!digest) return res.status(401).end();
+    const { rows: [account] } = await database.query(
+      `SELECT users.email FROM sessions JOIN users ON users.id = sessions.user_id
+       WHERE sessions.token_hash = $1 AND sessions.expires_at > clock_timestamp()`,
+      [digest],
+    );
+    if (!account) return res.status(401).end();
+    res.locals.account = account;
+    next();
+  };
+}
+
 function limitedAttempts() {
   const attempts = new Map();
   let resetAt = 0;
@@ -88,16 +104,8 @@ export function authRoutes(database, origins = localOrigins) {
     res.status(200).end();
   });
 
-  router.get('/session', async (req, res) => {
-    const digest = readSession(req);
-    if (!digest) return res.status(401).end();
-    const { rows: [account] } = await database.query(
-      `SELECT users.email FROM sessions JOIN users ON users.id = sessions.user_id
-       WHERE sessions.token_hash = $1 AND sessions.expires_at > clock_timestamp()`,
-      [digest],
-    );
-    if (!account) return res.status(401).end();
-    res.json(account);
+  router.get('/session', requireSession(database), (_req, res) => {
+    res.json(res.locals.account);
   });
 
   router.post('/logout', async (req, res) => {

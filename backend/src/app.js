@@ -1,11 +1,15 @@
 import express from 'express';
 import { healthRoutes } from './modules/health/health.routes.js';
-import { authRoutes } from './modules/auth/auth.routes.js';
+import { authRoutes, requireSession } from './modules/auth/auth.routes.js';
 
 export function createApp(database, appOrigins) {
   const app = express();
   app.disable('x-powered-by');
   app.use('/api/auth', authRoutes(database, appOrigins));
+  app.get('/api/laundry-machines', requireSession(database), async (_req, res) => {
+    const { rows } = await database.query('SELECT id, name, location FROM laundry_machines ORDER BY id');
+    res.json(rows);
+  });
   app.use('/api', healthRoutes(database));
   app.use((_req, res) => res.status(404).json({ status: 'error', message: 'Endpoint not found.' }));
   app.use((_error, _req, res, _next) => {
