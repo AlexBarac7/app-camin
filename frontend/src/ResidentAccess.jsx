@@ -133,6 +133,7 @@ function Account() {
     <div className="mt-5 grid gap-5">
       {email && <>
         <p className="break-all">{email}</p>
+        <a className="w-fit underline" href="/spalatorie">Spălătorie</a>
         <button type="button" className={buttonStyle} disabled={pending} onClick={logout}>
           {pending ? 'Se deconectează…' : 'Deconectare'}
         </button>
@@ -143,10 +144,54 @@ function Account() {
   );
 }
 
+function LaundryCatalog() {
+  const [machines, setMachines] = useState(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadCatalog() {
+      try {
+        const response = await fetch('/api/laundry-machines', { signal: controller.signal });
+        if (response.status === 401) {
+          window.location.replace('/autentificare');
+          return;
+        }
+        if (!response.ok) throw new Error(unavailable);
+        setMachines(await response.json());
+      } catch {
+        if (!controller.signal.aborted) setError(true);
+      }
+    }
+    loadCatalog();
+    return () => controller.abort();
+  }, []);
+
+  return (
+    <div className="mt-5 grid gap-5">
+      <a className="w-fit underline" href="/cont">Înapoi la cont</a>
+      {error && <p role="alert" className="text-red-800">{unavailable}</p>}
+      {!machines && !error && <p role="status">Se încarcă inventarul…</p>}
+      {machines?.length === 0 && <p role="status">Inventarul spălătoriei nu a fost încă publicat.</p>}
+      {machines?.length > 0 && (
+        <ul className="divide-y divide-slate-200">
+          {machines.map(machine => (
+            <li key={machine.id} className="break-words py-3">
+              <p className="font-semibold">{machine.name}</p>
+              <p>{machine.location}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 const headings = {
   '/activeaza': 'Activează contul',
   '/autentificare': 'Autentificare',
   '/cont': 'Contul meu',
+  '/spalatorie': 'Spălătorie',
 };
 
 export const isResidentRoute = Object.hasOwn(headings, route);
@@ -156,11 +201,16 @@ if (isResidentRoute) {
 }
 
 export default function ResidentAccess() {
+  let content;
+  if (route === '/cont') content = <Account />;
+  else if (route === '/spalatorie') content = <LaundryCatalog />;
+  else content = <AccessForm activation={route === '/activeaza'} />;
+
   return (
     <main className="mx-auto max-w-lg px-4 py-10 sm:py-20">
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{headings[route]}</h1>
-        {route === '/cont' ? <Account /> : <AccessForm activation={route === '/activeaza'} />}
+        {content}
       </div>
     </main>
   );

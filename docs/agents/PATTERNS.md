@@ -11,6 +11,7 @@
 - PATTERN-003 · Apply SQL and record migration history in one transaction · candidate
 - PATTERN-004 · Serialize invitation changes for each email · candidate
 - PATTERN-005 · Run integration suites on separate disposable databases · candidate
+- PATTERN-006 · Reuse session verification on resident endpoints · candidate
 
 ---
 
@@ -52,3 +53,10 @@
 - **How:** Start PostgreSQL for the integration job and create a fresh database
   for each suite so migration history and authentication fixtures stay isolated.
 - **Example:** .github/workflows/ci.yml.
+
+## PATTERN-006 · Reuse session verification on resident endpoints
+- **Status:** candidate
+- **How:** Use the same session middleware for account details and protected
+  resident reads. Reject missing or expired sessions before querying the
+  protected data, and set Cache-Control to no-store.
+- **Example:** backend/src/modules/auth/auth.routes.js; backend/src/app.js.

@@ -14,6 +14,7 @@
 - Q-003 · Does this project include a visual interface? · _answered_
 - Q-004 · What is the repository remote and release process?
 - Q-005 · Which business rules and users should the product support?
+- Q-006 · Who manages the laundry catalog and with what permissions?
 
 ---
 
@@ -59,3 +60,13 @@
   workflow and photo storage, notification events and recipients.
 - **Who answers:** Project owner, after interviews
 - **Evidence:** The owner explicitly said no interviews have been conducted yet.
+
+## Q-006 · Who manages the laundry catalog and with what permissions?
+- **Status:** open
+- **Blocks:** Publishing the real inventory and implementing catalog management.
+- **Who answers:** Project owner, after brainstorming and consulting the residence administrator.
+- **To clarify:** Who confirms and publishes the inventory, who can add, edit or
+  retire machines, what autonomy the residence administrator has, and whether
+  changes happen through the terminal or the application. See also
+  [Q-005](#q-005--which-business-rules-and-users-should-the-product-support)
+  for broader roles and product rules.

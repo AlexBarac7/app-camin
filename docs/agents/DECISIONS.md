@@ -13,6 +13,7 @@
 - D-004 · Keep local environment values out of Git
 - D-005 · Apply versioned PostgreSQL migrations explicitly
 - D-006 · Activate local resident accounts by invitation
+- D-007 · Require resident authentication to read the laundry catalog
 
 ---
 
@@ -94,3 +95,14 @@
 - **Evidence:** The owner requested implementation of the approved resident
   invitation plan.
 - **Confirmed:** 2026-11-21
+
+## D-007 · Require resident authentication to read the laundry catalog
+- **Status:** approved
+- **Rule:** In the first version, residents need a valid session to view the
+  laundry catalog. Resident access is read-only and includes machine names and
+  locations.
+- **Why:** The catalog gives signed-in residents a way to identify and locate
+  laundry machines while catalog management permissions are being decided.
+- **Evidence:** The owner approved the read-only catalog plan, verified the
+  browser flow and confirmed recording the access rule as a decision.
+- **Confirmed:** 2026-11-22

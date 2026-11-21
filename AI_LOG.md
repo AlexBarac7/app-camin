@@ -4,6 +4,56 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-22 · Read-only laundry catalog
+
+**Workflow** — Graffino `/plan` and `/build`.
+
+**What I asked for** — Build a laundry catalog residents can open from their
+account. Record the unresolved management roles and permissions for later
+discussion. Document the work and show the changes for review before committing.
+
+**What I got** — On `feat/laundry-catalog`, migration `002` creates an empty
+laundry inventory. The protected `GET /api/laundry-machines` endpoint returns
+machine names and locations ordered by ID. The Romanian catalog screen links
+from the account page and handles loading, an empty list, errors and sign-in
+redirection. [D-007](docs/agents/DECISIONS.md#d-007--require-resident-authentication-to-read-the-laundry-catalog)
+records resident access. [Q-006](docs/agents/OPEN-QUESTIONS.md#q-006--who-manages-the-laundry-catalog-and-with-what-permissions)
+tracks catalog management, and `PATTERN-006` records shared session verification
+as a candidate practice.
+
+**What I did with it** — I checked the empty catalog in the browser, then asked
+for two demonstrative machines in the local database. I confirmed that the
+machines and locations appeared and that opening the page after signing out
+redirected to sign-in.
+
+**Verification** — Backend tests, PostgreSQL integration suites, frontend build,
+ledger validation and Compose smoke checks passed. Integration covered the empty
+catalog, ordering and fields for two machines, and HTTP 401 for absent and expired
+sessions. The owner confirmed the manual browser checks.
+
+## 2026-11-21 · Manual cleanup of expired sessions
+
+**Workflow** — Graffino `/build` from the approved cleanup plan.
+
+**What I asked for** — Add and test a manual backend command to remove expired
+sessions, then commit, push and verify GitHub Actions before merging.
+
+**What I got** — The `sessions:cleanup` command reuses the PostgreSQL connection
+and deletes rows whose expiry is at or before the statement timestamp. It
+reports the number deleted, closes the connection and returns a nonzero exit
+code on failure. The [README](README.md#clean-up-expired-sessions) documents local
+and Compose usage.
+
+**What I did with it** — I opened PR #5 after the branch was pushed and merged
+it after checking the PR and its CI results.
+
+**Verification** — A disposable PostgreSQL database confirmed that the first
+run deletes one expired session, the second deletes zero, and the active session
+still authenticates. Backend tests, frontend build, ledger validation and the
+Compose smoke check passed. Compose also confirmed exit code 1 on a database
+error. Both [GitHub Actions jobs for PR #5](https://github.com/AlexBarac7/app-camin/actions/runs/44950511812)
+passed.
+
 ## 2026-11-21 · Local resident access by invitation
 
 **Workflow** — Graffino `/build` from the approved invitation plan.
