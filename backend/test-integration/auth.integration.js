@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -68,4 +69,17 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   const expiredCookie = secondLogin.headers.get('set-cookie').split(';')[0];
   await db.query("UPDATE sessions SET expires_at = now() - interval '1 second'");
   assert.equal((await request('session', undefined, expiredCookie)).status, 401);
+
+  const activeLogin = await request('login', { email, password });
+  assert.equal(activeLogin.status, 200);
+  const activeCookie = activeLogin.headers.get('set-cookie').split(';')[0];
+  const cleanup = () => execFileSync('npm', ['--silent', 'run', 'sessions:cleanup'], {
+    cwd: fileURLToPath(new URL('../', import.meta.url)),
+    encoding: 'utf8',
+  }).trim();
+  assert.equal(cleanup(), 'Sesiuni șterse: 1');
+  assert.equal(cleanup(), 'Sesiuni șterse: 0');
+  const activeSession = await request('session', undefined, activeCookie);
+  assert.equal(activeSession.status, 200);
+  assert.deepEqual(await activeSession.json(), { email });
 });
