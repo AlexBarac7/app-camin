@@ -337,3 +337,17 @@ The command uses that origin in links and the API uses it for write requests.
 Run the automated access flow on a fresh, disposable PostgreSQL 17 database
 named `app_camin_auth_test`. Configure the same `PG*` variables described for
 the migration tests, then run `npm --prefix backend run test:auth`.
+
+### Clean up expired sessions
+
+After applying the migration, run this command manually from the repository
+root with the current backend image running. Rebuild the backend if you started
+it before the command was added (`docker compose up --build -d --wait backend`).
+
+```bash
+docker compose exec backend npm run sessions:cleanup
+```
+
+For a backend running locally, set the same `PG*` variables and run
+`npm --prefix backend run sessions:cleanup`. The command deletes only expired
+sessions and prints the number deleted. Active sessions remain usable.
