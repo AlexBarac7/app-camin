@@ -12,6 +12,7 @@
 - D-003 · Docker and Compose for local development
 - D-004 · Keep local environment values out of Git
 - D-005 · Apply versioned PostgreSQL migrations explicitly
+- D-006 · Activate local resident accounts by invitation
 
 ---
 
@@ -82,3 +83,14 @@
   to apply in order without rebuilding the database.
 - **Evidence:** The project owner approved the migration plan after selecting
   manual Compose execution and forward corrections.
+
+## D-006 · Activate local resident accounts by invitation
+- **Status:** approved
+- **Rule:** Activate local resident accounts through single-use invitations
+  issued from the terminal and valid for 48 hours. Authenticate with email and
+  password and use sessions valid for 24 hours.
+- **Why:** Demonstrate resident access before the shared resource inventory and
+  operating rules are available.
+- **Evidence:** The owner requested implementation of the approved resident
+  invitation plan.
+- **Confirmed:** 2026-11-21

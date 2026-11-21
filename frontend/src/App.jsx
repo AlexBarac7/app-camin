@@ -75,7 +75,8 @@ export default function App() {
       <button type="button" onClick={refresh} disabled={checking} className="mt-6 rounded-lg bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-900 disabled:opacity-60">
         {checking ? 'Checking services…' : 'Check again'}
       </button>
-      <p className="mt-8 border-t border-slate-200 pt-5 text-sm leading-6 text-slate-500">No interview findings or business data are represented here. Authentication, reservations, queues, usage quotas, no-show policies, maintenance tickets and push notifications are not implemented.</p>
+      <a href="/autentificare" lang="ro" className="ml-4 underline focus-visible:outline-2 focus-visible:outline-offset-4">Autentificare</a>
+      <p className="mt-8 border-t border-slate-200 pt-5 text-sm leading-6 text-slate-500">No interview findings or business data are represented here. Reservations, queues, usage quotas, no-show policies, maintenance tickets and push notifications are not implemented.</p>
     </main>
   );
 }

@@ -9,6 +9,7 @@
 - PATTERN-001 · Separate app composition from process startup · candidate
 - PATTERN-002 · Verify the technical foundation in GitHub Actions · candidate
 - PATTERN-003 · Apply SQL and record migration history in one transaction · candidate
+- PATTERN-004 · Serialize invitation changes for each email · candidate
 
 ---
 
@@ -36,3 +37,11 @@
   pending file, commit its SQL and history entry together so a failed file stays
   pending while earlier successful files remain applied.
 - **Example:** backend/src/migrations.js.
+
+## PATTERN-004 · Serialize invitation changes for each email
+- **Status:** candidate
+- **How:** Lock the normalized email for issuance, revocation, and activation.
+  Recheck invitation validity inside the transaction and consume the invitation
+  together with account creation. Hash the password before acquiring the lock.
+- **Example:** backend/src/modules/auth/invitations.js;
+  backend/test-integration/auth.integration.js.
