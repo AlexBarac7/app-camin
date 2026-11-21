@@ -8,6 +8,7 @@
 ## Index
 - PATTERN-001 · Separate app composition from process startup · candidate
 - PATTERN-002 · Verify the technical foundation in GitHub Actions · candidate
+- PATTERN-003 · Apply SQL and record migration history in one transaction · candidate
 
 ---
 
@@ -28,3 +29,10 @@
 - **Example:** .github/workflows/ci.yml; README.md (Continuous integration).
 
 
+
+## PATTERN-003 · Apply SQL and record migration history in one transaction
+- **Status:** candidate
+- **How:** Acquire an advisory lock before checking migration history. For each
+  pending file, commit its SQL and history entry together so a failed file stays
+  pending while earlier successful files remain applied.
+- **Example:** backend/src/migrations.js.
