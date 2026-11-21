@@ -10,6 +10,7 @@
 - PATTERN-002 · Verify the technical foundation in GitHub Actions · candidate
 - PATTERN-003 · Apply SQL and record migration history in one transaction · candidate
 - PATTERN-004 · Serialize invitation changes for each email · candidate
+- PATTERN-005 · Run integration suites on separate disposable databases · candidate
 
 ---
 
@@ -45,3 +46,9 @@
   together with account creation. Hash the password before acquiring the lock.
 - **Example:** backend/src/modules/auth/invitations.js;
   backend/test-integration/auth.integration.js.
+
+## PATTERN-005 · Run integration suites on separate disposable databases
+- **Status:** candidate
+- **How:** Start PostgreSQL for the integration job and create a fresh database
+  for each suite so migration history and authentication fixtures stay isolated.
+- **Example:** .github/workflows/ci.yml.

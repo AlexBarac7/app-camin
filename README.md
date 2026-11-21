@@ -156,6 +156,7 @@ temporary Linux environment with Node.js 22 and Python 3.
 | --- | --- |
 | Dependency installation | Install frontend and backend dependencies from committed lockfiles using `npm ci`. |
 | Backend tests | Verify health responses, readiness behavior, configuration validation, and database timeout handling. |
+| PostgreSQL integration tests | Run the migration and resident access suites against separate fresh PostgreSQL 17 databases. |
 | Frontend build | Confirm that the React application compiles successfully for production. |
 | Documentation validation | Check knowledge ledger consistency without modifying files. |
 
@@ -163,14 +164,15 @@ A failed command marks the workflow as failed and prevents subsequent steps from
 running. Execution logs are available in GitHub's **Actions** tab, with check
 results also displayed on pull requests.
 
-The checks require no real business data, database credentials, or running
-PostgreSQL instance. Backend tests use controlled test doubles and a local TCP
-server. Workflow permissions are limited to read access to repository contents;
-no deployment credentials are configured.
+The workflow uses no real business data or repository secrets. The standard
+backend tests use test doubles and a local TCP server. The integration job
+starts its own disposable PostgreSQL service and discards both test databases
+when the job ends. Workflow permissions are limited to read access to
+repository contents.
 
-A successful run confirms only that the configured checks passed for that
-revision. It does not verify browser rendering or accessibility, Docker service
-integration with PostgreSQL, unconfirmed business rules, or production readiness.
+A successful run confirms that the configured checks passed for that revision.
+Browser rendering, accessibility, and the application's Docker Compose stack
+require separate verification.
 Those areas require separate verification. The workflow does not merge changes,
 publish releases, or deploy the application. It becomes available on GitHub after
 the workflow file is pushed; manual execution requires it on the default branch.
