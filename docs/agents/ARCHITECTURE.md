@@ -17,14 +17,13 @@ activates resident accounts by invitation and gives signed-in residents a read-o
 | Knowledge ledger | `docs/agents/` | Decisions, patterns, contracts, and questions | Working rules |
 | Workflow skills | `.claude/skills/` | Planning and implementation instructions | Agent definitions |
 | Agent definitions | `.claude/agents/` | Planner and builder roles | Workflow skills |
-| Frontend | `frontend/` | English service status page and Romanian resident access, account and resources screens | REST API through Vite proxy |
+| Frontend | `frontend/` | Romanian welcome and resident screens, plus a protected English service status page | REST API through Vite proxy |
 | Backend | `backend/src/` | Configuration, database pool, health and auth modules, and authenticated laundry inventory | PostgreSQL |
 | Local runtime | `compose.yaml` | Three services, loopback ports, persistent volume | Docker |
 
 ## Data flow
 Browser :5173 → Vite /api proxy → backend :3000 → PostgreSQL db:5432.
-Health API behavior is owned by C-001 in CONTRACTS.md; consumers are the frontend,
-backend tests and Compose healthcheck. Future modules belong alongside health.
+Service status and readiness behavior is owned by [C-002](CONTRACTS.md#c-002--authorized-service-status-and-internal-readiness). Compose checks readiness on backend loopback port 3001. This port is unpublished.
 
 ## State and storage
 PostgreSQL 17 stores data in the named postgres_data volume, mounted at

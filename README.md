@@ -57,8 +57,8 @@ In each new terminal, repeat the password prompt with the same password before
 running Compose commands. Do not generate a different password for an existing
 database volume: PostgreSQL initialization variables apply only to an empty volume.
 
-Open **http://localhost:5173**. The page should show **Connected** for both REST API
-and PostgreSQL, with explicit success messages. Use **Check again** to refresh.
+Open **http://localhost:5173** to reach the Romanian welcome page. See
+[Local resident access](#local-resident-access) for migration and account setup.
 
 ## Configuration
 
@@ -84,41 +84,43 @@ On deadline expiry, the checked-out connection is discarded. Browser checks have
 a 6-second network deadline to allow delivery of the backend's failure response.
 These are technical limits, not business policies.
 
-## Verify PostgreSQL and the API
+## Verify PostgreSQL and service status
+
+The browser status page lives at `/admin/stare-servicii`. Apply the migrations,
+activate a resident account, and run the following command to grant access.
+Enter the existing account's email when prompted.
 
 ```bash
-curl -i http://localhost:3000/api/health
-curl -i http://localhost:3000/api/ready
+docker compose exec backend npm run service-status:access -- grant
 docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1;"'
 ```
 
-- `/api/health`: HTTP 200, `status: "ok"`; backend process is responding.
-- `/api/ready`: HTTP 200 and `database: "connected"` after a real `SELECT 1`;
-  HTTP 503 and `database: "unavailable"` on failure, without database error details.
-- `psql`: one row containing `1`. This checks SQL inside the database container;
-  the readiness endpoint separately checks backend-to-database connectivity.
+Use the same command with `revoke` to withdraw access before granting it to
+another account. Changes take effect on the next request, including existing sessions.
 
-The health API contract is owned by [C-001](docs/agents/CONTRACTS.md#c-001--technical-health-api).
+The endpoint and readiness contract is owned by [C-002](docs/agents/CONTRACTS.md#c-002--authorized-service-status-and-internal-readiness).
 
 ## Manual acceptance checks
 
-1. Run `docker compose ps`: all three services should be running; `db` and
-   `backend` should become healthy.
-2. Open the frontend and check both success messages. Refresh with the button.
-3. Use a narrow viewport and keyboard navigation; the button must remain usable,
-   focus must be visible, and statuses must be understandable without color.
-4. Run `docker compose stop db`. Click **Check again**: PostgreSQL should show
-   **Unavailable**, while REST API remains **Connected**. `/api/ready` must return
-   503 promptly, within approximately 4 seconds plus HTTP overhead.
-5. Run `docker compose start db`. Wait for database startup, then click
-   **Check again**: PostgreSQL should recover without restarting the backend.
-6. Run `docker compose stop backend`. Refresh the checks: both should show a
-   clear error rather than wait indefinitely. Restore with
-   `docker compose start backend` and check again.
+1. Run `docker compose ps` and verify that the database and backend are healthy.
+2. Check the welcome page at a narrow viewport with the keyboard. Sign in and
+   confirm that both login and a return to the welcome URL lead to Resurse.
+3. Open `/admin/stare-servicii` without a session, as an ordinary resident, and
+   as the authorized account. Expect login, **Acces interzis**, and the status cards,
+   respectively. Verify the cards refresh with **Check again**.
+4. Stop PostgreSQL in the local test stack. Refresh the admin page and check for
+   **Verificarea accesului este indisponibilă**. Use the internal probe below
+   to check that infrastructure can still report PostgreSQL failure.
+5. Start PostgreSQL and retry the access check. Verify that the admin page and
+   the internal probe recover without restarting the backend.
 
-To test a stalled database rather than a stopped one, use
-`docker compose pause db`, check readiness, and always restore it with
-`docker compose unpause db`. The automated backend test also covers a silent peer.
+```bash
+docker compose exec backend node -e "fetch('http://127.0.0.1:3001/ready', { signal: AbortSignal.timeout(5000) }).then(async r => console.log(r.status, await r.json()))"
+```
+
+The internal check should respond within approximately four seconds plus HTTP
+overhead. A nonresponsive database can be simulated by pausing and then
+unpausing the database service in a disposable Compose stack.
 
 ## Development and automated checks
 
@@ -212,51 +214,6 @@ normal startup or test procedure.
 No business durations, quotas, penalties, priorities, or interview evidence are
 assumed. Any future temporary product values must be explicitly marked
 **demonstrative**. No delivery dates are implied by this roadmap.
-
-## Verification record — 2026-11-16
-
-- Backend: all 5 existing tests passed; no test assertions were changed.
-- Frontend: production build passed with Vite 7.3.8.
-- Dependency installation: `npm ci` completed for both applications.
-  Initial sandbox attempts failed with `EAI_AGAIN registry.npmjs.org`;
-  authorized reruns succeeded. Backend tests initially reported
-  `ERR_TEST_FAILURE` in the sandbox and passed with authorized local socket access.
-- Ledger checker (including `--fix`) and `git diff --check` passed.
-- All CI checks passed on GitHub Actions.
-- Local runtime: container inspection showed PostgreSQL healthy and the backend
-  unhealthy. PostgreSQL logs identified password authentication failure.
-  Application recovery was confirmed manually after correcting the password.
-  API/SQL commands and the full manual acceptance procedure were not repeated
-  as part of this verification.
-- Browser: a supplied screenshot showed the status page during the
-  authentication failure. No automated browser, keyboard, or viewport checks
-  were performed.
-
-## Verification record — 2026-11-12
-
-- Backend: 5 tests passed; the silent TCP peer test completed in approximately 4.01 s.
-- Frontend: production build passed with Vite 7.3.8.
-- Docker: both images built with npm ci; all three services started successfully.
-  Validation used a separate `app-camin-qa` project, a temporary in-memory database,
-  and a generated password retained only in process memory. Test containers and
-  their network were removed afterward; the development database was not initialized.
-- HTTP: frontend, compiled JSX delivery, backend liveness and Vite API proxy passed.
-- SQL: SELECT 1 returned one row. Readiness succeeded, returned 503 in 4.01 s for
-  a paused database, and recovered after unpause and database restart.
-- Ledger checker and git diff --check passed. Existing test assertions changed: 0.
-- Initial restricted-environment checks failed: npm reported
-  `getaddrinfo EAI_AGAIN registry.npmjs.org`; the test subprocess reported
-  `ERR_TEST_FAILURE`. Dependency installation and tests passed when rerun with
-  authorized network/socket access. A diagnostic attempt reported
-  `node: bad option: --test-isolation=none`; that option is not used by this project.
-- Compose validation without a password correctly failed with
-  `required variable POSTGRES_PASSWORD is missing a value`; validation with a
-  shell-supplied password passed.
-- Browser rendering, keyboard/viewport checks and screenshots were not performed:
-  no browser automation tool or installed browser was available. HTTP/build checks
-  do not replace the manual acceptance procedure above.
-- Subsequent manual verification confirmed that all acceptance checks passed.
-  No automated screenshot was taken.
 
 ## PostgreSQL migrations
 

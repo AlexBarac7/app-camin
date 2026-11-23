@@ -13,6 +13,7 @@
     "test:migrations": "node --test test-integration/migrations.integration.js",
     "invite:create": "node src/invite.js create",
     "invite:revoke": "node src/invite.js revoke",
+    "service-status:access": "node src/service-status-access.js",
     "sessions:cleanup": "node src/cleanup-sessions.js",
     "test:auth": "node --test test-integration/auth.integration.js"
   },

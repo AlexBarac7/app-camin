@@ -12,6 +12,7 @@
 - PATTERN-004 · Serialize invitation changes for each email · candidate
 - PATTERN-005 · Run integration suites on separate disposable databases · candidate
 - PATTERN-006 · Reuse session verification on resident endpoints · candidate
+- PATTERN-007 · Share the readiness probe with a container-local listener · candidate
 
 ---
 
@@ -60,3 +61,11 @@
   resident reads. Reject missing or expired sessions before querying the
   protected data, and set Cache-Control to no-store.
 - **Example:** backend/src/modules/auth/auth.routes.js; backend/src/app.js.
+
+## PATTERN-007 · Share the readiness probe with a container-local listener
+- **Status:** candidate
+- **How:** Use one bounded database probe for an authorized browser endpoint
+  and the container healthcheck. Enable the healthcheck listener in Compose,
+  bind it to loopback inside the backend container, and leave its port unpublished.
+- **Example:** backend/src/modules/health/health.routes.js; backend/src/server.js;
+  compose.yaml.

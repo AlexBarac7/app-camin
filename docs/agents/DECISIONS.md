@@ -14,6 +14,7 @@
 - D-005 · Apply versioned PostgreSQL migrations explicitly
 - D-006 · Activate local resident accounts by invitation
 - D-007 · Require resident authentication to read the laundry catalog
+- D-008 · Limit browser access to service status to one explicitly authorized account
 
 ---
 
@@ -106,3 +107,14 @@
 - **Evidence:** The owner approved the read-only catalog plan, verified the
   browser flow and confirmed recording the access rule as a decision.
 - **Confirmed:** 2026-11-22
+
+## D-008 · Limit browser access to service status to one explicitly authorized account
+- **Status:** approved
+- **Rule:** Service status in the browser requires a valid session for the one
+  existing account that can be authorized through the local terminal command.
+  The permission is absent by default and is checked on every request. Revoke
+  the current permission before granting it to a different account.
+- **Why:** Service diagnostics are restricted to the operator selected locally.
+- **Evidence:** Owner requested implementation of the approved welcome and service
+  status plan.
+- **Confirmed:** 2026-11-23

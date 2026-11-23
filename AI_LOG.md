@@ -4,6 +4,25 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-23 · Resident welcome and protected service status
+
+**What I asked for** — Implement the approved welcome and service status plan on
+the inventory branch after the manual inventory review and commit.
+
+**What I got** — The welcome page checks for an existing session and offers
+sign-in. The admin status page checks permission before loading the cards.
+Migration `004` limits the permission to one account. The local
+`service-status:access` command grants or revokes it. Compose uses the same
+four-second PostgreSQL probe through an unpublished backend loopback listener.
+D-008 and C-002 record the approved behavior.
+
+**Verification** — Seven backend tests, both PostgreSQL integration suites, the
+frontend build and the ledger passed. In a disposable Compose stack, the
+internal probe returned 503 in 4.05 seconds with PostgreSQL paused and returned
+200 after unpause. Chromium at 390 × 844 verified welcome navigation, admin
+authorization, access failure while PostgreSQL was stopped, and recovery.
+The owner confirmed the expected behavior during manual testing.
+
 ## 2026-11-23 · Resident resources and laundry inventory
 
 **Workflow** — Graffino `/build` from the approved plan.
@@ -206,10 +225,17 @@ and browser behavior are covered by separate local checks.
 
 ### Commands and outcomes
 
-The [2026-11-16 verification record](README.md#verification-record--2026-11-16)
-reports that both `npm ci` runs, all five backend tests, the frontend build,
-the ledger check, and `git diff --check` passed locally.
-The record also reports manual recovery after correcting the local database password.
+Both `npm ci` runs, all five backend tests, the Vite 7.3.8 production build,
+the ledger checker (including `--fix`), and `git diff --check` passed locally.
+The initial sandbox runs reported `EAI_AGAIN registry.npmjs.org` during
+dependency installation and `ERR_TEST_FAILURE` during backend tests.
+The reruns passed with network and local socket access.
+
+PostgreSQL was healthy while the backend was unhealthy. The database logs
+showed a password authentication failure, and manual verification confirmed
+recovery after the password was corrected. The API, SQL, and full acceptance
+checks were skipped in this run. A supplied screenshot showed the status page
+during the outage. Automated browser, keyboard, and viewport checks were skipped.
 
 ### GitHub Actions results
 
@@ -245,8 +271,28 @@ The [health API contract](docs/agents/CONTRACTS.md#c-001--technical-health-api) 
 
 ### Tests and manual checks
 
-The [2026-11-12 verification record](README.md#verification-record--2026-11-12)
-reports five passing backend tests, a passing frontend build and ledger check, and successful local Docker, HTTP, and SQL checks.
+On 2026-11-12, all five backend tests passed, including the silent TCP peer
+test at approximately 4.01 seconds. The Vite 7.3.8 production build, ledger
+check, and `git diff --check` passed. Existing test assertions were preserved.
+
+Both Docker images built with `npm ci`, and all three services started in an
+isolated `app-camin-qa` project with a temporary in-memory PostgreSQL database
+and a process-local password. The containers and network were removed after
+the run. The development database was left intact. The frontend served
+compiled JSX, the backend liveness endpoint responded, and the Vite API
+proxy worked. `SELECT 1` returned one row. Readiness returned 503 in 4.01
+seconds with PostgreSQL paused and recovered after unpause and restart.
+
+Initial sandbox checks reported `getaddrinfo EAI_AGAIN registry.npmjs.org`
+and `ERR_TEST_FAILURE`. Dependency installation and tests passed on rerun
+with network and local socket access. A diagnostic command reported
+`node: bad option: --test-isolation=none`. Compose validation reported
+`required variable POSTGRES_PASSWORD is missing a value` before the shell
+password was supplied and passed afterward.
+
+The initial run skipped browser rendering, keyboard, viewport, and screenshot
+checks because browser automation was unavailable. The owner later confirmed
+that the manual acceptance checks passed.
 
 ### Next steps
 
