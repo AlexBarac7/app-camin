@@ -307,7 +307,7 @@ instance for each run.
 ## Local resident access
 
 With the shell password and Compose configuration from [First run](#first-run),
-start the services, apply the migration and issue an invitation from the backend
+start the services, apply the migrations and issue an invitation from the backend
 container.
 
 ```bash
@@ -324,9 +324,11 @@ unused invitation, run `docker compose exec backend npm run invite:revoke`
 and enter the same email.
 
 Open the link in a browser, choose a password of 15–128 characters and confirm
-it. Sign in at `/autentificare` with the invited email. At `/cont`, verify the
-email remains visible after reloading. Select **Deconectare**, then revisit
-`/cont` to check that it redirects to sign-in. A session lasts 24 hours.
+it. Sign in at `/autentificare` with the invited email. The app opens
+**Resurse** at `/resurse`, with links to both laundry rooms and the drying room.
+Select an equipment card to see its technical condition and operating hours where known.
+Open **Contul meu** at `/cont` to see the email and select **Deconectare**.
+A session lasts 24 hours.
 
 The invitation command prints links for `http://localhost:5173` by default.
 The API accepts that origin and `http://127.0.0.1:5173` in local development.

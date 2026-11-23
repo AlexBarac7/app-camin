@@ -70,7 +70,7 @@ function AccessForm({ activation }) {
       await authRequest(activation ? 'activate' : 'login', activation
         ? { token: invitation, password }
         : { email: data.get('email'), password });
-      window.location.replace(activation ? '/autentificare' : '/cont');
+      window.location.replace(activation ? '/autentificare' : '/resurse');
     } catch (failure) {
       if (failure.invalidInvitation) setInvalid(true);
       else setError(failure.status ? failure.message : unavailable);
@@ -133,7 +133,6 @@ function Account() {
     <div className="mt-5 grid gap-5">
       {email && <>
         <p className="break-all">{email}</p>
-        <a className="w-fit underline" href="/spalatorie">Spălătorie</a>
         <button type="button" className={buttonStyle} disabled={pending} onClick={logout}>
           {pending ? 'Se deconectează…' : 'Deconectare'}
         </button>
@@ -144,54 +143,121 @@ function Account() {
   );
 }
 
-function LaundryCatalog() {
+const laundryRooms = [
+  { id: '1', path: '/spalatorie/1', name: 'Spălătoria 1' },
+  { id: '2', path: '/spalatorie/2', name: 'Spălătoria 2' },
+  { id: 'uscatorie', path: '/spalatorie/uscatorie', name: 'Uscătoria' },
+];
+
+const linkFocus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
+
+function ResidentNav() {
+  return (
+    <nav aria-label="Navigare principală" className="mb-5 flex gap-2">
+      {[['/resurse', 'Resurse'], ['/cont', 'Contul meu']].map(([path, label]) => (
+        <a key={path} href={path} aria-current={route === path ? 'page' : undefined}
+          className={'rounded-lg px-3 py-3 font-semibold aria-[current=page]:bg-slate-900 aria-[current=page]:text-white hover:underline ' + linkFocus}>
+          {label}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+const technicalStatus = {
+  broken: 'Defectă',
+  working: 'Funcțională',
+  unspecified: 'Neprecizată',
+};
+
+function EquipmentCard({ machine }) {
+  const dryer = machine.type === 'dryer';
+  const broken = machine.technicalStatus === 'broken';
+
+  return (
+    <li>
+      <details className="rounded-xl border border-slate-300">
+        <summary className={'cursor-pointer rounded-xl px-4 py-4 ' + linkFocus}>
+          <span className="ml-1 font-semibold">
+            {dryer ? 'Uscător' : 'Mașină de spălat'}{' '}
+            <span className={'rounded border border-slate-300 bg-white px-2 py-0.5 ' + (dryer ? 'text-red-700' : 'text-black')}>
+              {machine.label}
+            </span>
+          </span>
+          <span className="mt-2 block text-sm text-slate-600">{machine.location}</span>
+          <span className={'mt-2 inline-block rounded-md px-2 py-1 text-sm font-medium ' +
+            (broken ? 'bg-red-100 text-red-900' : 'bg-slate-100 text-slate-800')}>
+            {broken ? 'Defectă' : 'Ocupare necunoscută'}
+          </span>
+        </summary>
+        <div className="grid gap-3 border-t border-slate-200 px-4 py-4 text-sm">
+          <p><strong>Stare tehnică</strong> · {technicalStatus[machine.technicalStatus]}</p>
+          {machine.room !== 'uscatorie' && <p><strong>Program</strong> · luni–vineri, 08:00–20:00</p>}
+        </div>
+      </details>
+    </li>
+  );
+}
+
+function Resources({ room }) {
   const [machines, setMachines] = useState(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
-    async function loadCatalog() {
+    async function loadResources() {
       try {
-        const response = await fetch('/api/laundry-machines', { signal: controller.signal });
+        const response = await fetch(room ? '/api/laundry-machines' : '/api/auth/session', {
+          signal: controller.signal,
+        });
         if (response.status === 401) {
           window.location.replace('/autentificare');
           return;
         }
         if (!response.ok) throw new Error(unavailable);
-        setMachines(await response.json());
+        setMachines(room ? (await response.json()).filter(machine => machine.room === room.id) : []);
       } catch {
         if (!controller.signal.aborted) setError(true);
       }
     }
-    loadCatalog();
+    loadResources();
     return () => controller.abort();
-  }, []);
+  }, [room]);
 
   return (
-    <div className="mt-5 grid gap-5">
-      <a className="w-fit underline" href="/cont">Înapoi la cont</a>
+    <div className="mt-5 grid gap-4">
+      {room && <a className={'w-fit rounded py-2 underline ' + linkFocus} href="/resurse">Înapoi la Resurse</a>}
       {error && <p role="alert" className="text-red-800">{unavailable}</p>}
-      {!machines && !error && <p role="status">Se încarcă inventarul…</p>}
-      {machines?.length === 0 && <p role="status">Inventarul spălătoriei nu a fost încă publicat.</p>}
-      {machines?.length > 0 && (
-        <ul className="divide-y divide-slate-200">
-          {machines.map(machine => (
-            <li key={machine.id} className="break-words py-3">
-              <p className="font-semibold">{machine.name}</p>
-              <p>{machine.location}</p>
+      {!machines && !error && <p role="status">{room ? 'Se încarcă inventarul…' : 'Se verifică sesiunea…'}</p>}
+      {machines && (room ? (
+        machines.length ? (
+          <ul className="grid gap-3">
+            {machines.map(machine => <EquipmentCard key={machine.id} machine={machine} />)}
+          </ul>
+        ) : <p role="status">Inventarul acestei încăperi nu a fost încă publicat.</p>
+      ) : (
+        <ul className="grid gap-3">
+          {laundryRooms.map(item => (
+            <li key={item.id}>
+              <a href={item.path} className={'block rounded-xl border border-slate-300 p-4 font-semibold hover:bg-slate-50 ' + linkFocus}>
+                {item.name} <span className="font-normal text-slate-600">– subsol</span>
+              </a>
             </li>
           ))}
         </ul>
-      )}
+      ))}
     </div>
   );
 }
 
+const currentRoom = laundryRooms.find(room => room.path === route);
 const headings = {
   '/activeaza': 'Activează contul',
   '/autentificare': 'Autentificare',
   '/cont': 'Contul meu',
-  '/spalatorie': 'Spălătorie',
+  '/resurse': 'Resurse',
+  '/spalatorie': 'Resurse',
+  ...Object.fromEntries(laundryRooms.map(room => [room.path, room.name])),
 };
 
 export const isResidentRoute = Object.hasOwn(headings, route);
@@ -201,13 +267,21 @@ if (isResidentRoute) {
 }
 
 export default function ResidentAccess() {
+  const legacyRoute = route === '/spalatorie';
+  useEffect(() => {
+    if (legacyRoute) window.location.replace('/resurse');
+  }, [legacyRoute]);
+
+  const showNav = route === '/cont' || route === '/resurse' || currentRoom;
   let content;
   if (route === '/cont') content = <Account />;
-  else if (route === '/spalatorie') content = <LaundryCatalog />;
+  else if (route === '/resurse' || currentRoom) content = <Resources room={currentRoom} />;
+  else if (legacyRoute) content = <a href="/resurse">Deschide Resurse</a>;
   else content = <AccessForm activation={route === '/activeaza'} />;
 
   return (
     <main className="mx-auto max-w-lg px-4 py-10 sm:py-20">
+      {showNav && <ResidentNav />}
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{headings[route]}</h1>
         {content}

@@ -8,7 +8,7 @@
 ## Overview
 Local technical foundation: React/Vite/Tailwind frontend, modular Express backend
 and PostgreSQL using pg, coordinated by Docker Compose. The first product flow
-activates resident accounts by invitation. Rules for shared resources remain open.
+activates resident accounts by invitation and gives signed-in residents a read-only laundry inventory by room.
 
 ## Parts
 | Part | Path | Responsibility | Talks to |
@@ -17,8 +17,8 @@ activates resident accounts by invitation. Rules for shared resources remain ope
 | Knowledge ledger | `docs/agents/` | Decisions, patterns, contracts, and questions | Working rules |
 | Workflow skills | `.claude/skills/` | Planning and implementation instructions | Agent definitions |
 | Agent definitions | `.claude/agents/` | Planner and builder roles | Workflow skills |
-| Frontend | `frontend/` | English service status page and Romanian resident access screens | REST API through Vite proxy |
-| Backend | `backend/src/` | Configuration, database pool, health and auth modules | PostgreSQL |
+| Frontend | `frontend/` | English service status page and Romanian resident access, account and resources screens | REST API through Vite proxy |
+| Backend | `backend/src/` | Configuration, database pool, health and auth modules, and authenticated laundry inventory | PostgreSQL |
 | Local runtime | `compose.yaml` | Three services, loopback ports, persistent volume | Docker |
 
 ## Data flow
@@ -28,7 +28,7 @@ backend tests and Compose healthcheck. Future modules belong alongside health.
 
 ## State and storage
 PostgreSQL 17 stores data in the named postgres_data volume, mounted at
-/var/lib/postgresql/data. Explicit backend commands inspect and apply numbered PostgreSQL migrations. The resident access migration adds users, invitations, and sessions. No seed data is included.
+/var/lib/postgresql/data. Explicit backend commands inspect and apply numbered PostgreSQL migrations. The resident access migration adds users, invitations, and sessions. The laundry inventory migration records the 30 pieces of equipment listed in [INTERVIEW.md](../../INTERVIEW.md).
 
 ## Configuration
 .env.example documents fixed local ports 5173/3000/5432 and demonstrative database

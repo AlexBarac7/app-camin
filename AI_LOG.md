@@ -4,6 +4,46 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-23 · Resident resources and laundry inventory
+
+**Workflow** — Graffino `/build` from the approved plan.
+
+**What I asked for** — Let residents find laundry equipment by its physical
+label on a phone and check its location, technical condition and operating hours where known.
+
+**What I got** — Migration `003` adds the 30 pieces of equipment from
+[INTERVIEW.md](INTERVIEW.md). Residents land on **Resurse** and can open a room
+or **Contul meu**. Room cards keep **Defectă** or **Ocupare necunoscută** visible
+and expand to show the technical condition and operating hours where known. Q-007–Q-010
+record the operating questions that remain open.
+
+**Verification** — Six backend tests, both PostgreSQL integration suites, the
+frontend build and ledger validation passed. The migration was verified on a
+fresh database and against existing records. Compose started successfully,
+and the health, readiness and unauthorized catalog checks passed. The local
+migration was applied and exactly two confirmed demonstrative rows were
+removed. The local inventory contains 30 pieces of equipment. Chromium at
+390 px verified sign-in, direct links, room navigation, closed card status,
+touch and keyboard expansion, and sign-out.
+
+## 2026-11-23 · Residence administrator input and interview summary
+
+**What I asked for** — Review the current implementation and the Graffino
+workflow, then summarize the information obtained from discussions with the
+residence administrator and the head of the residence.
+
+**What I got** — Added [INTERVIEW.md](INTERVIEW.md) with the laundry inventory,
+equipment condition, operating hours, quiet hours, and the current process for
+reporting defects. The summary identifies details that remain unspecified.
+
+**What I did with it** — I’ll use the inventory and documented residence rules
+to guide the next stages of development.
+
+**Verification** — Backend tests, PostgreSQL integration tests, the frontend
+build, and ledger validation passed.
+[PR #7](https://github.com/AlexBarac7/app-camin/pull/7) added only
+`INTERVIEW.md` and was merged into `main`.
+
 ## 2026-11-22 · Read-only laundry catalog
 
 **Workflow** — Graffino `/plan` and `/build`.
