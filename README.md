@@ -297,6 +297,20 @@ Run the automated access flow on a fresh, disposable PostgreSQL 17 database
 named `app_camin_auth_test`. Configure the same `PG*` variables described for
 the migration tests, then run `npm --prefix backend run test:auth`.
 
+### Inspect reservations and database tables
+
+The account authorized for service status can open `/admin/rezervari` to filter
+reservation history or `/admin/baza-de-date` to browse equipment, reservations
+and migrations. Both pages are read-only. Apply migration 005 before using
+the reservation views.
+
+Run the corresponding integration suite with the same `PG*` configuration as
+the migration tests, using a fresh database named `app_camin_reservations_test`:
+
+```bash
+npm --prefix backend run test:reservations
+```
+
 ### Clean up expired sessions
 
 After applying the migration, run this command manually from the repository

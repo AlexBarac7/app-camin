@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import LaundryCalendar, { upcomingInterval } from './LaundryCalendar.jsx';
 
 const invalidLink = 'Invitația nu mai este valabilă. Cere o invitație nouă.';
 const unavailable = 'Momentan nu putem finaliza cererea. Încearcă din nou.';
@@ -170,7 +171,15 @@ const technicalStatus = {
   unspecified: 'Neprecizată',
 };
 
-function EquipmentCard({ machine }) {
+const occupancy = {
+  available: 'Disponibilă',
+  occupied: 'Ocupată',
+  handover: 'Predare',
+  broken: 'Defectă',
+  unspecified: 'Neprecizată',
+};
+
+function EquipmentCard({ machine, selected, onSelect, onChange }) {
   const dryer = machine.type === 'dryer';
   const broken = machine.technicalStatus === 'broken';
 
@@ -187,12 +196,19 @@ function EquipmentCard({ machine }) {
           <span className="mt-2 block text-sm text-slate-600">{machine.location}</span>
           <span className={'mt-2 inline-block rounded-md px-2 py-1 text-sm font-medium ' +
             (broken ? 'bg-red-100 text-red-900' : 'bg-slate-100 text-slate-800')}>
-            {broken ? 'Defectă' : 'Ocupare necunoscută'}
+            {occupancy[machine.status]}
           </span>
+          {machine.nextReservation && <span className="mt-2 block text-sm">
+            Următoarea rezervare · {upcomingInterval(machine.nextReservation)}
+          </span>}
         </summary>
         <div className="grid gap-3 border-t border-slate-200 px-4 py-4 text-sm">
           <p><strong>Stare tehnică</strong> · {technicalStatus[machine.technicalStatus]}</p>
-          {machine.room !== 'uscatorie' && <p><strong>Program</strong> · luni–vineri, 08:00–20:00</p>}
+          <p><strong>Program</strong> · luni–vineri, 08:00–20:00</p>
+          <button type="button" className={buttonStyle} aria-expanded={selected} onClick={onSelect}>
+            {selected ? 'Închide calendarul' : 'Vezi calendarul'}
+          </button>
+          {selected && <LaundryCalendar machine={machine} onChange={onChange} />}
         </div>
       </details>
     </li>
@@ -201,13 +217,22 @@ function EquipmentCard({ machine }) {
 
 function Resources({ room }) {
   const [machines, setMachines] = useState(null);
+  const [selectedMachine, setSelectedMachine] = useState(null);
+  const [revision, setRevision] = useState(0);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
+    let timer;
+    const refresh = () => setRevision(value => value + 1);
+    function refreshOnReturn() {
+      if (!document.hidden) refresh();
+    }
+
     async function loadResources() {
+      let refreshAfter = 30_000;
       try {
-        const response = await fetch(room ? '/api/laundry-machines' : '/api/auth/session', {
+        const response = await fetch(room ? '/api/laundry-machines?availability=1' : '/api/auth/session', {
           signal: controller.signal,
         });
         if (response.status === 401) {
@@ -215,14 +240,31 @@ function Resources({ room }) {
           return;
         }
         if (!response.ok) throw new Error(unavailable);
-        setMachines(room ? (await response.json()).filter(machine => machine.room === room.id) : []);
+        const inventory = room ? (await response.json()).filter(machine => machine.room === room.id) : [];
+        if (controller.signal.aborted) return;
+        for (const machine of inventory) {
+          if (machine.nextStatusAt) {
+            const delay = Date.parse(machine.nextStatusAt) - Date.parse(machine.observedAt);
+            refreshAfter = Math.min(refreshAfter, Math.max(1, delay));
+          }
+        }
+        setError(false);
+        setMachines(inventory);
       } catch {
         if (!controller.signal.aborted) setError(true);
+      } finally {
+        if (room && !controller.signal.aborted) timer = setTimeout(refresh, refreshAfter);
       }
     }
+
     loadResources();
-    return () => controller.abort();
-  }, [room]);
+    if (room) document.addEventListener('visibilitychange', refreshOnReturn);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', refreshOnReturn);
+    };
+  }, [room, revision]);
 
   return (
     <div className="mt-5 grid gap-4">
@@ -232,7 +274,10 @@ function Resources({ room }) {
       {machines && (room ? (
         machines.length ? (
           <ul className="grid gap-3">
-            {machines.map(machine => <EquipmentCard key={machine.id} machine={machine} />)}
+            {machines.map(machine => <EquipmentCard key={machine.id} machine={machine}
+              selected={selectedMachine === machine.id}
+              onSelect={() => setSelectedMachine(selectedMachine === machine.id ? null : machine.id)}
+              onChange={() => setRevision(value => value + 1)} />)}
           </ul>
         ) : <p role="status">Inventarul acestei încăperi nu a fost încă publicat.</p>
       ) : (

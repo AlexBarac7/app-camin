@@ -144,7 +144,8 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   assert.equal(activeSession.status, 200);
   assert.deepEqual(await activeSession.json(), { email });
 
-  assert.deepEqual((await runMigrations(db, migrations, 'apply')).slice(3), [
+  await cp(join(migrations, '004_service_status_access.sql'), join(baseline, '004_service_status_access.sql'));
+  assert.deepEqual((await runMigrations(db, baseline, 'apply')).slice(3), [
     { filename: '004_service_status_access.sql', state: 'newly applied' },
   ]);
   const otherEmail = 'other@example.test';

@@ -13,6 +13,7 @@
 - PATTERN-005 · Run integration suites on separate disposable databases · candidate
 - PATTERN-006 · Reuse session verification on resident endpoints · candidate
 - PATTERN-007 · Share the readiness probe with a container-local listener · candidate
+- PATTERN-008 · Serialize bookings on the equipment row · candidate
 
 ---
 
@@ -69,3 +70,11 @@
   bind it to loopback inside the backend container, and leave its port unpublished.
 - **Example:** backend/src/modules/health/health.routes.js; backend/src/server.js;
   compose.yaml.
+
+## PATTERN-008 · Serialize bookings on the equipment row
+- **Status:** candidate
+- **How:** Lock the equipment row before testing whether a requested block overlaps
+  an active reservation. Insert the reservation in the same transaction. Use
+  strict boundary comparisons so adjacent blocks can share an endpoint.
+- **Example:** backend/src/modules/laundry/reservations.routes.js;
+  backend/test-integration/reservations.integration.js.

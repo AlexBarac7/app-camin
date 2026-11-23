@@ -15,7 +15,8 @@
     "invite:revoke": "node src/invite.js revoke",
     "service-status:access": "node src/service-status-access.js",
     "sessions:cleanup": "node src/cleanup-sessions.js",
-    "test:auth": "node --test test-integration/auth.integration.js"
+    "test:auth": "node --test test-integration/auth.integration.js",
+    "test:reservations": "node --test test-integration/reservations.integration.js"
   },
   "dependencies": { "express": "^5.1.0", "pg": "^8.16.0" }
 }

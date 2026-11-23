@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import AdminData, { AdminNav } from './AdminData.jsx';
 
 const initial = { state: 'checking', message: 'Checking service…' };
 
@@ -101,6 +102,7 @@ function ServiceStatus() {
 
   return (
     <main lang="en" className="mx-auto max-w-3xl px-5 py-12 sm:py-20">
+      <AdminNav current="/admin/stare-servicii" />
       <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Service status</h1>
       <p className="mt-4 max-w-2xl leading-7 text-slate-600">Check the backend and PostgreSQL connection.</p>
       <div className="mt-8 grid gap-4" aria-live="polite" aria-atomic="true" aria-busy={checking}>
@@ -168,5 +170,6 @@ export default function App() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
   if (path === '/') return <Welcome />;
   if (path === '/admin/stare-servicii') return <ServiceStatus />;
+  if (path === '/admin/rezervari' || path === '/admin/baza-de-date') return <AdminData path={path} />;
   return <Page title="Pagina nu a fost găsită"><HomeLink /></Page>;
 }

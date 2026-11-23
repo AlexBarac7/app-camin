@@ -17,6 +17,9 @@
 - D-008 · Limit browser access to service status to one explicitly authorized account
 - D-009 · Notify only residents waiting to use defective equipment
 - D-010 · Cancel affected reservations and Live-queue entries when equipment is defective
+- D-011 · Use the application calendar for pilot laundry reservations · _proposed_ · [Laundry decisions](decisions/laundry-decisions.md)
+- D-012 · Restrict administrative data views to the authorized operator · [Admin data](decisions/admin-data.md)
+- D-013 · Allow extended laundry use for blocks ending at 20:00 · [Laundry decisions](decisions/laundry-decisions.md)
 
 ---
 
@@ -147,3 +150,9 @@
 - **Why:** Residents can see why their reservations were cancelled and choose another machine.
 - **Evidence:** The owner confirmed [Q-011](OPEN-QUESTIONS.md#q-011--what-happens-to-reservations-when-equipment-is-marked-defective). [GitHub issue #9](https://github.com/AlexBarac7/app-camin/issues/9) tracks implementation.
 - **Confirmed:** 2026-11-23
+
+## Where to find other decisions
+
+The [index](#index) lists decisions in numeric order. For decisions stored in
+topic files under `docs/agents/decisions/`, follow the link on the corresponding
+index line to read the full text.
