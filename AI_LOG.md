@@ -4,7 +4,29 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-23 · Laundry reservations, equipment faults, and follow-up issues
+
+**Model:** GPT-6.2-Sol.
+
+**What I asked for** — Record the confirmed drying room schedule, reservation
+occupancy and fault handling. Create GitHub issues for later implementation
+and complete the model field in every journal entry.
+
+**What I got** — Q-007 records the Monday–Friday, 08:00–20:00 drying schedule.
+Q-008 records occupancy at the start of the reserved interval and the need
+for a calendar. D-009 records targeted notifications. D-010 and Q-011 record
+cancellations, reservation history and removal from the active Live-queue
+after a confirmed defect. The implementation and remaining questions are
+tracked in [#8](https://github.com/AlexBarac7/app-camin/issues/8),
+[#9](https://github.com/AlexBarac7/app-camin/issues/9) and
+[#10](https://github.com/AlexBarac7/app-camin/issues/10).
+
+**Verification** — Checked the model fields against Codex session history.
+The ledger checker and `git diff --check` passed.
+
 ## 2026-11-23 · Resident welcome and protected service status
+
+**Model:** GPT-6.2-Sol.
 
 **What I asked for** — Implement the approved welcome and service status plan on
 the inventory branch after the manual inventory review and commit.
@@ -24,6 +46,8 @@ authorization, access failure while PostgreSQL was stopped, and recovery.
 The owner confirmed the expected behavior during manual testing.
 
 ## 2026-11-23 · Resident resources and laundry inventory
+
+**Model:** GPT-6.2-Sol.
 
 **Workflow** — Graffino `/build` from the approved plan.
 
@@ -47,6 +71,8 @@ touch and keyboard expansion, and sign-out.
 
 ## 2026-11-23 · Residence administrator input and interview summary
 
+**Model:** GPT-6.2-Sol.
+
 **What I asked for** — Review the current implementation and the Graffino
 workflow, then summarize the information obtained from discussions with the
 residence administrator and the head of the residence.
@@ -64,6 +90,8 @@ build, and ledger validation passed.
 `INTERVIEW.md` and was merged into `main`.
 
 ## 2026-11-22 · Read-only laundry catalog
+
+**Model:** GPT-6.2-Sol.
 
 **Workflow** — Graffino `/plan` and `/build`.
 
@@ -92,6 +120,8 @@ sessions. The owner confirmed the manual browser checks.
 
 ## 2026-11-21 · Manual cleanup of expired sessions
 
+**Model:** GPT-6.2-Sol.
+
 **Workflow** — Graffino `/build` from the approved cleanup plan.
 
 **What I asked for** — Add and test a manual backend command to remove expired
@@ -114,6 +144,8 @@ error. Both [GitHub Actions jobs for PR #5](https://github.com/AlexBarac7/app-ca
 passed.
 
 ## 2026-11-21 · Local resident access by invitation
+
+**Model:** GPT-6.2-Sol.
 
 **Workflow** — Graffino `/build` from the approved invitation plan.
 
@@ -147,6 +179,8 @@ PostgreSQL listed `users`, `invitations`, `sessions` and `schema_migrations`.
 
 ## 2026-11-21 · P20 project brief and PostgreSQL migrations
 
+**Model:** GPT-6.2-Sol.
+
 **Workflow** — Graffino `/plan` and `/build`.
 
 **What I asked for** — Save the original P20 brief in [CONTEXT.md](CONTEXT.md)
@@ -178,6 +212,8 @@ A separate preview stack was started for manual testing. Its status command
 reported `No migration files.`, as expected with an empty migration directory.
 
 ## 2026-11-18 — Project decisions, vocabulary, and local acceptance
+
+**Model:** GPT-6.2-Sol.
 
 ### What was asked and done
 
