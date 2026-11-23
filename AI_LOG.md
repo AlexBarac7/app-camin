@@ -4,7 +4,94 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-23 · Laundry reservations, equipment faults, and follow-up issues
+
+**Model:** GPT-6.2-Sol.
+
+**What I asked for** — Record the confirmed drying room schedule, reservation
+occupancy and fault handling. Create GitHub issues for later implementation
+and complete the model field in every journal entry.
+
+**What I got** — Q-007 records the Monday–Friday, 08:00–20:00 drying schedule.
+Q-008 records occupancy at the start of the reserved interval and the need
+for a calendar. D-009 records targeted notifications. D-010 and Q-011 record
+cancellations, reservation history and removal from the active Live-queue
+after a confirmed defect. The implementation and remaining questions are
+tracked in [#8](https://github.com/AlexBarac7/app-camin/issues/8),
+[#9](https://github.com/AlexBarac7/app-camin/issues/9) and
+[#10](https://github.com/AlexBarac7/app-camin/issues/10).
+
+**Verification** — Checked the model fields against Codex session history.
+The ledger checker and `git diff --check` passed.
+
+## 2026-11-23 · Resident welcome and protected service status
+
+**Model:** GPT-6.2-Sol.
+
+**What I asked for** — Implement the approved welcome and service status plan on
+the inventory branch after the manual inventory review and commit.
+
+**What I got** — The welcome page checks for an existing session and offers
+sign-in. The admin status page checks permission before loading the cards.
+Migration `004` limits the permission to one account. The local
+`service-status:access` command grants or revokes it. Compose uses the same
+four-second PostgreSQL probe through an unpublished backend loopback listener.
+D-008 and C-002 record the approved behavior.
+
+**Verification** — Seven backend tests, both PostgreSQL integration suites, the
+frontend build and the ledger passed. In a disposable Compose stack, the
+internal probe returned 503 in 4.05 seconds with PostgreSQL paused and returned
+200 after unpause. Chromium at 390 × 844 verified welcome navigation, admin
+authorization, access failure while PostgreSQL was stopped, and recovery.
+The owner confirmed the expected behavior during manual testing.
+
+## 2026-11-23 · Resident resources and laundry inventory
+
+**Model:** GPT-6.2-Sol.
+
+**Workflow** — Graffino `/build` from the approved plan.
+
+**What I asked for** — Let residents find laundry equipment by its physical
+label on a phone and check its location, technical condition and operating hours where known.
+
+**What I got** — Migration `003` adds the 30 pieces of equipment from
+[INTERVIEW.md](INTERVIEW.md). Residents land on **Resurse** and can open a room
+or **Contul meu**. Room cards keep **Defectă** or **Ocupare necunoscută** visible
+and expand to show the technical condition and operating hours where known. Q-007–Q-010
+record the operating questions that remain open.
+
+**Verification** — Six backend tests, both PostgreSQL integration suites, the
+frontend build and ledger validation passed. The migration was verified on a
+fresh database and against existing records. Compose started successfully,
+and the health, readiness and unauthorized catalog checks passed. The local
+migration was applied and exactly two confirmed demonstrative rows were
+removed. The local inventory contains 30 pieces of equipment. Chromium at
+390 px verified sign-in, direct links, room navigation, closed card status,
+touch and keyboard expansion, and sign-out.
+
+## 2026-11-23 · Residence administrator input and interview summary
+
+**Model:** GPT-6.2-Sol.
+
+**What I asked for** — Review the current implementation and the Graffino
+workflow, then summarize the information obtained from discussions with the
+residence administrator and the head of the residence.
+
+**What I got** — Added [INTERVIEW.md](INTERVIEW.md) with the laundry inventory,
+equipment condition, operating hours, quiet hours, and the current process for
+reporting defects. The summary identifies details that remain unspecified.
+
+**What I did with it** — I’ll use the inventory and documented residence rules
+to guide the next stages of development.
+
+**Verification** — Backend tests, PostgreSQL integration tests, the frontend
+build, and ledger validation passed.
+[PR #7](https://github.com/AlexBarac7/app-camin/pull/7) added only
+`INTERVIEW.md` and was merged into `main`.
+
 ## 2026-11-22 · Read-only laundry catalog
+
+**Model:** GPT-6.2-Sol.
 
 **Workflow** — Graffino `/plan` and `/build`.
 
@@ -33,6 +120,8 @@ sessions. The owner confirmed the manual browser checks.
 
 ## 2026-11-21 · Manual cleanup of expired sessions
 
+**Model:** GPT-6.2-Sol.
+
 **Workflow** — Graffino `/build` from the approved cleanup plan.
 
 **What I asked for** — Add and test a manual backend command to remove expired
@@ -55,6 +144,8 @@ error. Both [GitHub Actions jobs for PR #5](https://github.com/AlexBarac7/app-ca
 passed.
 
 ## 2026-11-21 · Local resident access by invitation
+
+**Model:** GPT-6.2-Sol.
 
 **Workflow** — Graffino `/build` from the approved invitation plan.
 
@@ -88,6 +179,8 @@ PostgreSQL listed `users`, `invitations`, `sessions` and `schema_migrations`.
 
 ## 2026-11-21 · P20 project brief and PostgreSQL migrations
 
+**Model:** GPT-6.2-Sol.
+
 **Workflow** — Graffino `/plan` and `/build`.
 
 **What I asked for** — Save the original P20 brief in [CONTEXT.md](CONTEXT.md)
@@ -119,6 +212,8 @@ A separate preview stack was started for manual testing. Its status command
 reported `No migration files.`, as expected with an empty migration directory.
 
 ## 2026-11-18 — Project decisions, vocabulary, and local acceptance
+
+**Model:** GPT-6.2-Sol.
 
 ### What was asked and done
 
@@ -166,10 +261,17 @@ and browser behavior are covered by separate local checks.
 
 ### Commands and outcomes
 
-The [2026-11-16 verification record](README.md#verification-record--2026-11-16)
-reports that both `npm ci` runs, all five backend tests, the frontend build,
-the ledger check, and `git diff --check` passed locally.
-The record also reports manual recovery after correcting the local database password.
+Both `npm ci` runs, all five backend tests, the Vite 7.3.8 production build,
+the ledger checker (including `--fix`), and `git diff --check` passed locally.
+The initial sandbox runs reported `EAI_AGAIN registry.npmjs.org` during
+dependency installation and `ERR_TEST_FAILURE` during backend tests.
+The reruns passed with network and local socket access.
+
+PostgreSQL was healthy while the backend was unhealthy. The database logs
+showed a password authentication failure, and manual verification confirmed
+recovery after the password was corrected. The API, SQL, and full acceptance
+checks were skipped in this run. A supplied screenshot showed the status page
+during the outage. Automated browser, keyboard, and viewport checks were skipped.
 
 ### GitHub Actions results
 
@@ -205,8 +307,28 @@ The [health API contract](docs/agents/CONTRACTS.md#c-001--technical-health-api) 
 
 ### Tests and manual checks
 
-The [2026-11-12 verification record](README.md#verification-record--2026-11-12)
-reports five passing backend tests, a passing frontend build and ledger check, and successful local Docker, HTTP, and SQL checks.
+On 2026-11-12, all five backend tests passed, including the silent TCP peer
+test at approximately 4.01 seconds. The Vite 7.3.8 production build, ledger
+check, and `git diff --check` passed. Existing test assertions were preserved.
+
+Both Docker images built with `npm ci`, and all three services started in an
+isolated `app-camin-qa` project with a temporary in-memory PostgreSQL database
+and a process-local password. The containers and network were removed after
+the run. The development database was left intact. The frontend served
+compiled JSX, the backend liveness endpoint responded, and the Vite API
+proxy worked. `SELECT 1` returned one row. Readiness returned 503 in 4.01
+seconds with PostgreSQL paused and recovered after unpause and restart.
+
+Initial sandbox checks reported `getaddrinfo EAI_AGAIN registry.npmjs.org`
+and `ERR_TEST_FAILURE`. Dependency installation and tests passed on rerun
+with network and local socket access. A diagnostic command reported
+`node: bad option: --test-isolation=none`. Compose validation reported
+`required variable POSTGRES_PASSWORD is missing a value` before the shell
+password was supplied and passed afterward.
+
+The initial run skipped browser rendering, keyboard, viewport, and screenshot
+checks because browser automation was unavailable. The owner later confirmed
+that the manual acceptance checks passed.
 
 ### Next steps
 

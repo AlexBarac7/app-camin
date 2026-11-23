@@ -25,5 +25,7 @@ export function loadConfig(env = process.env) {
   return {
     port: port(env, 'PORT'),
     database: loadDatabaseConfig(env),
+    internalReadinessPort: env.INTERNAL_READINESS_PORT === undefined
+      ? undefined : port(env, 'INTERNAL_READINESS_PORT'),
   };
 }

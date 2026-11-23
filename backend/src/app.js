@@ -7,8 +7,11 @@ export function createApp(database, appOrigins) {
   app.disable('x-powered-by');
   app.use('/api/auth', authRoutes(database, appOrigins));
   app.get('/api/laundry-machines', requireSession(database), async (_req, res) => {
-    const { rows } = await database.query('SELECT id, name, location FROM laundry_machines ORDER BY id');
-    res.json(rows);
+    const { rows } = await database.query('SELECT * FROM laundry_machines ORDER BY id');
+    res.json(rows.map(({ id, name, location, room, type, label, technical_status }) => ({
+      id, name, location,
+      ...(room && { room, type, label, technicalStatus: technical_status }),
+    })));
   });
   app.use('/api', healthRoutes(database));
   app.use((_req, res) => res.status(404).json({ status: 'error', message: 'Endpoint not found.' }));

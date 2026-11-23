@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { cp, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -13,7 +16,13 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   assert.equal(process.env.PGDATABASE, 'app_camin_auth_test');
   const db = createDatabase(loadDatabaseConfig());
   t.after(() => db.close());
-  assert.deepEqual(await runMigrations(db, fileURLToPath(new URL('../migrations/', import.meta.url)), 'apply'), [
+  const migrations = fileURLToPath(new URL('../migrations/', import.meta.url));
+  const baseline = await mkdtemp(join(tmpdir(), 'camin-catalog-'));
+  t.after(() => rm(baseline, { recursive: true, force: true }));
+  for (const file of ['001_resident_access.sql', '002_laundry_machines.sql']) {
+    await cp(join(migrations, file), join(baseline, file));
+  }
+  assert.deepEqual(await runMigrations(db, baseline, 'apply'), [
     { filename: '001_resident_access.sql', state: 'newly applied' },
     { filename: '002_laundry_machines.sql', state: 'newly applied' },
   ]);
@@ -93,6 +102,38 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
     { id: 2, name: 'Mașină test B', location: 'Etaj test B' },
   ]);
 
+  await db.query("INSERT INTO laundry_machines (id, name, location) OVERRIDING SYSTEM VALUE VALUES (3, 'Echipament anterior', 'Locație anterioară')");
+  await cp(join(migrations, '003_laundry_inventory.sql'), join(baseline, '003_laundry_inventory.sql'));
+  const migrated = await runMigrations(db, baseline, 'apply');
+  assert.deepEqual(migrated.slice(2).map(row => row.state), ['newly applied']);
+
+  const inventoryResponse = await catalog(activeCookie);
+  assert.equal(inventoryResponse.status, 200);
+  assert.equal(inventoryResponse.headers.get('cache-control'), 'no-store');
+  const inventory = await inventoryResponse.json();
+  assert.equal(inventory.length, 33);
+  assert.equal(new Set(inventory.map(machine => machine.id)).size, 33);
+  const legacy = inventory.find(machine => machine.name === 'Echipament anterior');
+  assert.equal(legacy.location, 'Locație anterioară');
+  assert.equal(legacy.room, undefined);
+
+  const equipment = inventory.filter(machine => machine.room !== undefined);
+  const labels = (room, type) => equipment.filter(machine => machine.room === room && machine.type === type)
+    .map(machine => machine.label);
+  assert.deepEqual(labels('1', 'washer'), Array.from({ length: 11 }, (_, i) => String(i + 1)));
+  assert.deepEqual(labels('2', 'washer'), Array.from({ length: 8 }, (_, i) => (i + 1) + 'A'));
+  assert.deepEqual(labels('2', 'dryer'), ['1A', '2A']);
+  assert.deepEqual(labels('uscatorie', 'dryer'), Array.from({ length: 9 }, (_, i) => String(i + 1)));
+  assert.deepEqual(equipment.filter(machine => machine.technicalStatus === 'broken')
+    .map(({ room, type, label }) => [room, type, label]), [['1', 'washer', '3'], ['1', 'washer', '10']]);
+  assert.deepEqual(equipment.filter(machine => machine.technicalStatus === 'unspecified')
+    .map(({ room, type, label }) => [room, type, label]), [['2', 'dryer', '1A'], ['2', 'dryer', '2A']]);
+  assert.equal(equipment.filter(machine => machine.technicalStatus === 'working').length, 26);
+  assert.equal((await catalog()).status, 401);
+  assert.equal((await catalog(expiredCookie)).status, 401);
+  assert.ok((await runMigrations(db, baseline, 'apply')).every(row => row.state === 'applied'));
+  assert.equal((await db.query('SELECT count(*)::int AS total FROM laundry_machines')).rows[0].total, 33);
+
   const cleanup = () => execFileSync('npm', ['--silent', 'run', 'sessions:cleanup'], {
     cwd: fileURLToPath(new URL('../', import.meta.url)),
     encoding: 'utf8',
@@ -102,4 +143,39 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   const activeSession = await request('session', undefined, activeCookie);
   assert.equal(activeSession.status, 200);
   assert.deepEqual(await activeSession.json(), { email });
+
+  assert.deepEqual((await runMigrations(db, migrations, 'apply')).slice(3), [
+    { filename: '004_service_status_access.sql', state: 'newly applied' },
+  ]);
+  const otherEmail = 'other@example.test';
+  assert.equal((await activate(await issueInvitation(db, otherEmail))).status, 201);
+  const otherLogin = await request('login', { email: otherEmail, password });
+  assert.equal(otherLogin.status, 200);
+  const otherCookie = otherLogin.headers.get('set-cookie').split(';')[0];
+
+  const permission = (mode, address) => spawnSync(process.execPath, ['src/service-status-access.js', mode], {
+    cwd: fileURLToPath(new URL('../', import.meta.url)),
+    input: address + '\n',
+    encoding: 'utf8',
+  });
+  const endpoints = ['/api/admin/access', '/api/health', '/api/ready'];
+  const statuses = async cookie => Promise.all(endpoints.map(async path =>
+    (await fetch(base + path, { headers: { cookie } })).status));
+  assert.deepEqual(await statuses(activeCookie), [403, 403, 403]);
+  assert.deepEqual(await statuses(otherCookie), [403, 403, 403]);
+
+  const missing = permission('grant', 'missing@example.test');
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /Nu există un cont/);
+  assert.equal(permission('grant', email).status, 0);
+  assert.deepEqual(await statuses(activeCookie), [204, 200, 200]);
+  const occupied = permission('grant', otherEmail);
+  assert.equal(occupied.status, 1);
+  assert.match(occupied.stderr, /Retrage permisiunea/);
+  assert.deepEqual(await statuses(otherCookie), [403, 403, 403]);
+  assert.equal(permission('revoke', email).status, 0);
+  assert.deepEqual(await statuses(activeCookie), [403, 403, 403]);
+  assert.equal(permission('grant', otherEmail).status, 0);
+  assert.deepEqual(await statuses(otherCookie), [204, 200, 200]);
+
 });

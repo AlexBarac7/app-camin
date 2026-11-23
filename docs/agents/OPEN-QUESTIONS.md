@@ -15,6 +15,11 @@
 - Q-004 · What is the repository remote and release process?
 - Q-005 · Which business rules and users should the product support?
 - Q-006 · Who manages the laundry catalog and with what permissions?
+- Q-007 · What are the drying room's operating hours? · _answered_
+- Q-008 · What establishes whether equipment is occupied? · _answered_
+- Q-009 · How do reservations and Live-queue interact with the notebook?
+- Q-010 · How are no-shows confirmed and handled?
+- Q-011 · What happens to reservations when equipment is marked defective? · _answered_
 
 ---
 
@@ -25,7 +30,7 @@
 - **Answer:** The owner described shared resource management for a student residence,
   co-working hub or residential building: reservations, live queue, fair-use quotas,
   no-show handling, maintenance tickets with photos and push notifications.
-  Exact users, roles and rules are not yet established. No interviews supplied.
+  Exact users, roles and rules remain under investigation. See [INTERVIEW.md](../../INTERVIEW.md) for the documented residence practices.
 
 ## Q-002 · Which stack and runtime should the application use?
 - **Status:** answered
@@ -59,14 +64,70 @@
   transport, fair-use quotas, no-show definitions and consequences, maintenance
   workflow and photo storage, notification events and recipients.
 - **Who answers:** Project owner, after interviews
-- **Evidence:** The owner explicitly said no interviews have been conducted yet.
+- **Evidence:** [INTERVIEW.md](../../INTERVIEW.md) documents current residence practices and identifies details still to clarify.
 
 ## Q-006 · Who manages the laundry catalog and with what permissions?
 - **Status:** open
-- **Blocks:** Publishing the real inventory and implementing catalog management.
+- **Blocks:** Ongoing inventory updates and implementing catalog management.
 - **Who answers:** Project owner, after brainstorming and consulting the residence administrator.
-- **To clarify:** Who confirms and publishes the inventory, who can add, edit or
+- **Owner input:** Both the administrator and admin should be able to change
+  equipment status manually. For example, the administrator can mark equipment
+  as defective while it is occupied or available.
+- **To clarify:** Who confirms and publishes inventory updates, who can add, edit or
   retire machines, what autonomy the residence administrator has, and whether
   changes happen through the terminal or the application. See also
   [Q-005](#q-005--which-business-rules-and-users-should-the-product-support)
   for broader roles and product rules.
+
+## Q-007 · What are the drying room's operating hours?
+- **Status:** answered
+- **Blocks:** Displaying an operating schedule for the drying room.
+- **Who answers:** Project owner
+- **Answer:** The drying room and dryers follow the same hours as the washing
+  machines, Monday through Friday, 08:00–20:00.
+- **Confirmed:** 2026-11-23
+
+## Q-008 · What establishes whether equipment is occupied?
+- **Status:** answered
+- **Blocks:** Showing Available or Occupied for each piece of equipment.
+- **Who answers:** Project owner
+- **Answer:** The backend marks a washing machine occupied when the reserved
+  interval begins and makes it available when the interval ends, provided it
+  remains operational. A future reservation leaves the machine available now.
+  Show the upcoming occupied interval alongside the equipment card or nearby,
+  and show reservations on a calendar. A resident can reserve the machine for
+  immediate use if that reservation fits before the next reserved interval.
+- **Confirmed:** 2026-11-23
+- **Tracking:** [Reservation calendar](https://github.com/AlexBarac7/app-camin/issues/8).
+
+## Q-009 · How do reservations and Live-queue interact with the notebook?
+- **Status:** open
+- **Blocks:** Implementing the reservation calendar and Live-queue.
+- **Who answers:** Project owner, after consulting the residence administrator.
+- **Evidence:** [INTERVIEW.md](../../INTERVIEW.md) describes the notebook workflow. Reservation duration, advance booking, cancellation, quotas and Live-queue order remain open.
+- **Tracking:** [Live-queue priority](https://github.com/AlexBarac7/app-camin/issues/10).
+
+## Q-010 · How are no-shows confirmed and handled?
+- **Status:** open
+- **Blocks:** Implementing the attendance confirmation window and any strike policy.
+- **Who answers:** Project owner, after consulting the residence administrator.
+- **Evidence:** [INTERVIEW.md](../../INTERVIEW.md) documents the practice for clothes left in equipment after the recorded interval. A no-show rule remains unconfirmed.
+
+## Q-011 · What happens to reservations when equipment is marked defective?
+- **Status:** answered
+- **Blocks:** Finalizing changes to future reservations and Live-queue records after a defect.
+- **Who answers:** Project owner
+- **Owner input:** A serious defect immediately ends the current reservation and
+  triggers automatic notices to affected residents, including the person using
+  the equipment. An inspection can be planned for after the current cycle.
+  While the cycle finishes, block new bookings and let the operator optionally
+  send an editable notice. On confirmation of a defect, affected residents with
+  upcoming reservations or Live-queue entries receive the automatic notice.
+- **Answer:** Cancel upcoming reservations with the reason
+  “Echipament defect” and keep them in reservation history. Remove the affected
+  entries from the active Live-queue and retain the reason they ended. Residents
+  choose another machine.
+- **Confirmed:** 2026-11-23
+- **Evidence:** [D-009](DECISIONS.md#d-009--notify-only-residents-waiting-to-use-defective-equipment)
+  defines targeted notifications. [GitHub issue #9](https://github.com/AlexBarac7/app-camin/issues/9)
+  tracks implementation of the fault workflows.

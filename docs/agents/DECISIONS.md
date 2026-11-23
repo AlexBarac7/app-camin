@@ -14,6 +14,9 @@
 - D-005 · Apply versioned PostgreSQL migrations explicitly
 - D-006 · Activate local resident accounts by invitation
 - D-007 · Require resident authentication to read the laundry catalog
+- D-008 · Limit browser access to service status to one explicitly authorized account
+- D-009 · Notify only residents waiting to use defective equipment
+- D-010 · Cancel affected reservations and Live-queue entries when equipment is defective
 
 ---
 
@@ -106,3 +109,41 @@
 - **Evidence:** The owner approved the read-only catalog plan, verified the
   browser flow and confirmed recording the access rule as a decision.
 - **Confirmed:** 2026-11-22
+
+## D-008 · Limit browser access to service status to one explicitly authorized account
+- **Status:** approved
+- **Rule:** Service status in the browser requires a valid session for the one
+  existing account that can be authorized through the local terminal command.
+  The permission is absent by default and is checked on every request. Revoke
+  the current permission before granting it to a different account.
+- **Why:** Service diagnostics are restricted to the operator selected locally.
+- **Evidence:** Owner requested implementation of the approved welcome and service
+  status plan.
+- **Confirmed:** 2026-11-23
+
+
+## D-009 · Notify only residents waiting to use defective equipment
+- **Status:** approved
+- **Rule:** When equipment is marked defective, notify residents with an upcoming
+  reservation or a Live-queue entry for that equipment and ask them to reserve
+  another machine. A machine marked defective while available triggers no
+  notification when nobody is waiting to use it. Do not broadcast the change to
+  other residents.
+- **Why:** Residents whose plans are affected need time to find another machine.
+  Targeted notifications avoid unnecessary alerts.
+- **Example notification:** „Mașina de spălat {număr} din {încăpere} este defectă.
+  Te rugăm să rezervi altă mașină.”
+- **Evidence:** The owner explicitly confirmed the notification rule and requested
+  that it be recorded in the decision ledger.
+- **Confirmed:** 2026-11-23
+
+## D-010 · Cancel affected reservations and Live-queue entries when equipment is defective
+- **Status:** approved
+- **Rule:** When a defect is confirmed, cancel upcoming reservations for the
+  affected equipment with the reason “Echipament defect”. Keep them in
+  reservation history. Remove affected entries from the active Live-queue and
+  retain the reason they ended. A serious defect that requires immediate
+  shutdown also ends the reservation in progress immediately.
+- **Why:** Residents can see why their reservations were cancelled and choose another machine.
+- **Evidence:** The owner confirmed [Q-011](OPEN-QUESTIONS.md#q-011--what-happens-to-reservations-when-equipment-is-marked-defective). [GitHub issue #9](https://github.com/AlexBarac7/app-camin/issues/9) tracks implementation.
+- **Confirmed:** 2026-11-23
