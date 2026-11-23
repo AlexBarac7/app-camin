@@ -223,7 +223,14 @@ function Resources({ room }) {
 
   useEffect(() => {
     const controller = new AbortController();
+    let timer;
+    const refresh = () => setRevision(value => value + 1);
+    function refreshOnReturn() {
+      if (!document.hidden) refresh();
+    }
+
     async function loadResources() {
+      let refreshAfter = 30_000;
       try {
         const response = await fetch(room ? '/api/laundry-machines?availability=1' : '/api/auth/session', {
           signal: controller.signal,
@@ -233,21 +240,31 @@ function Resources({ room }) {
           return;
         }
         if (!response.ok) throw new Error(unavailable);
+        const inventory = room ? (await response.json()).filter(machine => machine.room === room.id) : [];
+        if (controller.signal.aborted) return;
+        for (const machine of inventory) {
+          if (machine.nextStatusAt) {
+            const delay = Date.parse(machine.nextStatusAt) - Date.parse(machine.observedAt);
+            refreshAfter = Math.min(refreshAfter, Math.max(1, delay));
+          }
+        }
         setError(false);
-        setMachines(room ? (await response.json()).filter(machine => machine.room === room.id) : []);
+        setMachines(inventory);
       } catch {
         if (!controller.signal.aborted) setError(true);
+      } finally {
+        if (room && !controller.signal.aborted) timer = setTimeout(refresh, refreshAfter);
       }
     }
-    loadResources();
-    return () => controller.abort();
-  }, [room, revision]);
 
-  useEffect(() => {
-    if (!room) return;
-    const timer = setInterval(() => setRevision(value => value + 1), 30_000);
-    return () => clearInterval(timer);
-  }, [room]);
+    loadResources();
+    if (room) document.addEventListener('visibilitychange', refreshOnReturn);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', refreshOnReturn);
+    };
+  }, [room, revision]);
 
   return (
     <div className="mt-5 grid gap-4">

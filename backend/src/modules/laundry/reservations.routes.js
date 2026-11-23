@@ -27,11 +27,21 @@ export async function laundryAvailability(database) {
       ORDER BY starts_at LIMIT 1
     ) upcoming ON true
     ORDER BY machine.id`);
-  return rows.map(row => ({
-    ...row,
-    status: equipmentStatus(row.technical_status, row.starts_at && row, row.observed_at),
-    nextReservation: row.next_start ? occupiedBlock({ starts_at: row.next_start, ends_at: row.next_end }) : null,
-  }));
+  return rows.map(row => {
+    const status = equipmentStatus(row.technical_status, row.starts_at && row, row.observed_at);
+    const nextStatusAt = {
+      available: row.next_start,
+      occupied: row.use_ends_at,
+      handover: row.ends_at,
+    }[status] ?? null;
+    return {
+      ...row,
+      status,
+      observedAt: row.observed_at,
+      nextStatusAt,
+      nextReservation: row.next_start ? occupiedBlock({ starts_at: row.next_start, ends_at: row.next_end }) : null,
+    };
+  });
 }
 
 async function book(database, machineId, userId, { startsAt, endsAt }) {
@@ -61,15 +71,17 @@ async function saveReservation(client, machineId, userId, startsAt, endsAt) {
   const { rows: [{ now }] } = await client.query('SELECT clock_timestamp() AS now');
   const useEnd = reservationWindow(startsAt, endsAt, machine.type, now);
   if (!useEnd) return [400, { message: 'Alege un interval valid în programul spălătoriei.' }];
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
   const { rows } = await client.query(`
     SELECT 1 FROM laundry_reservations
     WHERE machine_id = $1 AND cancelled_at IS NULL AND starts_at < $3 AND ends_at > $2
-    LIMIT 1`, [machineId, startsAt, endsAt]);
+    LIMIT 1`, [machineId, start, end]);
   if (rows.length) return [409, { message: overlapMessage }];
   const { rows: [reservation] } = await client.query(`
     INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at)
     VALUES ($1, $2, $3, $4, $5)
-    RETURNING id, user_id, starts_at, use_ends_at, ends_at`, [machineId, userId, startsAt, useEnd, endsAt]);
+    RETURNING id, user_id, starts_at, use_ends_at, ends_at`, [machineId, userId, start, useEnd, end]);
   return [201, calendarEntry(reservation, userId)];
 }
 

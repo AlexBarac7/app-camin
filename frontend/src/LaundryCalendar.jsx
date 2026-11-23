@@ -74,7 +74,7 @@ async function request(path, options) {
 
 function CalendarDay({ machine, day, onChange }) {
   const [data, setData] = useState(null);
-  const [now, setNow] = useState(Date.now);
+  const [elapsed, setElapsed] = useState(0);
   const [revision, setRevision] = useState(0);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [pending, setPending] = useState(false);
@@ -84,13 +84,12 @@ function CalendarDay({ machine, day, onChange }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const start = Date.now();
     request(endpoint + '/calendar?day=' + day, { signal: controller.signal })
       .then(response => response.json())
       .then(calendar => {
         if (controller.signal.aborted) return;
-        setData({ calendar, offset: +new Date(calendar.now) - start });
-        setNow(Date.now());
+        setData({ calendar, receivedAt: performance.now() });
+        setElapsed(0);
       })
       .catch(error => {
         if (!controller.signal.aborted) setFeedback({ error: true, text: error.message });
@@ -99,9 +98,16 @@ function CalendarDay({ machine, day, onChange }) {
   }, [endpoint, day, revision]);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+    if (!data) return;
+    // Start from the server snapshot at receipt so latency cannot hide a valid slot early.
+    const updateClock = () => setElapsed(performance.now() - data.receivedAt);
+    const timer = setInterval(updateClock, 1000);
+    document.addEventListener('visibilitychange', updateClock);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', updateClock);
+    };
+  }, [data]);
 
   useEffect(() => {
     if (feedback?.afterAction) feedbackRegion.current.focus();
@@ -129,8 +135,8 @@ function CalendarDay({ machine, day, onChange }) {
     }
   }
 
-  const { calendar, offset } = data ?? {};
-  const currentTime = now + (offset ?? 0);
+  const calendar = data?.calendar;
+  const currentTime = calendar ? Date.parse(calendar.now) + elapsed : 0;
   const blocks = calendar?.open ? calendarBlocks(calendar, currentTime) : [];
   const options = calendar?.open && calendar.bookable
     ? bookingOptions(calendar, blocks, currentTime, (machine.type === 'dryer' ? 240 : 180) * minute)
@@ -210,7 +216,7 @@ export default function LaundryCalendar({ machine, onChange }) {
   return (
     <section aria-label={'Calendar · ' + machine.name} className="grid gap-3">
       <div className="grid grid-cols-2 gap-2">
-        <h3 className="col-span-2 font-semibold">{dayFormat.format(new Date(day))}</h3>
+        <h3 aria-live="polite" aria-atomic="true" className="col-span-2 font-semibold">{dayFormat.format(new Date(day))}</h3>
         <button type="button" className={control} onClick={() => setDay(moveDay(day, -1))}>Ziua anterioară</button>
         <button type="button" className={control} onClick={() => setDay(moveDay(day, 1))}>Ziua următoare</button>
       </div>

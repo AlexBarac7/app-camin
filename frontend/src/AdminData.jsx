@@ -64,6 +64,10 @@ function useData(path) {
 }
 
 function DataPage({ title, path, result, authorized, controls, children }) {
+  useEffect(() => {
+    document.title = title + ' · app-camin';
+  }, [title]);
+
   if (result.denied || authorized.denied) {
     return (
       <main lang="ro" className="mx-auto grid max-w-lg gap-5 px-5 py-12">

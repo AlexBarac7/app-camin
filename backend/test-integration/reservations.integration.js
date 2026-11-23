@@ -129,4 +129,36 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     assert.equal(entry.useEndsAt, at(600));
     assert.equal(entry.endsAt, at(600));
   }
+
+  const offsetTimestamp = minutes => new Date(+new Date(at(minutes)) + 16 * 3600_000)
+    .toISOString().replace('Z', '+16:00');
+  const normalized = await request(path + '/reservations', 'POST', 0, {
+    startsAt: offsetTimestamp(120), endsAt: offsetTimestamp(150),
+  });
+  assert.equal(normalized.status, 201);
+  const entry = await normalized.json();
+  assert.equal(entry.startsAt, at(120));
+  assert.equal(entry.endsAt, at(150));
+
+  const readMachine = async () => (await get('/api/laundry-machines?availability=1'))
+    .find(machine => machine.id === fixture.machine);
+  const occupied = await readMachine();
+  assert.equal(occupied.status, 'occupied');
+  assert.ok(occupied.observedAt < occupied.nextStatusAt);
+  const { rows: [handover] } = await db.query(`
+    UPDATE laundry_reservations
+    SET starts_at = now() - interval '20 minutes', use_ends_at = now() - interval '5 minutes',
+        ends_at = now() + interval '5 minutes'
+    WHERE id = $1 RETURNING ends_at`, [replacementId]);
+  const duringHandover = await readMachine();
+  assert.equal(duringHandover.status, 'handover');
+  assert.equal(duringHandover.nextStatusAt, handover.ends_at.toISOString());
+  await db.query(`
+    UPDATE laundry_reservations
+    SET starts_at = now() - interval '30 minutes', use_ends_at = now() - interval '15 minutes',
+        ends_at = now() - interval '5 minutes'
+    WHERE id = $1`, [replacementId]);
+  const available = await readMachine();
+  assert.equal(available.status, 'available');
+  assert.equal(available.nextStatusAt, at(60));
 });

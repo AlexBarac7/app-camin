@@ -4,6 +4,26 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-23 · Addressed the PR review findings
+
+**Model:** GPT-6 (Codex).
+
+**What I asked for** — Review PR #12 with three read-only specialists and
+address the confirmed findings before merge.
+
+**What I got** — Equipment cards refresh at the next known status transition,
+on return to the tab and periodically for changes by other residents. The
+calendar advances from the server time reported in the response instead of
+counting request latency as clock skew. Booking queries receive parsed
+timestamps. The two admin pages have distinct document titles, and calendar
+navigation announces the selected date through a polite live region.
+
+**Verification** — The new PostgreSQL regression reproduced HTTP 500 before the
+fix and passed after it. All backend and PostgreSQL suites, the frontend build
+and ledger validation passed. Chromium verified status transitions, refreshing
+when the tab becomes visible, cancellation with a delayed response, distinct
+admin titles and the calendar live region.
+
 ## 2026-11-23 · Laundry reservations and administrative data views
 
 **Model:** GPT-6 (Codex).

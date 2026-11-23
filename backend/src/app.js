@@ -13,10 +13,10 @@ export function createApp(database, appOrigins) {
     const withAvailability = req.query.availability === '1';
     const rows = withAvailability ? await laundryAvailability(database)
       : (await database.query('SELECT * FROM laundry_machines ORDER BY id')).rows;
-    res.json(rows.map(({ id, name, location, room, type, label, technical_status, status, nextReservation }) => ({
+    res.json(rows.map(({ id, name, location, room, type, label, technical_status, status, nextReservation, observedAt, nextStatusAt }) => ({
       id, name, location,
       ...(room && { room, type, label, technicalStatus: technical_status }),
-      ...(withAvailability && { status, nextReservation }),
+      ...(withAvailability && { status, nextReservation, observedAt, nextStatusAt }),
     })));
   });
   app.use('/api/laundry-machines', reservationRoutes(database, appOrigins));
