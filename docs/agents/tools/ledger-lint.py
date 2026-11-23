@@ -11,7 +11,7 @@ its indexes. Stdlib only. Run from the repo root:
 Ledger layout: each kind has a main file (DECISIONS.md …). Entries are headings
 `## D-001 · Title` (or `###` in CONTRACTS.md). Above ~150 lines a kind may be split:
 entries move to topic files in docs/agents/<kind>/<topic>.md and the main file keeps
-only the index, grouped by topic.
+the index. The active decision index is ordered by numeric ID.
 
 Superseded decisions and patterns leave the always-loaded files: their index lines
 go to DECISIONS-SUPERSEDED.md / PATTERNS-SUPERSEDED.md (same topic headings), and an
@@ -230,9 +230,11 @@ def lint(fix=False):
 
 
 def index_lines(prefix, entries, home, pointer=None, empty_topics=()):
-    """Index text for the file `home` (main or superseded file): entries written in it
-    first, then one heading per topic file. `pointer` = the superseded file, listed
-    under a topic whose entries are all superseded (empty_topics)."""
+    """Build an index for a main or superseded file.
+
+    Active decisions are listed in numeric order across all topic files. Other
+    indexes group entries by file. A pointer identifies all-superseded topics.
+    """
     main, tdir, *_ = KINDS[prefix]
     def short(status):
         m = re.match(r"(superseded-by\s+\S+|[a-z-]+)", status.strip())
@@ -247,6 +249,22 @@ def index_lines(prefix, entries, home, pointer=None, empty_topics=()):
         if prefix == "C":
             extra = f" · {e['section'].lower() or 'provided'}" + ("" if st == "approved" else f" · _{st}_")
         return f"- {e['id']} · {e['title']}{extra}"
+    def topic_link(path):
+        name = os.path.splitext(os.path.basename(path))[0]
+        return f"[{name.replace('-', ' ').capitalize()}]({tdir}/{os.path.basename(path)})"
+
+    if prefix == "D" and os.path.basename(home) == main:
+        out = []
+        for e in sorted(entries, key=lambda entry: int(entry["id"].split("-")[-1])):
+            item = line(e)
+            if os.path.dirname(e["file"]) != AG:
+                item += f" · {topic_link(e['file'])}"
+            out.append(item)
+        if pointer:
+            for topic in empty_topics:
+                out.append(f"- {topic_link(topic)} · all superseded: see [{pointer}]({pointer})")
+        return "\n".join(out) + "\n"
+
     groups = {}
     for e in entries:
         key = "" if os.path.dirname(e["file"]) == AG else e["file"]
@@ -256,8 +274,7 @@ def index_lines(prefix, entries, home, pointer=None, empty_topics=()):
     out = []
     for key in sorted(groups, key=lambda k: (k != "", k)):
         if key:
-            name = os.path.splitext(os.path.basename(key))[0]
-            out.append(f"\n### [{name.replace('-', ' ').capitalize()}]({tdir}/{os.path.basename(key)})")
+            out.append(f"\n### {topic_link(key)}")
         out += [line(e) for e in groups[key]]
         if key and not groups[key] and pointer:
             out.append(f"- all superseded: see [{pointer}]({pointer})")

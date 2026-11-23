@@ -5,7 +5,7 @@ import { activateInvitation } from './invitations.js';
 const sessionCookie = 'camin_session';
 const sessionLifetime = 24 * 60 * 60 * 1000;
 const attemptWindow = 60 * 1000;
-const localOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+export const localOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
 function readSession(req) {
   const prefix = sessionCookie + '=';
@@ -20,7 +20,7 @@ export function requireSession(database, { serviceStatus = false } = {}) {
     const digest = readSession(req);
     if (!digest) return res.status(401).end();
     const { rows: [account] } = await database.query(
-      `SELECT users.email${serviceStatus ? ', users.can_view_service_status' : ''}
+      `SELECT users.id, users.email${serviceStatus ? ', users.can_view_service_status' : ''}
        FROM sessions JOIN users ON users.id = sessions.user_id
        WHERE sessions.token_hash = $1 AND sessions.expires_at > clock_timestamp()`,
       [digest],
@@ -107,7 +107,7 @@ export function authRoutes(database, origins = localOrigins) {
   });
 
   router.get('/session', requireSession(database), (_req, res) => {
-    res.json(res.locals.account);
+    res.json({ email: res.locals.account.email });
   });
 
   router.post('/logout', async (req, res) => {

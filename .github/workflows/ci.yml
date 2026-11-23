@@ -83,6 +83,7 @@ jobs:
         run: |
           docker exec "$POSTGRES_CONTAINER" createdb -U postgres app_camin_migrations_test
           docker exec "$POSTGRES_CONTAINER" createdb -U postgres app_camin_auth_test
+          docker exec "$POSTGRES_CONTAINER" createdb -U postgres app_camin_reservations_test
 
       - name: Run PostgreSQL integration tests
         env:
@@ -94,3 +95,4 @@ jobs:
         run: |
           PGDATABASE=app_camin_migrations_test npm --prefix backend run test:migrations
           PGDATABASE=app_camin_auth_test npm --prefix backend run test:auth
+          PGDATABASE=app_camin_reservations_test npm --prefix backend run test:reservations

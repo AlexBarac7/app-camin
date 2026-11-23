@@ -4,6 +4,51 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-23 · Laundry reservations and administrative data views
+
+**Model:** GPT-6 (Codex).
+
+**What I asked for** — Implement the approved reservation plan for issue #8,
+add read-only administrative views for reservations and database tables, and
+extend the closing-time exception so a washer can be used from 16:45 and a
+dryer from 15:45 until 20:00 without handover.
+
+**What I got** — Migration `005` adds reservation history. The backend
+locks the equipment row before checking overlapping blocks, including handover.
+Residents can browse a daily calendar, preview usage and handover, book working
+equipment, and cancel their own reservations before they start. A conflict
+refreshes the calendar. Other residents see only the occupied interval.
+Equipment cards show current occupancy and list the next reservation separately.
+
+The existing service-status authorization also protects `/admin/rezervari`
+and `/admin/baza-de-date`. The first page filters reservation history by
+equipment, day and status. The second shows paginated equipment, reservation
+and migration records with column names and types. Both are read-only.
+
+Q-009 records the pilot calendar and notebook rules. D-011 remains proposed.
+D-012 records access to the administrative views, and D-013 records the approved
+closing-time thresholds. The decision index regenerates in numeric order. Future
+decisions should be grouped by subject in an existing topic file whenever one
+applies. Laundry decisions use [laundry-decisions.md](docs/agents/decisions/laundry-decisions.md)
+and administrative data decisions use [admin-data.md](docs/agents/decisions/admin-data.md).
+
+**Verification** — Nine backend tests, the migrations, authentication and
+reservations suites on disposable PostgreSQL databases, the frontend build,
+ledger validation and `git diff --check` passed during implementation. A
+disposable Compose stack applied migration `005` and rejected an unauthenticated
+calendar request. Chromium at 390 px verified booking, privacy, cancellation,
+conflict refresh, closing-time previews, admin filters, keyboard pagination and
+resident access denial. PostgreSQL checks covered simultaneous requests,
+the handover boundary, cancellation and both closing-time thresholds.
+The occupancy transitions were verified through the API using simulated
+reservation times. The owner confirmed administrative access denial for the
+test resident and reported that the manual checks passed except for the
+closing-time case, which led to the approved change. Real-time occupancy
+transitions on the card remained untested manually after closing.
+
+**Follow-up** — The push reminder is separate work. The branch changes were
+local and uncommitted when this entry was added.
+
 ## 2026-11-23 · Laundry reservations, equipment faults, and follow-up issues
 
 **Model:** GPT-6.2-Sol.

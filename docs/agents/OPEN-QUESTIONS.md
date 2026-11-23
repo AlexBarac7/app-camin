@@ -17,7 +17,7 @@
 - Q-006 · Who manages the laundry catalog and with what permissions?
 - Q-007 · What are the drying room's operating hours? · _answered_
 - Q-008 · What establishes whether equipment is occupied? · _answered_
-- Q-009 · How do reservations and Live-queue interact with the notebook?
+- Q-009 · How do reservations and Live-queue interact with the notebook? · _investigating_
 - Q-010 · How are no-shows confirmed and handled?
 - Q-011 · What happens to reservations when equipment is marked defective? · _answered_
 
@@ -101,11 +101,15 @@
 - **Tracking:** [Reservation calendar](https://github.com/AlexBarac7/app-camin/issues/8).
 
 ## Q-009 · How do reservations and Live-queue interact with the notebook?
-- **Status:** open
-- **Blocks:** Implementing the reservation calendar and Live-queue.
+- **Status:** investigating
+- **Blocks:** Determining Live-queue priority and how the queue interacts with the notebook.
 - **Who answers:** Project owner, after consulting the residence administrator.
-- **Evidence:** [INTERVIEW.md](../../INTERVIEW.md) describes the notebook workflow. Reservation duration, advance booking, cancellation, quotas and Live-queue order remain open.
-- **Tracking:** [Live-queue priority](https://github.com/AlexBarac7/app-camin/issues/10).
+- **Answer (calendar and notebook):** During the pilot, the application calendar
+  has priority for reservations. The notebook may still record actual use.
+- **Evidence:** The owner approved the issue #8 implementation plan.
+  [INTERVIEW.md](../../INTERVIEW.md) describes the previous notebook workflow.
+- **Tracking:** [Reservation calendar](https://github.com/AlexBarac7/app-camin/issues/8)
+  and [Live-queue priority](https://github.com/AlexBarac7/app-camin/issues/10).
 
 ## Q-010 · How are no-shows confirmed and handled?
 - **Status:** open
