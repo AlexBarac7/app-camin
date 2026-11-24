@@ -49,3 +49,9 @@ frontend npm run build produces static assets. Railway is a future target only.
 Live-queue, quotas, no-show policies, maintenance tickets, photo storage and
 push integrations remain outside the current implementation. No Railway deployment
 configuration or authorization exists yet.
+
+Migration 006 adds the independent equipment permission, the reservation linked
+to a pending inspection and the cancellation reason. Equipment changes lock
+the same machine row as booking creation and commit cancellations with the
+technical status. The resident calendar returns fault cancellations to their
+owner. The equipment management page checks its dedicated permission.

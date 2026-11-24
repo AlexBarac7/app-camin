@@ -20,6 +20,9 @@
 - D-011 · Use the application calendar for pilot laundry reservations · _proposed_ · [Laundry decisions](decisions/laundry-decisions.md)
 - D-012 · Restrict administrative data views to the authorized operator · [Admin data](decisions/admin-data.md)
 - D-013 · Allow extended laundry use for blocks ending at 20:00 · [Laundry decisions](decisions/laundry-decisions.md)
+- D-014 · Authorize equipment operations separately and restore service manually · [Laundry decisions](decisions/laundry-decisions.md)
+- D-015 · Notify affected residents when equipment returns to service in time · [Laundry decisions](decisions/laundry-decisions.md)
+- D-016 · Offer a five-minute hold when laundry service resumes · [Laundry decisions](decisions/laundry-decisions.md)
 
 ---
 

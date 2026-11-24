@@ -20,6 +20,7 @@
 - Q-009 · How do reservations and Live-queue interact with the notebook? · _investigating_
 - Q-010 · How are no-shows confirmed and handled?
 - Q-011 · What happens to reservations when equipment is marked defective? · _answered_
+- Q-012 · When is equipment restored in time to notify a resident? · _answered_
 
 ---
 
@@ -73,6 +74,7 @@
 - **Owner input:** Both the administrator and admin should be able to change
   equipment status manually. For example, the administrator can mark equipment
   as defective while it is occupied or available.
+- **Pilot status changes:** D-014 grants equipment management explicitly per account from the terminal. Operators change equipment status in the application.
 - **To clarify:** Who confirms and publishes inventory updates, who can add, edit or
   retire machines, what autonomy the residence administrator has, and whether
   changes happen through the terminal or the application. See also
@@ -135,3 +137,14 @@
 - **Evidence:** [D-009](DECISIONS.md#d-009--notify-only-residents-waiting-to-use-defective-equipment)
   defines targeted notifications. [GitHub issue #9](https://github.com/AlexBarac7/app-camin/issues/9)
   tracks implementation of the fault workflows.
+
+## Q-012 · When is equipment restored in time to notify a resident?
+- **Status:** answered
+- **Blocks:** Selecting recipients for the restoration notification in D-015.
+- **Who answers:** Project owner
+- **Answer:** Before the original start, offer the slot regardless of duration.
+  After the slot begins, use the remaining usage time at restoration (excluding
+  handover). At least 60 minutes qualifies for a five-minute hold. With less
+  time, the notification offers another slot. Declining or letting the hold
+  expire releases the interval for other residents. See [D-016](decisions/laundry-decisions.md#d-016--offer-a-five-minute-hold-when-laundry-service-resumes).
+- **Confirmed:** 2026-11-24

@@ -1,3 +1,4 @@
+import LaundryStatus from './LaundryStatus.jsx';
 import { useEffect, useState } from 'react';
 import LaundryCalendar, { upcomingInterval } from './LaundryCalendar.jsx';
 
@@ -166,6 +167,7 @@ function ResidentNav() {
 }
 
 const technicalStatus = {
+  inspection: 'În verificare',
   broken: 'Defectă',
   working: 'Funcțională',
   unspecified: 'Neprecizată',
@@ -175,13 +177,13 @@ const occupancy = {
   available: 'Disponibilă',
   occupied: 'Ocupată',
   handover: 'Predare',
+  inspection: 'În verificare',
   broken: 'Defectă',
   unspecified: 'Neprecizată',
 };
 
 function EquipmentCard({ machine, selected, onSelect, onChange }) {
   const dryer = machine.type === 'dryer';
-  const broken = machine.technicalStatus === 'broken';
 
   return (
     <li>
@@ -194,16 +196,17 @@ function EquipmentCard({ machine, selected, onSelect, onChange }) {
             </span>
           </span>
           <span className="mt-2 block text-sm text-slate-600">{machine.location}</span>
-          <span className={'mt-2 inline-block rounded-md px-2 py-1 text-sm font-medium ' +
-            (broken ? 'bg-red-100 text-red-900' : 'bg-slate-100 text-slate-800')}>
-            {occupancy[machine.status]}
+          <span className="mt-2 flex flex-wrap gap-2">
+            <LaundryStatus status={machine.status}>{occupancy[machine.status]}</LaundryStatus>
+            {machine.status === 'occupied' && machine.technicalStatus === 'inspection' &&
+              <LaundryStatus status="inspection">Verificare după ciclu</LaundryStatus>}
           </span>
           {machine.nextReservation && <span className="mt-2 block text-sm">
             Următoarea rezervare · {upcomingInterval(machine.nextReservation)}
           </span>}
         </summary>
         <div className="grid gap-3 border-t border-slate-200 px-4 py-4 text-sm">
-          <p><strong>Stare tehnică</strong> · {technicalStatus[machine.technicalStatus]}</p>
+          <p><strong>Stare tehnică</strong> · <LaundryStatus status={machine.technicalStatus}>{technicalStatus[machine.technicalStatus]}</LaundryStatus></p>
           <p><strong>Program</strong> · luni–vineri, 08:00–20:00</p>
           <button type="button" className={buttonStyle} aria-expanded={selected} onClick={onSelect}>
             {selected ? 'Închide calendarul' : 'Vezi calendarul'}
@@ -216,6 +219,7 @@ function EquipmentCard({ machine, selected, onSelect, onChange }) {
 }
 
 function Resources({ room }) {
+  const [canManage, setCanManage] = useState(false);
   const [machines, setMachines] = useState(null);
   const [selectedMachine, setSelectedMachine] = useState(null);
   const [revision, setRevision] = useState(0);
@@ -257,6 +261,8 @@ function Resources({ room }) {
       }
     }
 
+    if (!room) fetch('/api/equipment-access', { signal: controller.signal })
+      .then(response => setCanManage(response.ok)).catch(() => {});
     loadResources();
     if (room) document.addEventListener('visibilitychange', refreshOnReturn);
     return () => {
@@ -268,6 +274,7 @@ function Resources({ room }) {
 
   return (
     <div className="mt-5 grid gap-4">
+      {!room && canManage && <a className="w-fit rounded py-2 underline" href="/admin/echipamente">Gestionează echipamentele</a>}
       {room && <a className={'w-fit rounded py-2 underline ' + linkFocus} href="/resurse">Înapoi la Resurse</a>}
       {error && <p role="alert" className="text-red-800">{unavailable}</p>}
       {!machines && !error && <p role="status">{room ? 'Se încarcă inventarul…' : 'Se verifică sesiunea…'}</p>}

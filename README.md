@@ -324,3 +324,26 @@ docker compose exec backend npm run sessions:cleanup
 For a backend running locally, set the same `PG*` variables and run
 `npm --prefix backend run sessions:cleanup`. The command deletes only expired
 sessions and prints the number deleted. Active sessions remain usable.
+
+### Managing laundry equipment faults
+
+Rebuild the services and apply the pending migrations. To grant equipment
+management access to an existing account, run
+`docker compose exec backend npm run equipment:access -- grant` and enter the
+account email at the prompt. Use `revoke` to withdraw access. The backend checks
+this permission on every equipment management request.
+
+Open **Resurse → Gestionează echipamentele** and select the machine by room and number.
+
+- **Verifică după ciclu** schedules an inspection after the current cycle. Existing
+  reservations stay in the calendar, and the machine is closed to new bookings.
+- **Scoate din funcțiune** ends the current reservation and cancels upcoming
+  reservations for that machine. Affected residents see the reason in their
+  calendar while the fault is active. Operators with access to reservation
+  history can still see the reason after service is restored.
+- **Repune în serviciu** opens the machine for new bookings. Cancelled reservations
+  stay in history. Residents can book an available slot again.
+
+Shutdown and restoration notifications and Live-queue integration are planned
+work. The approved restoration notification rule is recorded in
+[D-015](docs/agents/decisions/laundry-decisions.md#d-015--notify-affected-residents-when-equipment-returns-to-service-in-time).

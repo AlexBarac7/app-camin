@@ -1,3 +1,4 @@
+import LaundryStatus from './LaundryStatus.jsx';
 import { useEffect, useState } from 'react';
 
 const dateTime = new Intl.DateTimeFormat('ro-RO', {
@@ -137,7 +138,9 @@ const reservationColumns = [
   { name: 'usage', label: 'Utilizare', render: row => <>{formatDate(row.starts_at)}<br />{formatDate(row.use_ends_at)}</> },
   { name: 'handover', label: 'Predare', render: row => row.use_ends_at === row.ends_at ? '—'
     : <>{formatDate(row.use_ends_at)}<br />{formatDate(row.ends_at)}</> },
-  { name: 'status', label: 'Stare', render: row => row.cancelled_at ? 'Anulată' : 'Activă' },
+  { name: 'status', label: 'Stare', render: row => row.cancelled_at
+    ? <LaundryStatus status="cancelled">Anulată</LaundryStatus> : <LaundryStatus status="reserved">Activă</LaundryStatus> },
+  { name: 'cancellation_reason', label: 'Motiv' },
   { name: 'cancelled_at', label: 'Anulată la', type: 'timestamptz' },
 ];
 

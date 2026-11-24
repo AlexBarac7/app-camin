@@ -112,7 +112,10 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
   const reservations = await get(adminTables + '/reservations');
   assert.deepEqual(new Set(reservations.rows.map(row => row.id)), new Set([id, replacementId, active.items[0].id]));
   const migrations = await get(adminTables + '/migrations');
-  assert.equal(migrations.rows.at(-1).filename, '005_laundry_reservations.sql');
+  const filenames = migrations.rows.map(row => row.filename);
+  const base = filenames.indexOf('005_laundry_reservations.sql');
+  assert.ok(base >= 0);
+  assert.equal(filenames[base + 1], '006_equipment_faults.sql');
   for (const table of ['users', 'sessions', 'invitations', 'schema_migrations']) {
     assert.equal((await request(adminTables + '/' + table)).status, 404);
   }
@@ -161,4 +164,67 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
   const available = await readMachine();
   assert.equal(available.status, 'available');
   assert.equal(available.nextStatusAt, at(60));
+  const change = action => request(path + '/condition', 'POST', 0, { action });
+  assert.equal((await change('stop')).status, 403);
+  await db.query('UPDATE users SET can_manage_equipment = true WHERE id = $1', [users[0].id]);
+  assert.equal((await change('inspect')).status, 409);
+  for (const selected of [fixture.machine, fixture.dryer]) {
+    const endpoint = '/api/laundry-machines/' + selected + '/condition';
+    const operate = action => request(endpoint, 'POST', 0, { action });
+    const { rows: [cycle] } = await db.query(`
+      INSERT INTO laundry_reservations (machine_id,user_id,starts_at,use_ends_at,ends_at)
+      VALUES ($1,$2,now()-interval '4 minutes',now()+interval '6 minutes',now()+interval '16 minutes')
+      RETURNING id`, [selected, users[0].id]);
+    const state = async () => (await get('/api/laundry-machines?availability=1')).find(item => item.id === selected);
+    assert.equal((await operate('inspect')).status, 204);
+    assert.equal((await state()).status, 'occupied');
+    assert.equal((await book(1, 250, 280, selected)).status, 409);
+    await db.query(`UPDATE laundry_reservations SET starts_at=now()-interval '40 minutes',
+      use_ends_at=now()-interval '20 minutes', ends_at=now()-interval '10 minutes' WHERE id=$1`, [cycle.id]);
+    const { rows: [next] } = await db.query(`
+      INSERT INTO laundry_reservations (machine_id,user_id,starts_at,use_ends_at,ends_at)
+      VALUES ($1,$2,now()-interval '2 minutes',now()+interval '8 minutes',now()+interval '18 minutes')
+      RETURNING id`, [selected, users[1].id]);
+    assert.equal((await state()).status, 'inspection');
+    if (selected === fixture.dryer) {
+      assert.equal((await operate('stop')).status, 204);
+      const readCancellation = async () => (await db.query(
+        'SELECT cancelled_at,cancellation_reason FROM laundry_reservations WHERE id=$1', [next.id])).rows[0];
+      const first = await readCancellation();
+      assert.ok(first.cancelled_at);
+      assert.equal(first.cancellation_reason, 'Echipament defect');
+      assert.equal((await operate('stop')).status, 204);
+      assert.deepEqual(await readCancellation(), first);
+    }
+    assert.equal((await operate('restore')).status, 204);
+    assert.equal((await state()).status, selected === fixture.machine ? 'occupied' : 'available');
+  }
+
+  // Force the second write to fail after the cancellation update.
+  await db.query(`CREATE FUNCTION reject_fault() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN RAISE EXCEPTION 'fixture'; END $$;
+    CREATE TRIGGER reject_fault BEFORE UPDATE ON laundry_machines
+    FOR EACH ROW EXECUTE FUNCTION reject_fault()`);
+  assert.equal((await change('stop')).status, 500);
+  assert.equal((await readMachine()).status, 'occupied');
+  assert.ok((await (await calendar(other)).json()).reservations.length);
+  await db.query('DROP TRIGGER reject_fault ON laundry_machines');
+  const [raced, stopped] = await Promise.all([book(1, 200, 250), change('stop')]);
+  assert.ok([201, 409].includes(raced.status));
+  assert.equal(stopped.status, 204);
+  assert.equal((await change('stop')).status, 204);
+  assert.equal((await readMachine()).status, 'broken');
+  const mine = await (await calendar(other)).json();
+  assert.ok(mine.cancellations.some(row => row.startsAt === at(60)));
+  assert.ok(!(await (await calendar(winner)).json()).cancellations.some(row => row.startsAt === at(60)));
+  assert.equal(mine.reservations.length, 0);
+  assert.equal((await change('restore')).status, 204);
+  assert.equal((await readMachine()).status, 'available');
+  assert.deepEqual((await (await calendar(other)).json()).cancellations, []);
+  assert.equal((await change('stop')).status, 204);
+  assert.deepEqual((await (await calendar(other)).json()).cancellations, []);
+  assert.equal((await change('restore')).status, 204);
+  assert.equal((await book(1, 60, 90)).status, 201);
+  await db.query('UPDATE users SET can_manage_equipment = false WHERE id = $1', [users[0].id]);
+  assert.equal((await change('stop')).status, 403);
 });

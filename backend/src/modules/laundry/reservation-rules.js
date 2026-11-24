@@ -52,7 +52,9 @@ export function calendarEntry(row, userId) {
   };
 }
 
-export function equipmentStatus(technicalStatus, current, now) {
+export function equipmentStatus(technicalStatus, current, now, inspectionReservationId) {
+  if (technicalStatus === 'inspection' && current && current.id === inspectionReservationId &&
+      current.starts_at <= now && now < current.use_ends_at) return 'occupied';
   if (technicalStatus !== 'working') return technicalStatus ?? 'unspecified';
   if (!current || now < current.starts_at || now >= current.ends_at) return 'available';
   return now < current.use_ends_at ? 'occupied' : 'handover';

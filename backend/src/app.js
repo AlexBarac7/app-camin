@@ -1,3 +1,4 @@
+import { conditionRoutes } from './modules/laundry/condition.routes.js';
 import express from 'express';
 import { adminRoutes } from './modules/admin/admin.routes.js';
 import { healthRoutes } from './modules/health/health.routes.js';
@@ -19,6 +20,7 @@ export function createApp(database, appOrigins) {
       ...(withAvailability && { status, nextReservation, observedAt, nextStatusAt }),
     })));
   });
+  app.use('/api', conditionRoutes(database, appOrigins));
   app.use('/api/laundry-machines', reservationRoutes(database, appOrigins));
   app.use('/api/admin', adminRoutes(database));
   app.use('/api', healthRoutes(database));

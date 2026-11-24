@@ -12,11 +12,11 @@ function validId(value, max) {
 export async function laundryAvailability(database) {
   const { rows } = await database.query(`
     SELECT machine.*, statement_timestamp() AS observed_at,
-      active.starts_at, active.use_ends_at, active.ends_at,
+      active.id AS active_id, active.starts_at, active.use_ends_at, active.ends_at,
       upcoming.starts_at AS next_start, upcoming.ends_at AS next_end
     FROM laundry_machines machine
     LEFT JOIN LATERAL (
-      SELECT starts_at, use_ends_at, ends_at FROM laundry_reservations
+      SELECT id, starts_at, use_ends_at, ends_at FROM laundry_reservations
       WHERE machine_id = machine.id AND cancelled_at IS NULL
         AND starts_at <= statement_timestamp() AND ends_at > statement_timestamp()
       LIMIT 1
@@ -28,7 +28,7 @@ export async function laundryAvailability(database) {
     ) upcoming ON true
     ORDER BY machine.id`);
   return rows.map(row => {
-    const status = equipmentStatus(row.technical_status, row.starts_at && row, row.observed_at);
+    const status = equipmentStatus(row.technical_status, row.starts_at && { ...row, id: row.active_id }, row.observed_at, row.inspection_reservation_id);
     const nextStatusAt = {
       available: row.next_start,
       occupied: row.use_ends_at,
@@ -104,19 +104,21 @@ export function reservationRoutes(database, origins = localOrigins) {
         (($2::date + time '08:00') AT TIME ZONE $3) AS opens_at,
         (($2::date + time '20:00') AT TIME ZONE $3) AS closes_at,
         extract(isodow FROM $2::date) <= 5 AS open,
-        reservation.id, reservation.user_id, reservation.starts_at, reservation.use_ends_at, reservation.ends_at
+        reservation.cancellation_reason, reservation.id, reservation.user_id, reservation.starts_at, reservation.use_ends_at, reservation.ends_at
       FROM laundry_machines machine
       LEFT JOIN laundry_reservations reservation ON reservation.machine_id = machine.id
-        AND reservation.cancelled_at IS NULL
+        AND (reservation.cancelled_at IS NULL OR (reservation.cancelled_at = machine.current_fault_at
+          AND reservation.cancellation_reason IS NOT NULL AND reservation.user_id = $4))
         AND reservation.starts_at < (($2::date + 1)::timestamp AT TIME ZONE $3)
         AND reservation.ends_at > ($2::date::timestamp AT TIME ZONE $3)
-      WHERE machine.id = $1 ORDER BY reservation.starts_at`, [req.params.machineId, day, residenceZone]);
+      WHERE machine.id = $1 ORDER BY reservation.starts_at`, [req.params.machineId, day, residenceZone, res.locals.account.id]);
     if (!rows.length) return res.status(404).json(notFound);
     const [{ technical_status, now, opens_at, closes_at, latest_start, open }] = rows;
     res.json({
       now, opensAt: opens_at, closesAt: closes_at, latestStart: latest_start, open,
       bookable: technical_status === 'working',
-      reservations: rows.filter(row => row.id).map(row => calendarEntry(row, res.locals.account.id)),
+      cancellations: rows.filter(row => row.cancellation_reason).map(row => ({ ...occupiedBlock(row), reason: row.cancellation_reason })),
+      reservations: rows.filter(row => row.id && !row.cancellation_reason).map(row => calendarEntry(row, res.locals.account.id)),
     });
   });
 

@@ -4,6 +4,53 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-24 · Clear calendar notices after equipment restoration
+
+The resident calendar shows cancellations for the current fault. Restoration
+clears the notices while keeping cancelled bookings and their reason in history.
+Migration 007 tracks the shutdown timestamp. For machines already broken at
+upgrade, it uses the most recent recorded fault cancellation if one exists.
+
+## 2026-11-24 · Explain retained bookings during equipment inspection
+
+The resident calendar now explains that a booking affected by inspection is
+kept and the equipment can be used after restoration within the reserved usage
+time. Chromium checks with simulated reservations at 390 and 1280 pixels
+verified the notice on the resident's upcoming booking, its absence on the
+original cycle and another resident's booking, and its removal after restoration.
+The frontend build passed.
+
+## 2026-11-24 · Local preview of equipment management
+
+**Model:** GPT-6.2-Astra (Codex).
+
+At the owner's request, rebuilt and started the local frontend and backend
+against the existing PostgreSQL volume on the equipment-faults branch. Applied
+migration 006 after verifying that 001–005 were already applied. Compose
+reported healthy backend and database services. The frontend equipment page
+returned HTTP 200 and the protected equipment-access API returned HTTP 401
+without a session. The services were left running for manual review. At startup
+zero accounts held the new equipment permission. Its grant command prompts for
+the intended operator's email.
+
+## 2026-11-24 · Laundry equipment faults and manual restoration
+
+**Model:** GPT-6.2-Astra (Codex).
+
+The owner approved the operational part of issue #9, separate equipment
+permissions, and updating the migration-history assertion to check 005 followed
+by 006. Operators can schedule inspection, stop equipment or restore service.
+Fault cancellations keep planned times and the reason. The calendar exposes
+these cancellations only to their owner. D-014 records the pilot rules.
+
+The new status test initially reported inspection instead of occupied during the
+original cycle. The migration-order test initially found no 006. All ten backend
+tests and all three disposable PostgreSQL suites subsequently passed, including
+concurrent booking, rollback and repeated shutdown. Compose applied all six
+migrations. Chromium exercised navigation, shutdown, resident equipment status
+and restoration at 390 and 1280 CSS pixels. Push notifications and Live-queue
+remain follow-up work in issue #9.
+
 ## 2026-11-23 · Addressed the PR review findings
 
 **Model:** GPT-6 (Codex).
