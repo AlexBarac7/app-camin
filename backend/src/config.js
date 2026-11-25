@@ -22,9 +22,17 @@ export function loadDatabaseConfig(env = process.env) {
 }
 
 export function loadConfig(env = process.env) {
+  const push = ['VAPID_SUBJECT', 'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'].some(name => env[name])
+    ? {
+      subject: required(env, 'VAPID_SUBJECT'),
+      publicKey: required(env, 'VAPID_PUBLIC_KEY'),
+      privateKey: required(env, 'VAPID_PRIVATE_KEY'),
+    }
+    : undefined;
   return {
     port: port(env, 'PORT'),
     database: loadDatabaseConfig(env),
+    push,
     internalReadinessPort: env.INTERNAL_READINESS_PORT === undefined
       ? undefined : port(env, 'INTERNAL_READINESS_PORT'),
   };

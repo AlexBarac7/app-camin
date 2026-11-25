@@ -15,6 +15,7 @@ async function checked(url, options) {
   if (response.status === 401) window.location.replace('/autentificare');
   if (!response.ok) throw new Error(response.status === 403 ? 'Nu ai permisiunea de a gestiona echipamente.'
     : response.status === 409 ? 'Starea s-a schimbat. Verifică echipamentul și încearcă din nou.'
+    : response.status === 422 ? 'Nu există rezidenți afectați de această verificare.'
     : 'Cererea nu a putut fi finalizată. Încearcă din nou.');
   return response;
 }
@@ -26,7 +27,10 @@ export default function EquipmentManagement() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [draft, setDraft] = useState(null);
   const machine = machines.find(item => String(item.id) === selected);
+  const editing = machine?.inspectionStartedAt && draft?.inspectionStartedAt === machine.inspectionStartedAt
+    && !machine.inspectionNotified;
   useEffect(() => {
     document.documentElement.lang = 'ro';
     document.title = 'Gestionare echipamente · Cămin';
@@ -50,7 +54,7 @@ export default function EquipmentManagement() {
     return () => { controller.abort(); clearTimeout(timer); };
   }, [revision]);
 
-  async function change(action) {
+  async function change(action, inspection) {
     if (action === 'stop' && !window.confirm('Scoți din funcțiune ' + machine.name + ' din ' + machine.location +
         '? Rezervarea în curs se încheie și rezervările viitoare se anulează.')) return;
     setBusy(true);
@@ -58,9 +62,10 @@ export default function EquipmentManagement() {
     setMessage('');
     try {
       await checked('/api/laundry-machines/' + machine.id + '/condition', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...inspection }),
       });
-      setMessage('Starea echipamentului a fost actualizată.');
+      setDraft(null);
+      setMessage(inspection ? 'Mesajul a fost trimis rezidenților afectați.' : 'Starea echipamentului a fost actualizată.');
     } catch (failure) {
       setError(failure.message);
     } finally {
@@ -76,7 +81,7 @@ export default function EquipmentManagement() {
     {message && <p role="status">{message}</p>}
     {machines.length > 0 && <div className="grid gap-2 font-medium"><label htmlFor="managed-equipment">Echipament</label>
       <select id="managed-equipment" className={control + ' w-full'} disabled={busy} value={selected} onChange={event => {
-        select(event.target.value); setMessage(''); setError('');
+        select(event.target.value); setDraft(null); setMessage(''); setError('');
       }}>
         <option value="">Alege echipamentul</option>
         {machines.map(item => <option key={item.id} value={item.id}>{item.location} · {item.name}</option>)}
@@ -95,7 +100,29 @@ export default function EquipmentManagement() {
           : action === 'restore' ? ['broken','inspection'].includes(machine.technicalStatus)
           : machine.technicalStatus !== 'broken').map(([action, label]) =>
           <button key={action} className={control} disabled={busy} onClick={() => change(action)}>{label}</button>)}
+        {machine.technicalStatus === 'inspection' && !machine.inspectionNotified && !editing &&
+          <button type="button" className={control} disabled={busy} onClick={() => {
+            const equipment = machine.type === 'washer' ? 'mașina de spălat' : 'uscătorul';
+            setDraft({
+              inspectionStartedAt: machine.inspectionStartedAt,
+              message: `După ce se încheie ciclul în curs, vom verifica ${equipment} ${machine.label} (${machine.location}). `
+                + 'Dacă urmează să folosești acest echipament, te rugăm să alegi altul.',
+            });
+          }}>Notifică rezidenții</button>}
       </div>
+      {machine.inspectionNotified && <p>Rezidenții afectați au fost notificați.</p>}
+      {editing && <form className="grid gap-2" onSubmit={event => {
+        event.preventDefault();
+        change('notify-inspection', draft);
+      }}>
+        <label htmlFor="inspection-message" className="font-medium">Mesaj pentru rezidenți</label>
+        <textarea id="inspection-message" className={control} value={draft.message} rows={4} maxLength={500}
+          required disabled={busy} onChange={event => setDraft({ ...draft, message: event.target.value })} />
+        <div className="flex flex-wrap gap-2">
+          <button className={control} disabled={busy || !draft.message.trim()}>Trimite mesajul</button>
+          <button type="button" className={control} disabled={busy} onClick={() => setDraft(null)}>Renunță</button>
+        </div>
+      </form>}
     </section>}
   </main>;
 }

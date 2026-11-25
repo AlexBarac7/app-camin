@@ -19,5 +19,5 @@
     "test:auth": "node --test test-integration/auth.integration.js",
     "test:reservations": "node --test test-integration/reservations.integration.js"
   },
-  "dependencies": { "express": "^5.1.0", "pg": "^8.16.0" }
+  "dependencies": { "express": "^5.1.0", "pg": "^8.16.0", "web-push": "^4.0.0" }
 }

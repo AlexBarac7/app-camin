@@ -69,3 +69,26 @@
 - **Evidence:** The owner confirmed the single remaining-usage threshold, both
   notification actions and the five-minute expiry when answering Q-012.
 - **Confirmed:** 2026-11-24
+
+## D-017 · Deliver pilot equipment notifications in the app and through opt-in Web Push
+- **Status:** approved
+- **Rule:** Publish shutdown, inspection and restoration notices to the affected
+  resident's authenticated notifications page. Also send a generic Web Push
+  alert to each device that explicitly opted in. Start any restoration hold
+  when its in-app notice is published. The resident answers in the app.
+- **Why:** Residents can see notices even if they decline browser permission,
+  and opted-in devices can alert them when the app is closed.
+- **Evidence:** The owner chose in-app delivery and browser alerts and requested
+  implementation of the issue #9 plan.
+- **Confirmed:** 2026-11-25
+
+## D-018 · Keep resident notices unread until acknowledged
+- **Status:** approved
+- **Rule:** A notice remains unread until its recipient selects **OK** on that
+  notice. The resident navigation displays the account's unread count when
+  positive. Reading leaves the notice in the inbox and preserves any offer.
+  Existing notices with no recorded acknowledgement begin unread.
+- **Why:** Residents can see which messages still need their attention and can
+  acknowledge each one individually.
+- **Evidence:** The owner approved the unread count and acknowledgement plan.
+- **Confirmed:** 2026-11-25

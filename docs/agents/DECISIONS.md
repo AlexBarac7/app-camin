@@ -23,6 +23,8 @@
 - D-014 · Authorize equipment operations separately and restore service manually · [Laundry decisions](decisions/laundry-decisions.md)
 - D-015 · Notify affected residents when equipment returns to service in time · [Laundry decisions](decisions/laundry-decisions.md)
 - D-016 · Offer a five-minute hold when laundry service resumes · [Laundry decisions](decisions/laundry-decisions.md)
+- D-017 · Deliver pilot equipment notifications in the app and through opt-in Web Push · [Laundry decisions](decisions/laundry-decisions.md)
+- D-018 · Keep resident notices unread until acknowledged · [Laundry decisions](decisions/laundry-decisions.md)
 
 ---
 

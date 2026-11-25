@@ -1,6 +1,7 @@
 import LaundryStatus from './LaundryStatus.jsx';
 import { useEffect, useState } from 'react';
 import LaundryCalendar, { upcomingInterval } from './LaundryCalendar.jsx';
+import Notifications, { disableDevicePush } from './Notifications.jsx';
 
 const invalidLink = 'Invitația nu mai este valabilă. Cere o invitație nouă.';
 const unavailable = 'Momentan nu putem finaliza cererea. Încearcă din nou.';
@@ -72,7 +73,9 @@ function AccessForm({ activation }) {
       await authRequest(activation ? 'activate' : 'login', activation
         ? { token: invitation, password }
         : { email: data.get('email'), password });
-      window.location.replace(activation ? '/autentificare' : '/resurse');
+      const notice = new URLSearchParams(window.location.search).get('notificare');
+      const destination = notice && /^\d+$/.test(notice) ? '/notificari#notificare-' + notice : '/resurse';
+      window.location.replace(activation ? '/autentificare' : destination);
     } catch (failure) {
       if (failure.invalidInvitation) setInvalid(true);
       else setError(failure.status ? failure.message : unavailable);
@@ -123,6 +126,7 @@ function Account() {
     setPending(true);
     setError('');
     try {
+      await disableDevicePush().catch(() => {});
       await authRequest('logout', {});
       window.location.replace('/autentificare');
     } catch {
@@ -153,15 +157,54 @@ const laundryRooms = [
 
 const linkFocus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
 
-function ResidentNav() {
+function ResidentNav({ inboxUnreadCount }) {
+  const [unreadCount, setUnreadCount] = useState(0);
+  useEffect(() => {
+    if (route === '/notificari') return;
+    const controller = new AbortController();
+    let loading = false;
+    async function load() {
+      if (document.hidden || loading) return;
+      loading = true;
+      try {
+        const response = await fetch('/api/notifications/unread-count', {
+          signal: controller.signal, cache: 'no-store',
+        });
+        if (response.status === 401) setUnreadCount(0);
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!controller.signal.aborted) setUnreadCount(data.unreadCount);
+      } catch {
+        // Keep the last count through a temporary connection failure.
+      } finally {
+        loading = false;
+      }
+    }
+    load();
+    const timer = setInterval(load, 15_000);
+    document.addEventListener('visibilitychange', load);
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', load);
+    };
+  }, []);
+  const count = route === '/notificari' ? inboxUnreadCount : unreadCount;
   return (
-    <nav aria-label="Navigare principală" className="mb-5 flex gap-2">
-      {[['/resurse', 'Resurse'], ['/cont', 'Contul meu']].map(([path, label]) => (
-        <a key={path} href={path} aria-current={route === path ? 'page' : undefined}
-          className={'rounded-lg px-3 py-3 font-semibold aria-[current=page]:bg-slate-900 aria-[current=page]:text-white hover:underline ' + linkFocus}>
+    <nav aria-label="Navigare principală" className="mb-5 flex flex-wrap gap-2">
+      {[['/resurse', 'Resurse'], ['/notificari', 'Notificări'], ['/cont', 'Contul meu']].map(([path, label]) => {
+        const showCount = path === '/notificari' && count > 0;
+        return <a key={path} href={path} aria-current={route === path ? 'page' : undefined}
+          className={'inline-flex items-center gap-2 rounded-lg px-3 py-3 font-semibold aria-[current=page]:bg-slate-900 aria-[current=page]:text-white hover:underline ' + linkFocus}>
           {label}
-        </a>
-      ))}
+          {showCount && <>
+            <span aria-hidden="true" className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-red-700 px-1.5 text-sm text-white tabular-nums">
+              {count}
+            </span>
+            <span className="sr-only">{count === 1 ? ', 1 mesaj necitit' : ', ' + count + ' mesaje necitite'}</span>
+          </>}
+        </a>;
+      })}
     </nav>
   );
 }
@@ -187,7 +230,7 @@ function EquipmentCard({ machine, selected, onSelect, onChange }) {
 
   return (
     <li>
-      <details className="rounded-xl border border-slate-300">
+      <details className="rounded-xl border border-slate-300" open={selected ? true : undefined}>
         <summary className={'cursor-pointer rounded-xl px-4 py-4 ' + linkFocus}>
           <span className="ml-1 font-semibold">
             {dryer ? 'Uscător' : 'Mașină de spălat'}{' '}
@@ -221,7 +264,8 @@ function EquipmentCard({ machine, selected, onSelect, onChange }) {
 function Resources({ room }) {
   const [canManage, setCanManage] = useState(false);
   const [machines, setMachines] = useState(null);
-  const [selectedMachine, setSelectedMachine] = useState(null);
+  const [selectedMachine, setSelectedMachine] = useState(() =>
+    Number(new URLSearchParams(window.location.search).get('echipament')) || null);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState(false);
 
@@ -307,6 +351,7 @@ const headings = {
   '/activeaza': 'Activează contul',
   '/autentificare': 'Autentificare',
   '/cont': 'Contul meu',
+  '/notificari': 'Notificări',
   '/resurse': 'Resurse',
   '/spalatorie': 'Resurse',
   ...Object.fromEntries(laundryRooms.map(room => [room.path, room.name])),
@@ -320,20 +365,22 @@ if (isResidentRoute) {
 
 export default function ResidentAccess() {
   const legacyRoute = route === '/spalatorie';
+  const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   useEffect(() => {
     if (legacyRoute) window.location.replace('/resurse');
   }, [legacyRoute]);
 
-  const showNav = route === '/cont' || route === '/resurse' || currentRoom;
+  const showNav = route === '/cont' || route === '/notificari' || route === '/resurse' || currentRoom;
   let content;
   if (route === '/cont') content = <Account />;
+  else if (route === '/notificari') content = <Notifications onUnreadCount={setInboxUnreadCount} />;
   else if (route === '/resurse' || currentRoom) content = <Resources room={currentRoom} />;
   else if (legacyRoute) content = <a href="/resurse">Deschide Resurse</a>;
   else content = <AccessForm activation={route === '/activeaza'} />;
 
   return (
     <main className="mx-auto max-w-lg px-4 py-10 sm:py-20">
-      {showNav && <ResidentNav />}
+      {showNav && <ResidentNav inboxUnreadCount={inboxUnreadCount} />}
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{headings[route]}</h1>
         {content}

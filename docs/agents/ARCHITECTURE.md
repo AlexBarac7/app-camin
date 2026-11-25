@@ -55,3 +55,9 @@ to a pending inspection and the cancellation reason. Equipment changes lock
 the same machine row as booking creation and commit cancellations with the
 technical status. The resident calendar returns fault cancellations to their
 owner. The equipment management page checks its dedicated permission.
+
+Migration 008 adds resident notifications, restoration offers and Web Push
+subscriptions and delivery jobs. Equipment changes create notices and offers
+under the same row lock used by booking creation. The calendar includes active
+offers without account information. The backend sends browser alerts after
+commit. A service worker opens the authenticated notifications page.

@@ -28,7 +28,9 @@ function calendarBlocks(calendar, now) {
   const closes = +new Date(calendar.closesAt);
   let cursor = +new Date(calendar.opensAt);
   const blocks = [];
-  for (const reservation of calendar.reservations) {
+  const intervals = [...calendar.reservations, ...(calendar.holds ?? []).map(hold => ({ ...hold, hold: true }))]
+    .sort((first, second) => Date.parse(first.startsAt) - Date.parse(second.startsAt));
+  for (const reservation of intervals) {
     const start = +new Date(reservation.startsAt);
     const end = +new Date(reservation.endsAt);
     if (start > cursor) blocks.push({ start: cursor, end: Math.min(start, closes) });
@@ -138,6 +140,13 @@ function CalendarDay({ machine, day, onChange }) {
 
   const calendar = data?.calendar;
   const currentTime = calendar ? Date.parse(calendar.now) + elapsed : 0;
+  const nextHoldExpiration = calendar?.nextHoldExpiration;
+  useEffect(() => {
+    if (!nextHoldExpiration) return;
+    const delay = Date.parse(nextHoldExpiration) - Date.parse(data.calendar.now);
+    const timer = setTimeout(() => setRevision(value => value + 1), Math.max(0, delay));
+    return () => clearTimeout(timer);
+  }, [data, nextHoldExpiration]);
   const blocks = calendar?.open ? calendarBlocks(calendar, currentTime) : [];
   const options = calendar?.open && calendar.bookable
     ? bookingOptions(calendar, blocks, currentTime, (machine.type === 'dryer' ? 240 : 180) * minute)
@@ -169,7 +178,8 @@ function CalendarDay({ machine, day, onChange }) {
         <ul aria-label="Intervalele zilei" className="grid gap-2">
           {blocks.map(({ start, end, reservation }) => (
             <li key={start} className="grid gap-1 rounded-lg bg-slate-100 p-2">
-              <span>{interval(start, end)} · {reservation
+              <span>{interval(start, end)} · {reservation?.hold
+                ? <LaundryStatus status="unavailable">Indisponibil temporar</LaundryStatus> : reservation
                 ? <LaundryStatus status="reserved">{reservation.id ? 'Rezervarea ta' : machine.technicalStatus === 'inspection' ? 'Rezervat' : 'Ocupat'}</LaundryStatus>
                 : calendar.bookable ? <LaundryStatus status="available">Liber</LaundryStatus>
                   : <LaundryStatus status="unavailable">Indisponibil</LaundryStatus>}

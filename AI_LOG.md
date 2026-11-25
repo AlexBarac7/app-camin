@@ -4,6 +4,58 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-25 · Issue #9 delivery checks
+
+The owner confirmed Web Push delivery with the desktop tab closed and verified
+that clicking the alert opens the unread notice in the resident account. The
+owner also confirmed the flow on iPhone through the installed web app. The
+iPhone test first received `403 BadJwtToken` from Apple. Using the test HTTPS
+origin as the VAPID subject with the same key pair returned `201`. Development
+requests from localhost and the configured HTTPS origin both pass the origin
+check for logout. Live-queue requirements are tracked in issue #10.
+
+The 13 backend tests, all three disposable PostgreSQL suites, the frontend
+build, ledger validation, and diff whitespace check passed before publication.
+Web Push delivery and navigation on a physical Android device remain pending.
+
+## 2026-11-25 · Unread count and acknowledgement
+
+The resident navigation shows the number of unread notifications. Selecting
+**OK** acknowledges one notice and keeps it in the inbox. Migration 009
+persists the read timestamp. Existing notices start unread, as approved in D-018.
+
+The new PostgreSQL assertions first failed because the inbox lacked
+`readAt`. The reservation suite then passed, including account isolation
+and idempotent acknowledgement. All 13 backend tests, the frontend build
+and the ledger check passed. Chromium with a simulated server verified
+the count changing from 0 to 2 to 1 to 0, with notices kept after reloading.
+
+## 2026-11-25 · Laundry notifications and restoration offers
+
+Implemented the three reservation notification flows in issue #9. Equipment
+shutdown publishes targeted notices. An authorized operator can send one
+editable notice per inspection. On restoration, eligible reservations get
+five-minute offers that block competing bookings until response or expiry.
+Accepted offers create new reservations and preserve the cancelled originals.
+Migration 008 adds the inbox, offers and pending Web Push deliveries. D-017
+records opt-in Web Push for the pilot. PATTERN-010 records the delivery
+transaction as a candidate. Live-queue integration remains open.
+
+All 13 backend tests, the PostgreSQL migrations, authentication and
+reservations suites, the frontend build, and the ledger check passed.
+The first reservations run exposed an untyped PostgreSQL parameter
+(`column "machine_id" is of type integer but expression is of type text`).
+The query now types parameters explicitly. The disposable Compose project
+applied all eight migrations and verified the tables, frontend assets and
+HTTP 401 on the unauthenticated notifications API. Chromium exercised
+inspection, shutdown, restoration, acceptance and a simulated service-worker
+alert at 390 and 1280 CSS pixels. The upgrade test preserved a preexisting
+cancellation and created an offer only after restoration. The temporary
+Chromium profile returned `AbortError: Registration failed - permission denied`
+and the isolated persistent profile could not complete subscription, so real
+desktop delivery was not verified. Android and iPhone verification requires
+test devices and a private HTTPS test origin.
+
 ## 2026-11-24 · Clear calendar notices after equipment restoration
 
 The resident calendar shows cancellations for the current fault. Restoration
