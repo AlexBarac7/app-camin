@@ -1,3 +1,4 @@
+import LaundryStatus from './LaundryStatus.jsx';
 import { useEffect, useRef, useState } from 'react';
 
 const timeZone = 'Europe/Bucharest';
@@ -27,7 +28,9 @@ function calendarBlocks(calendar, now) {
   const closes = +new Date(calendar.closesAt);
   let cursor = +new Date(calendar.opensAt);
   const blocks = [];
-  for (const reservation of calendar.reservations) {
+  const intervals = [...calendar.reservations, ...(calendar.holds ?? []).map(hold => ({ ...hold, hold: true }))]
+    .sort((first, second) => Date.parse(first.startsAt) - Date.parse(second.startsAt));
+  for (const reservation of intervals) {
     const start = +new Date(reservation.startsAt);
     const end = +new Date(reservation.endsAt);
     if (start > cursor) blocks.push({ start: cursor, end: Math.min(start, closes) });
@@ -95,7 +98,7 @@ function CalendarDay({ machine, day, onChange }) {
         if (!controller.signal.aborted) setFeedback({ error: true, text: error.message });
       });
     return () => controller.abort();
-  }, [endpoint, day, revision]);
+  }, [endpoint, day, revision, machine.observedAt]);
 
   useEffect(() => {
     if (!data) return;
@@ -137,6 +140,13 @@ function CalendarDay({ machine, day, onChange }) {
 
   const calendar = data?.calendar;
   const currentTime = calendar ? Date.parse(calendar.now) + elapsed : 0;
+  const nextHoldExpiration = calendar?.nextHoldExpiration;
+  useEffect(() => {
+    if (!nextHoldExpiration) return;
+    const delay = Date.parse(nextHoldExpiration) - Date.parse(data.calendar.now);
+    const timer = setTimeout(() => setRevision(value => value + 1), Math.max(0, delay));
+    return () => clearTimeout(timer);
+  }, [data, nextHoldExpiration]);
   const blocks = calendar?.open ? calendarBlocks(calendar, currentTime) : [];
   const options = calendar?.open && calendar.bookable
     ? bookingOptions(calendar, blocks, currentTime, (machine.type === 'dryer' ? 240 : 180) * minute)
@@ -158,18 +168,33 @@ function CalendarDay({ machine, day, onChange }) {
           setRevision(value => value + 1);
         }}>Reîncarcă data</button>
         : <p role="status">Se încarcă intervalele…</p>)}
+      {machine.technicalStatus === 'broken' && calendar?.cancellations?.map((entry, index) => <p key={index} className="rounded-lg bg-amber-50 p-3">
+        Rezervarea ta {interval(entry.startsAt, entry.endsAt)} · <LaundryStatus status="cancelled">Anulată</LaundryStatus> · {entry.reason}
+      </p>)}
       {calendar && !calendar.bookable && <p>Rezervare indisponibilă pentru acest echipament.</p>}
-      {calendar && !calendar.open && <p>Închis</p>}
+      {calendar && !calendar.open && <p><LaundryStatus status="unavailable">Închis</LaundryStatus></p>}
       {calendar?.open && !blocks.length && <p>Nu mai sunt intervale pentru această zi.</p>}
       {!!blocks.length && (
         <ul aria-label="Intervalele zilei" className="grid gap-2">
           {blocks.map(({ start, end, reservation }) => (
             <li key={start} className="grid gap-1 rounded-lg bg-slate-100 p-2">
-              <span>{interval(start, end)} · {
-                reservation?.id ? 'Rezervarea ta' : reservation ? 'Ocupat' : 'Liber'}</span>
+              <span>{interval(start, end)} · {reservation?.hold
+                ? <LaundryStatus status="unavailable">Indisponibil temporar</LaundryStatus> : reservation
+                ? <LaundryStatus status="reserved">{reservation.id ? 'Rezervarea ta' : machine.technicalStatus === 'inspection' ? 'Rezervat' : 'Ocupat'}</LaundryStatus>
+                : calendar.bookable ? <LaundryStatus status="available">Liber</LaundryStatus>
+                  : <LaundryStatus status="unavailable">Indisponibil</LaundryStatus>}
+              </span>
               {reservation?.id && <>
+                {machine.technicalStatus === 'inspection' && !calendar.bookable &&
+                  currentTime < Date.parse(reservation.useEndsAt) &&
+                  (start > currentTime || machine.status === 'inspection') && (
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
+                      {machine.status === 'occupied' ? 'Echipamentul va fi verificat după ciclul curent.' : 'Echipamentul este în verificare.'}
+                      {' '}Rezervarea ta este păstrată. Poți folosi echipamentul după repunerea în serviciu, în timpul rezervat pentru utilizare.
+                    </p>
+                  )}
                 <span>Utilizare {interval(start, reservation.useEndsAt)}</span>
-                {+new Date(reservation.useEndsAt) < end && <span>Predare {interval(reservation.useEndsAt, end)}</span>}
+                {+new Date(reservation.useEndsAt) < end && <span><LaundryStatus status="handover">Predare</LaundryStatus> {interval(reservation.useEndsAt, end)}</span>}
                 {start > currentTime && <button type="button" className={control + ' justify-self-start'}
                   disabled={pending} onClick={event => mutate(event, reservation.id)}>Anulează rezervarea</button>}
               </>}
@@ -200,7 +225,7 @@ function CalendarDay({ machine, day, onChange }) {
             <div aria-live="polite">
               {end > 0 && <>
                 <p>Utilizare {interval(start, useEnd)}</p>
-                {useEnd < end && <p>Predare {interval(useEnd, end)}</p>}
+                {useEnd < end && <p><LaundryStatus status="handover">Predare</LaundryStatus> {interval(useEnd, end)}</p>}
               </>}
             </div>
             <button className={primary} disabled={!end}>Confirmă rezervarea</button>

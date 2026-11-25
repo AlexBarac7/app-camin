@@ -1,3 +1,4 @@
+import { equipmentStatus } from '../src/modules/laundry/reservation-rules.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -40,4 +41,12 @@ test('reservation visibility and occupancy expose only the relevant data', async
   assert.equal(equipmentStatus('working', row, row.ends_at), 'available');
   assert.equal(equipmentStatus('broken', row, row.starts_at), 'broken');
   assert.equal(equipmentStatus('unspecified', row, row.starts_at), 'unspecified');
+});
+
+test('inspection allows only the original cycle to finish', () => {
+  const current = { id: '2', starts_at: 10, use_ends_at: 20, ends_at: 30 };
+  assert.equal(equipmentStatus('inspection', current, 15, '2'), 'occupied');
+  assert.equal(equipmentStatus('inspection', current, 20, '2'), 'inspection');
+  assert.equal(equipmentStatus('inspection', current, 15, '1'), 'inspection');
+  assert.equal(equipmentStatus('inspection', null, 25, '2'), 'inspection');
 });

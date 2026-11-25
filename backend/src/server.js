@@ -1,15 +1,22 @@
 import express from 'express';
+import { localOrigins } from './modules/auth/auth.routes.js';
 import { readiness } from './modules/health/health.routes.js';
 import { loadConfig } from './config.js';
 import { createDatabase } from './db.js';
 import { createApp } from './app.js';
+import { startPushDelivery } from './modules/notifications/push.js';
 
 try {
   const config = loadConfig();
   const database = createDatabase(config.database);
-  const server = createApp(database, process.env.APP_ORIGIN ? [process.env.APP_ORIGIN] : undefined).listen(config.port, '0.0.0.0', () => {
+  const appOrigin = process.env.APP_ORIGIN;
+  const origins = appOrigin
+    ? [...(process.env.NODE_ENV === 'production' ? [] : localOrigins), appOrigin]
+    : undefined;
+  const server = createApp(database, origins, config.push?.publicKey).listen(config.port, '0.0.0.0', () => {
     console.log(`Backend listening on port ${config.port}.`);
   });
+  const stopPushDelivery = startPushDelivery(database, config.push);
   const listeners = [server];
   if (config.internalReadinessPort) {
     const internal = express();
@@ -25,7 +32,7 @@ try {
     process.once(signal, async () => {
       const deadline = setTimeout(() => process.exit(1), 5000);
       deadline.unref();
-      await Promise.all(listeners.map(listener => new Promise(resolve => listener.close(resolve))));
+      await Promise.all([stopPushDelivery(), ...listeners.map(listener => new Promise(resolve => listener.close(resolve)))]);
       await database.close();
       clearTimeout(deadline);
       process.exit(0);

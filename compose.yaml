@@ -20,6 +20,9 @@ services:
     environment:
       INTERNAL_READINESS_PORT: 3001
       APP_ORIGIN: ${APP_ORIGIN:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       PORT: ${BACKEND_PORT:?BACKEND_PORT is required}
       PGHOST: ${PGHOST:?PGHOST is required}
       PGPORT: ${PGPORT:?PGPORT is required}

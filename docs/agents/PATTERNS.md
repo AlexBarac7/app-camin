@@ -14,6 +14,8 @@
 - PATTERN-006 · Reuse session verification on resident endpoints · candidate
 - PATTERN-007 · Share the readiness probe with a container-local listener · candidate
 - PATTERN-008 · Serialize bookings on the equipment row · candidate
+- PATTERN-009 · Serialize equipment faults with booking creation · candidate
+- PATTERN-010 · Persist browser alerts with the event that produced them · candidate
 
 ---
 
@@ -78,3 +80,18 @@
   strict boundary comparisons so adjacent blocks can share an endpoint.
 - **Example:** backend/src/modules/laundry/reservations.routes.js;
   backend/test-integration/reservations.integration.js.
+
+## PATTERN-009 · Serialize equipment faults with booking creation
+- **Status:** candidate
+- **How:** Take the same equipment row lock used by bookings, then commit the
+  technical status and affected reservation cancellations in one transaction.
+- **Example:** backend/src/modules/laundry/condition.routes.js and the
+  concurrency and rollback cases in backend/test-integration/reservations.integration.js.
+
+## PATTERN-010 · Persist browser alerts with the event that produced them
+- **Status:** candidate
+- **How:** Insert the resident notice and pending deliveries in the same
+  transaction as the equipment change. Lease pending deliveries after commit
+  and retry transient provider errors. Keep the notice readable in the app.
+- **Example:** backend/src/modules/notifications/laundry-notifications.js;
+  backend/src/modules/notifications/push.js.

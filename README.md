@@ -292,6 +292,7 @@ The API accepts that origin and `http://127.0.0.1:5173` in local development.
 When serving the app at a different origin, set `APP_ORIGIN` to its exact
 scheme, host and port, with no trailing slash, and recreate the backend.
 The command uses that origin in links and the API uses it for write requests.
+In development, setting `APP_ORIGIN` also keeps the two local origins enabled.
 
 Run the automated access flow on a fresh, disposable PostgreSQL 17 database
 named `app_camin_auth_test`. Configure the same `PG*` variables described for
@@ -324,3 +325,49 @@ docker compose exec backend npm run sessions:cleanup
 For a backend running locally, set the same `PG*` variables and run
 `npm --prefix backend run sessions:cleanup`. The command deletes only expired
 sessions and prints the number deleted. Active sessions remain usable.
+
+### Managing laundry equipment faults
+
+Rebuild the services and apply the pending migrations. To grant equipment
+management access to an existing account, run
+`docker compose exec backend npm run equipment:access -- grant` and enter the
+account email at the prompt. Use `revoke` to withdraw access. The backend checks
+this permission on every equipment management request.
+
+Open **Resurse → Gestionează echipamentele** and select the machine by room and number.
+
+- **Verifică după ciclu** schedules an inspection after the current cycle. Existing
+  reservations stay in the calendar, and the machine is closed to new bookings.
+- **Scoate din funcțiune** ends the current reservation and cancels upcoming
+  reservations for that machine. Affected residents see the reason in their
+  calendar while the fault is active. Operators with access to reservation
+  history can still see the reason after service is restored.
+- **Repune în serviciu** opens the machine for new bookings. Cancelled reservations
+  stay in history. Residents can book an available slot again.
+
+After applying migration 008, **Notificări** shows shutdown, inspection and
+restoration notices to the affected resident. During inspection, an operator
+can edit and send one notice. On restoration, eligible residents can accept
+or decline a five-minute offer. The cancelled original remains in history.
+Live-queue rules and equipment-fault integration are tracked together in
+[issue #10](https://github.com/AlexBarac7/app-camin/issues/10).
+
+For browser alerts, export `VAPID_SUBJECT` (an HTTPS origin or a valid contact
+`mailto:` URI),
+`VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` in the shell and recreate the
+backend. Use a persistent VAPID key pair for the environment. With the backend
+dependencies installed, the following Bash commands generate a new pair
+without displaying the private key. Set the subject separately.
+
+```bash
+read -r VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY < <(
+  cd backend && node --input-type=module -e 'import {generateVAPIDKeys} from "web-push"; const {publicKey, privateKey} = generateVAPIDKeys(); console.log(publicKey, privateKey)'
+)
+export VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY
+```
+
+Open **Notificări** and enable alerts on the device. For a phone test, use a
+private test origin accessible over HTTPS and set the backend's `APP_ORIGIN`
+to that exact origin. On iPhone, add the web app to the home screen and open
+it there before enabling alerts. The operator can exercise all three flows
+with test accounts and confirm the alert opens the correct notice.

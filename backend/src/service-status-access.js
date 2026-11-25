@@ -4,7 +4,8 @@ import { loadDatabaseConfig } from './config.js';
 import { createDatabase } from './db.js';
 import { normalizeEmail } from './modules/auth/credentials.js';
 
-const mode = process.argv[2];
+const equipment = process.argv[2] === '--equipment';
+const mode = process.argv[equipment ? 3 : 2];
 let database;
 try {
   if (mode !== 'grant' && mode !== 'revoke') {
@@ -22,7 +23,8 @@ try {
 
   database = createDatabase(loadDatabaseConfig());
   const { rowCount } = await database.query(
-    'UPDATE users SET can_view_service_status = $1 WHERE email = $2',
+    equipment ? 'UPDATE users SET can_manage_equipment = $1 WHERE email = $2'
+      : 'UPDATE users SET can_view_service_status = $1 WHERE email = $2',
     [mode === 'grant', email],
   );
   if (rowCount === 0) {

@@ -14,18 +14,19 @@ function readSession(req) {
   return validToken(token) ? tokenHash(token) : null;
 }
 
-export function requireSession(database, { serviceStatus = false } = {}) {
+export function requireSession(database, { serviceStatus = false, manageEquipment = false } = {}) {
   return async (req, res, next) => {
     res.set('Cache-Control', 'no-store');
     const digest = readSession(req);
     if (!digest) return res.status(401).end();
     const { rows: [account] } = await database.query(
-      `SELECT users.id, users.email${serviceStatus ? ', users.can_view_service_status' : ''}
+      `SELECT users.id, users.email${serviceStatus ? ', users.can_view_service_status' : ''}${manageEquipment ? ', users.can_manage_equipment' : ''}
        FROM sessions JOIN users ON users.id = sessions.user_id
        WHERE sessions.token_hash = $1 AND sessions.expires_at > clock_timestamp()`,
       [digest],
     );
     if (!account) return res.status(401).end();
+    if (manageEquipment && !account.can_manage_equipment) return res.status(403).end();
     if (serviceStatus && !account.can_view_service_status) return res.status(403).end();
     res.locals.account = account;
     next();

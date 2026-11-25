@@ -7,13 +7,14 @@ import { loadDatabaseConfig } from '../src/config.js';
 import { createDatabase } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
 import { newToken, tokenHash } from '../src/modules/auth/credentials.js';
+import { dispatchPushDeliveries } from '../src/modules/notifications/push.js';
 
 test('authenticated laundry reservations on disposable PostgreSQL', async t => {
   assert.equal(process.env.PGDATABASE, 'app_camin_reservations_test');
   const db = createDatabase(loadDatabaseConfig());
   t.after(() => db.close());
   await runMigrations(db, fileURLToPath(new URL('../migrations/', import.meta.url)), 'apply');
-  const server = createApp(db).listen(0, '127.0.0.1');
+  const server = createApp(db, undefined, 'fixture-public-key').listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(() => server.close());
   const { rows: users } = await db.query(
@@ -112,7 +113,10 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
   const reservations = await get(adminTables + '/reservations');
   assert.deepEqual(new Set(reservations.rows.map(row => row.id)), new Set([id, replacementId, active.items[0].id]));
   const migrations = await get(adminTables + '/migrations');
-  assert.equal(migrations.rows.at(-1).filename, '005_laundry_reservations.sql');
+  const filenames = migrations.rows.map(row => row.filename);
+  const base = filenames.indexOf('005_laundry_reservations.sql');
+  assert.ok(base >= 0);
+  assert.equal(filenames[base + 1], '006_equipment_faults.sql');
   for (const table of ['users', 'sessions', 'invitations', 'schema_migrations']) {
     assert.equal((await request(adminTables + '/' + table)).status, 404);
   }
@@ -161,4 +165,215 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
   const available = await readMachine();
   assert.equal(available.status, 'available');
   assert.equal(available.nextStatusAt, at(60));
+  const change = action => request(path + '/condition', 'POST', 0, { action });
+  assert.equal((await change('stop')).status, 403);
+  await db.query('UPDATE users SET can_manage_equipment = true WHERE id = $1', [users[0].id]);
+  const subscription = {
+    endpoint: 'https://fcm.googleapis.com/fcm/send/fixture',
+    keys: { p256dh: Buffer.alloc(65, 4).toString('base64url'), auth: Buffer.alloc(16).toString('base64url') },
+  };
+  const pushSubscription = '/api/notifications/push-subscription';
+  assert.equal((await request(pushSubscription, 'PUT', 1, subscription)).status, 204);
+  assert.equal((await request(pushSubscription, 'PUT', 0, subscription)).status, 409);
+  assert.equal((await request(pushSubscription, 'DELETE', 0, subscription)).status, 204);
+  const notices = async resident => {
+    const response = await request('/api/notifications', 'GET', resident);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    return (await response.json()).items;
+  };
+  assert.equal((await request('/api/notifications', 'GET', 2)).status, 401);
+  assert.equal((await change('inspect')).status, 409);
+  for (const selected of [fixture.machine, fixture.dryer]) {
+    const endpoint = '/api/laundry-machines/' + selected + '/condition';
+    const operate = action => request(endpoint, 'POST', 0, { action });
+    const { rows: [cycle] } = await db.query(`
+      INSERT INTO laundry_reservations (machine_id,user_id,starts_at,use_ends_at,ends_at)
+      VALUES ($1,$2,now()-interval '4 minutes',now()+interval '6 minutes',now()+interval '16 minutes')
+      RETURNING id`, [selected, users[0].id]);
+    const state = async () => (await get('/api/laundry-machines?availability=1')).find(item => item.id === selected);
+    assert.equal((await operate('inspect')).status, 204);
+    assert.equal((await state()).status, 'occupied');
+    const inspection = {
+      action: 'notify-inspection',
+      inspectionStartedAt: (await state()).inspectionStartedAt,
+      message: 'Mesaj editat pentru verificare.',
+    };
+    assert.equal((await request(endpoint, 'POST', 1, inspection)).status, 403);
+    const sendInspection = () => request(endpoint, 'POST', 0, inspection);
+    assert.deepEqual((await Promise.all([sendInspection(), sendInspection()])).map(response => response.status), [204, 204]);
+    const inspectionNotices = (await notices(0)).filter(item => item.machineId === selected && item.kind === 'inspection');
+    assert.deepEqual(inspectionNotices.map(item => item.message), [inspection.message]);
+    assert.equal((await book(1, 250, 280, selected)).status, 409);
+    await db.query(`UPDATE laundry_reservations SET starts_at=now()-interval '40 minutes',
+      use_ends_at=now()-interval '20 minutes', ends_at=now()-interval '10 minutes' WHERE id=$1`, [cycle.id]);
+    const { rows: [next] } = await db.query(`
+      INSERT INTO laundry_reservations (machine_id,user_id,starts_at,use_ends_at,ends_at)
+      VALUES ($1,$2,now()-interval '2 minutes',now()+interval '8 minutes',now()+interval '18 minutes')
+      RETURNING id`, [selected, users[1].id]);
+    assert.equal((await state()).status, 'inspection');
+    if (selected === fixture.dryer) {
+      assert.equal((await operate('stop')).status, 204);
+      const readCancellation = async () => (await db.query(
+        'SELECT cancelled_at,cancellation_reason FROM laundry_reservations WHERE id=$1', [next.id])).rows[0];
+      const first = await readCancellation();
+      assert.ok(first.cancelled_at);
+      assert.equal(first.cancellation_reason, 'Echipament defect');
+      const shutdown = (await notices(1)).filter(item => item.machineId === selected && item.kind === 'shutdown');
+      assert.equal(shutdown.length, 1);
+      assert.match(shutdown[0].message, /Rezervarea ta a fost anulată/);
+      const operatorNotices = (await notices(0)).filter(item => item.machineId === selected && item.kind === 'shutdown');
+      assert.equal(operatorNotices.length, 1);
+      assert.match(operatorNotices[0].message, /Rezervarea ta a fost anulată/);
+      assert.equal((await db.query('SELECT 1 FROM push_deliveries WHERE notification_id = $1', [shutdown[0].id])).rowCount, 1);
+      assert.equal((await operate('stop')).status, 204);
+      assert.deepEqual(await readCancellation(), first);
+    }
+    assert.equal((await operate('restore')).status, 204);
+    assert.equal((await state()).status, selected === fixture.machine ? 'occupied' : 'available');
+    if (selected === fixture.dryer) {
+      const restored = (await notices(1)).find(item => item.machineId === selected && item.kind === 'restored');
+      assert.match(restored.message, /^Uscătorul .+ funcționează din nou\. Alege un alt interval din calendar\.$/);
+    }
+  }
+
+  // Force the second write to fail after the cancellation update.
+  await db.query(`CREATE FUNCTION reject_fault() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN RAISE EXCEPTION 'fixture'; END $$;
+    CREATE TRIGGER reject_fault BEFORE UPDATE ON laundry_machines
+    FOR EACH ROW EXECUTE FUNCTION reject_fault()`);
+  const beforeRollback = await notices(0);
+  assert.equal((await change('stop')).status, 500);
+  assert.equal((await readMachine()).status, 'occupied');
+  assert.ok((await (await calendar(other)).json()).reservations.length);
+  assert.deepEqual(await notices(0), beforeRollback);
+  await db.query('DROP TRIGGER reject_fault ON laundry_machines');
+  const [raced, stopped] = await Promise.all([book(1, 200, 250), change('stop')]);
+  assert.ok([201, 409].includes(raced.status));
+  assert.equal(stopped.status, 204);
+  assert.equal((await change('stop')).status, 204);
+  assert.equal((await readMachine()).status, 'broken');
+  const mine = await (await calendar(other)).json();
+  assert.ok(mine.cancellations.some(row => row.startsAt === at(60)));
+  assert.ok(!(await (await calendar(winner)).json()).cancellations.some(row => row.startsAt === at(60)));
+  assert.equal(mine.reservations.length, 0);
+  assert.equal((await change('restore')).status, 204);
+  assert.equal((await readMachine()).status, 'available');
+  assert.deepEqual((await (await calendar(other)).json()).cancellations, []);
+  const offerFor = async resident => (await notices(resident))
+    .find(item => item.offer?.startsAt === at(60) && item.offer.status === 'pending').offer;
+  const answer = (offer, resident, action) => request(
+    '/api/notifications/offers/' + offer.id, 'POST', resident, { action });
+  const firstOffer = await offerFor(other);
+  const restorationNotice = (await notices(other)).find(item => item.offer?.id === firstOffer.id);
+  assert.match(restorationNotice.message, /^Mașina de spălat .+ funcționează din nou\. Îți păstrăm intervalul timp de cinci minute\. Dacă vrei să-l folosești, apasă „Continuă rezervarea”\.$/);
+  assert.equal((await answer(firstOffer, winner, 'accept')).status, 404);
+  assert.equal((await book(winner, 60, 90)).status, 409);
+  assert.deepEqual((await (await calendar(winner)).json()).holds.find(hold => hold.startsAt === at(60)),
+    { startsAt: at(60), endsAt: at(90) });
+  assert.equal((await change('stop')).status, 204);
+  assert.equal((await answer(firstOffer, other, 'accept')).status, 409);
+  assert.deepEqual((await (await calendar(other)).json()).cancellations, []);
+  assert.equal((await change('restore')).status, 204);
+  const secondOffer = await offerFor(other);
+  assert.notEqual(secondOffer.id, firstOffer.id);
+  assert.equal((await answer(secondOffer, other, 'decline')).status, 204);
+  assert.equal((await book(1, 60, 90)).status, 201);
+
+  const { rows: [spare] } = await db.query(`
+    SELECT id FROM laundry_machines WHERE technical_status = 'working' AND type = 'washer'
+      AND id <> $1 AND room IS NOT NULL ORDER BY id LIMIT 1`, [fixture.machine]);
+  const operateSpare = action => request('/api/laundry-machines/' + spare.id + '/condition', 'POST', 0, { action });
+  assert.equal((await operateSpare('stop')).status, 204);
+  assert.equal((await operateSpare('restore')).status, 204);
+  assert.ok(!(await notices(0)).some(item => item.machineId === spare.id));
+  assert.equal((await book(0, 60, 75, spare.id)).status, 201);
+  assert.equal((await book(1, 100, 130, spare.id)).status, 201);
+  await db.query(`INSERT INTO laundry_reservations (machine_id,user_id,starts_at,use_ends_at,ends_at)
+    VALUES ($1,$2,now()-interval '5 minutes',now()+interval '70 minutes',now()+interval '80 minutes')`,
+  [spare.id, users[0].id]);
+  assert.equal((await operateSpare('stop')).status, 204);
+  assert.ok((await notices(0)).some(item => item.machineId === spare.id && item.message.includes('recupera hainele')));
+  assert.equal((await operateSpare('restore')).status, 204);
+  const offersForSpare = async resident => (await notices(resident))
+    .filter(item => item.machineId === spare.id && item.offer?.status === 'pending').map(item => item.offer);
+  const future = (await offersForSpare(0)).find(offer => offer.startsAt === at(60));
+  const ongoing = (await offersForSpare(0)).find(offer => offer.id !== future.id);
+  const [accepted, replayed, blocked] = await Promise.all([
+    answer(future, 0, 'accept'), answer(future, 0, 'accept'), book(1, 60, 75, spare.id),
+  ]);
+  assert.deepEqual([accepted.status, replayed.status].sort(), [200, 201]);
+  const [acceptedData, replayedData] = await Promise.all([accepted.json(), replayed.json()]);
+  assert.deepEqual(acceptedData, replayedData);
+  const resumedResponse = await answer(ongoing, 0, 'accept');
+  assert.equal(resumedResponse.status, 201);
+  const resumedData = await resumedResponse.json();
+  const { rows: [resumed] } = await db.query(`
+    SELECT starts_at, use_ends_at, ends_at, (SELECT count(*)::integer FROM laundry_reservations
+      WHERE machine_id = $2 AND cancelled_at IS NULL) AS active_count
+    FROM laundry_reservations WHERE id = $1`, [resumedData.id, spare.id]);
+  assert.ok(resumed.starts_at >= new Date(ongoing.startsAt));
+  assert.equal(resumed.ends_at.toISOString(), ongoing.endsAt);
+  assert.equal(resumed.ends_at - resumed.use_ends_at, 600_000);
+  assert.equal(resumed.active_count, 2);
+  assert.equal(blocked.status, 409);
+  const [expires] = await offersForSpare(1);
+  await db.query("UPDATE laundry_restoration_offers SET expires_at = now() - interval '1 second' WHERE id = $1", [expires.id]);
+  assert.equal((await answer(expires, 1, 'accept')).status, 409);
+  assert.equal((await book(0, 100, 130, spare.id)).status, 201);
+  const { id: expiredNotice } = (await notices(1)).find(item => item.offer?.id === expires.id);
+  await db.query("UPDATE push_deliveries SET next_attempt_at = now() - interval '1 minute' WHERE notification_id = $1",
+    [expiredNotice]);
+  const sent = [];
+  await dispatchPushDeliveries(db, async (_subscription, payload) => {
+    sent.push(JSON.parse(payload).id);
+    throw Object.assign(new Error('fixture'), { statusCode: 503 });
+  });
+  assert.ok(sent.length > 0);
+  assert.ok(!sent.includes(expiredNotice));
+  assert.equal((await db.query('SELECT 1 FROM push_deliveries WHERE notification_id = $1', [expiredNotice])).rowCount, 0);
+  const retried = await db.query('SELECT 1 FROM push_deliveries WHERE attempts = 1 AND next_attempt_at > now()');
+  assert.equal(retried.rowCount, sent.length);
+  assert.equal((await request(pushSubscription, 'DELETE', 1, subscription)).status, 204);
+  assert.equal((await db.query('SELECT 1 FROM push_deliveries')).rowCount, 0);
+
+  assert.equal((await book(1, 160, 190, spare.id)).status, 201);
+  assert.equal((await operateSpare('stop')).status, 204);
+  assert.equal((await operateSpare('restore')).status, 204);
+  const atRisk = (await offersForSpare(1)).find(offer => offer.startsAt === at(160));
+  const [newShutdown, attemptedAcceptance] = await Promise.all([
+    operateSpare('stop'), answer(atRisk, 1, 'accept'),
+  ]);
+  assert.equal(newShutdown.status, 204);
+  assert.ok([201, 409].includes(attemptedAcceptance.status));
+  const remaining = await db.query(
+    'SELECT id FROM laundry_reservations WHERE machine_id = $1 AND cancelled_at IS NULL', [spare.id]);
+  assert.equal(remaining.rowCount, 0);
+
+  const unreadCount = async resident => {
+    const response = await request('/api/notifications/unread-count', 'GET', resident);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    return (await response.json()).unreadCount;
+  };
+  const markRead = (id, resident) => request('/api/notifications/' + id + '/read', 'PUT', resident);
+  const inbox = await notices(0);
+  assert.ok(inbox.length >= 2);
+  assert.ok(inbox.every(item => item.readAt === null));
+  assert.equal(await unreadCount(0), inbox.length);
+  assert.equal((await request('/api/notifications/unread-count', 'GET', 2)).status, 401);
+  assert.equal((await markRead(inbox[0].id, 1)).status, 404);
+  const response = await markRead(inbox[0].id, 0);
+  assert.equal(response.status, 200);
+  const { readAt } = await response.json();
+  assert.ok(readAt);
+  assert.deepEqual(await (await markRead(inbox[0].id, 0)).json(), { readAt });
+  assert.equal(await unreadCount(0), inbox.length - 1);
+  assert.equal((await notices(0)).find(item => item.id === inbox[0].id).readAt, readAt);
+  assert.equal((await notices(0)).find(item => item.id === inbox[1].id).readAt, null);
+  for (const item of inbox.slice(1)) assert.equal((await markRead(item.id, 0)).status, 200);
+  assert.equal(await unreadCount(0), 0);
+  assert.equal((await notices(0)).length, inbox.length);
+  await db.query('UPDATE users SET can_manage_equipment = false WHERE id = $1', [users[0].id]);
+  assert.equal((await change('stop')).status, 403);
 });

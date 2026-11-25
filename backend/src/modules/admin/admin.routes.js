@@ -38,7 +38,7 @@ export function adminRoutes(database) {
     }
     const { rows } = await database.query(`
       SELECT reservation.id, machine.name AS equipment, machine.location,
-        reservation.starts_at, reservation.use_ends_at, reservation.ends_at, reservation.cancelled_at
+        reservation.starts_at, reservation.use_ends_at, reservation.ends_at, reservation.cancelled_at, reservation.cancellation_reason
       FROM laundry_reservations reservation
       JOIN laundry_machines machine ON machine.id = reservation.machine_id
       WHERE ($1::integer IS NULL OR reservation.machine_id = $1)
