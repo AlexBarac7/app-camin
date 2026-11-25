@@ -4,6 +4,12 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-25 · Phone acceptance of optimized photo uploads
+
+The project owner confirmed that a report with a large photo submitted
+quickly from a physical phone. The attachment opened from its thumbnail,
+zoom worked, and the close button returned to the report.
+
 ## 2026-11-25 · Slower phone report uploads
 
 The project owner reported an intermittent `Load failed` after submitting
@@ -20,7 +26,7 @@ The backend runs HEIC decoding in a worker so other requests can progress.
 For the test HEIC, a 100 ms timer fired after 1,729 ms before the change
 and 100 ms afterwards. Simulated connection loss verified that the form
 keeps the draft and asks the resident to check report history before retrying.
-The delivery outcome on the physical phone remains a manual check.
+The subsequent physical phone check is recorded above.
 
 ## 2026-11-25 · Full-screen report photo viewer
 
