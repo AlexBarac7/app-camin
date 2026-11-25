@@ -22,7 +22,7 @@ async function checked(url, options) {
 
 export default function EquipmentManagement() {
   const [machines, setMachines] = useState([]);
-  const [selected, select] = useState('');
+  const [selected, select] = useState(() => new URLSearchParams(window.location.search).get('echipament') || '');
   const [revision, refresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -77,6 +77,7 @@ export default function EquipmentManagement() {
   return <main className="mx-auto grid max-w-2xl gap-5 px-4 py-6 sm:px-8 sm:py-10">
     <a className="w-fit py-2 underline" href="/resurse">Înapoi la Resurse</a>
     <h1 className="text-3xl font-bold">Gestionare echipamente</h1>
+    <a className="w-fit py-2 underline" href="/admin/sesizari">Vezi sesizările</a>
     {error && <p role="alert" className="text-red-800">{error}</p>}
     {message && <p role="status">{message}</p>}
     {machines.length > 0 && <div className="grid gap-2 font-medium"><label htmlFor="managed-equipment">Echipament</label>

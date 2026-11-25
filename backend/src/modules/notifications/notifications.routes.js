@@ -55,6 +55,7 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
   router.get('/', async (_req, res) => {
     const { rows } = await database.query(`
       SELECT notice.id, notice.kind, notice.message, notice.created_at, notice.read_at, notice.machine_id, machine.room,
+        notice.report_id,
         offer.id AS offer_id, offer.starts_at, offer.ends_at, offer.expires_at,
         CASE WHEN offer.status = 'pending' AND offer.expires_at <= statement_timestamp()
           THEN 'expired' ELSE offer.status END AS offer_status,
@@ -69,6 +70,7 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
       items: rows.map(row => ({
         id: row.id, kind: row.kind, message: row.message, createdAt: row.created_at, readAt: row.read_at,
         machineId: row.machine_id, room: row.room,
+        ...(row.report_id && { reportId: row.report_id }),
         ...(row.offer_id && { offer: {
           id: row.offer_id, status: row.offer_status,
           startsAt: row.starts_at, endsAt: row.ends_at, expiresAt: row.expires_at,

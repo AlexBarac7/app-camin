@@ -46,9 +46,9 @@ See README.md for verified local commands. Compose uses development servers;
 frontend npm run build produces static assets. Railway is a future target only.
 
 ## Boundaries
-Live-queue, quotas, no-show policies, maintenance tickets, photo storage and
-push integrations remain outside the current implementation. No Railway deployment
-configuration or authorization exists yet.
+Live-queue, quotas, no-show policies, photo storage and the email fallback remain
+outside the current implementation. No Railway deployment configuration or
+authorization exists yet.
 
 Migration 006 adds the independent equipment permission, the reservation linked
 to a pending inspection and the cancellation reason. Equipment changes lock
@@ -61,3 +61,10 @@ subscriptions and delivery jobs. Equipment changes create notices and offers
 under the same row lock used by booking creation. The calendar includes active
 offers without account information. The backend sends browser alerts after
 commit. A service worker opens the authenticated notifications page.
+
+Migration 011 adds laundry equipment reports and their links to notifications.
+Reports use the existing equipment management permission for operators and
+owner-only access for residents. Equipment changes and report transitions
+serialize on the equipment row. The inventory shows the 48-hour repair
+verification mark while its expiry is active. A new report or technical
+condition change clears the mark while retaining confirmation in report history.

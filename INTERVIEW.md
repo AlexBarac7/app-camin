@@ -13,6 +13,10 @@ Cele două spălătorii și uscătoria se află la subsol. Toți studenții caza
 | Spălătoria 2 | 2 uscătoare, numerotate 1A și 2A | Starea nu este precizată. |
 | Uscătoria | 9 uscătoare, numerotate 1–9 | Toate funcționale. |
 
+**Actualizare după interviu:** Proprietarul proiectului a confirmat că uscătoarele
+1A și 2A din Spălătoria 2 sunt funcționale și pot fi rezervate. Migrarea 010
+actualizează inventarul din aplicație pentru aceste două uscătoare.
+
 ### Cum se folosesc acum echipamentele
 
 1. Studentul ia de la portar cheia spațiului, o folosește pentru acces și încuiere, apoi o returnează.

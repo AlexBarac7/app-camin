@@ -25,6 +25,7 @@
 - D-016 · Offer a five-minute hold when laundry service resumes · [Laundry decisions](decisions/laundry-decisions.md)
 - D-017 · Deliver pilot equipment notifications in the app and through opt-in Web Push · [Laundry decisions](decisions/laundry-decisions.md)
 - D-018 · Keep resident notices unread until acknowledged · [Laundry decisions](decisions/laundry-decisions.md)
+- D-019 · Pilot digital reports for laundry equipment · [Laundry decisions](decisions/laundry-decisions.md)
 
 ---
 

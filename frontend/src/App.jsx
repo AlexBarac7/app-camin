@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import EquipmentManagement from './EquipmentManagement.jsx';
+import LaundryReports from './LaundryReports.jsx';
 import AdminData, { AdminNav } from './AdminData.jsx';
 
 const initial = { state: 'checking', message: 'Checking service…' };
@@ -170,6 +171,11 @@ function Welcome() {
 export default function App() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
   if (path === '/admin/echipamente') return <EquipmentManagement />;
+  if (path === '/admin/sesizari') return <main className="mx-auto max-w-2xl px-4 py-6 sm:px-8 sm:py-10" lang="ro">
+    <a className="underline" href="/admin/echipamente">Înapoi la echipamente</a>
+    <h1 className="mt-4 text-3xl font-bold">Sesizări echipamente</h1>
+    <LaundryReports operator />
+  </main>;
   if (path === '/') return <Welcome />;
   if (path === '/admin/stare-servicii') return <ServiceStatus />;
   if (path === '/admin/rezervari' || path === '/admin/baza-de-date') return <AdminData path={path} />;

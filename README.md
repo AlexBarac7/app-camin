@@ -1,42 +1,32 @@
 # app-camin
 
 A shared resource management application for a student residence, co-working hub,
-or residential building. Planned capabilities include reservations for shared resources
-(washing machines, study rooms, kitchens, gyms), a live queue, fair-use quotas,
-no-show handling, maintenance tickets with photos, and push notifications.
+or residential building. The pilot covers the two laundry rooms and the drying
+room in the residence.
 
-**Current implementation:** the technical foundation and local resident access
-by invitation. The shared-resource features listed above are planned.
-The development database name and user are explicitly demonstrative identifiers.
+The application includes resident access by invitation, the laundry inventory
+and Reservation calendar, equipment fault management, laundry reports, and
+in-app and opt-in Web Push notifications.
 
 ## Stack and layout
 
-- `frontend/`: JavaScript, React, Vite, Tailwind CSS; technical service status page and resident access screens.
-- `backend/`: Node.js, Express, REST API, PostgreSQL driver `pg`.
-- `backend/src/modules/health/`: health routes; future business modules can live
-  alongside this folder once their requirements are approved.
-- `backend/src/modules/auth/`: resident activation, login, session and logout.
-- `backend/src/config.js`: server configuration validation.
-- `backend/src/db.js`: shared PostgreSQL pool and bounded readiness check.
-- `compose.yaml`: local frontend, backend and PostgreSQL services.
-- `docs/agents/`: knowledge ledger and architectural documentation.
-- `docs/design/DESIGN.md`: guardrails for the technical status page.
-
-Railway is the intended future deployment platform. This Compose setup uses
-development servers; it is not a production deployment configuration. Production
-build serving, platform environment variables, TLS and deployment remain future work.
+- `frontend/` contains the React and Tailwind CSS interface and Vite development server.
+- `backend/src/modules/` contains the Express API for authentication, laundry
+  inventory, Reservations, equipment faults, reports, notifications, administrative
+  data views and service health.
+- `backend/migrations/` contains the versioned SQL for PostgreSQL.
+- `compose.yaml` runs the frontend, backend and PostgreSQL 17 locally.
+- `docs/agents/` contains the architectural documentation and decision ledger.
 
 ## Requirements
 
-Use the WSL terminal with Linux Node.js and npm. For the primary development path,
-install Docker with the Compose plugin and ensure its daemon is running and
-accessible. Host Node.js 22.12+ and npm are needed only for host-side npm commands;
-the application containers include Node.js themselves.
+Use Docker with the Compose plugin and a running daemon. On Windows, run the
+commands from the WSL terminal with Docker integration enabled. Host Node.js
+22.12+ and npm are required for the host-side commands below.
 
 ## First run
 
-Run from the repository root. Copy the example only on the first run; do not
-overwrite an existing local configuration.
+Run from the repository root. Keep any existing `.env` configuration.
 
 ```bash
 cp -n .env.example .env
@@ -44,6 +34,7 @@ read -rsp "PostgreSQL password: " POSTGRES_PASSWORD
 export POSTGRES_PASSWORD
 echo
 docker compose up --build -d --wait
+docker compose exec backend npm run migrate
 docker compose ps
 ```
 
@@ -57,8 +48,8 @@ In each new terminal, repeat the password prompt with the same password before
 running Compose commands. Do not generate a different password for an existing
 database volume: PostgreSQL initialization variables apply only to an empty volume.
 
-Open **http://localhost:5173** to reach the Romanian welcome page. See
-[Local resident access](#local-resident-access) for migration and account setup.
+Open [the local app](http://localhost:5173), then follow
+[Local resident access](#local-resident-access) to activate an account.
 
 ## Configuration
 
@@ -71,6 +62,8 @@ Open **http://localhost:5173** to reach the Romanian welcome page. See
 | `POSTGRES_DB` | `app_camin_demo`, demonstrative local database name |
 | `POSTGRES_USER` | `app_camin_demo`, demonstrative local database user |
 | `POSTGRES_PASSWORD` | Required shell environment value; no committed default |
+| `APP_ORIGIN` | Exact app origin for invitations and write requests. Defaults to `http://localhost:5173`. |
+| `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Optional shell settings for [Web Push](#web-push). |
 
 Compose maps the database name, user and password to `PGDATABASE`, `PGUSER` and
 `PGPASSWORD` for the backend, and passes `BACKEND_PORT` as `PORT`.
@@ -100,27 +93,17 @@ another account. Changes take effect on the next request, including existing ses
 
 The endpoint and readiness contract is owned by [C-002](docs/agents/CONTRACTS.md#c-002--authorized-service-status-and-internal-readiness).
 
-## Manual acceptance checks
+### Verify the internal readiness probe
 
-1. Run `docker compose ps` and verify that the database and backend are healthy.
-2. Check the welcome page at a narrow viewport with the keyboard. Sign in and
-   confirm that both login and a return to the welcome URL lead to Resurse.
-3. Open `/admin/stare-servicii` without a session, as an ordinary resident, and
-   as the authorized account. Expect login, **Acces interzis**, and the status cards,
-   respectively. Verify the cards refresh with **Check again**.
-4. Stop PostgreSQL in the local test stack. Refresh the admin page and check for
-   **Verificarea accesului este indisponibilă**. Use the internal probe below
-   to check that infrastructure can still report PostgreSQL failure.
-5. Start PostgreSQL and retry the access check. Verify that the admin page and
-   the internal probe recover without restarting the backend.
+Compose uses a separate listener inside the backend container. To check it directly, run:
 
 ```bash
 docker compose exec backend node -e "fetch('http://127.0.0.1:3001/ready', { signal: AbortSignal.timeout(5000) }).then(async r => console.log(r.status, await r.json()))"
 ```
 
 The internal check should respond within approximately four seconds plus HTTP
-overhead. A nonresponsive database can be simulated by pausing and then
-unpausing the database service in a disposable Compose stack.
+overhead. Use a disposable stack to verify that readiness reports a database
+outage and recovers after PostgreSQL restarts.
 
 ## Development and automated checks
 
@@ -137,9 +120,9 @@ python3 docs/agents/tools/ledger-lint.py
 git diff --check
 ```
 
-Backend tests cover liveness, readiness success/failure, configuration validation
-and a real TCP peer that stalls PostgreSQL negotiation. They require permission
-to bind local ports. Frontend production build checks bundling, not browser behavior.
+Backend tests cover health and readiness, authentication, Reservation rules
+and Web Push delivery handling. Some tests open local ports. The frontend
+build verifies that Vite can bundle the application.
 
 For host-only development against the Compose database, export the same password,
 set `PORT=3000`, `PGHOST=127.0.0.1`, `PGPORT=5432`, `PGDATABASE=app_camin_demo`,
@@ -157,27 +140,14 @@ temporary Linux environment with Node.js 22 and Python 3.
 | Check | Purpose |
 | --- | --- |
 | Dependency installation | Install frontend and backend dependencies from committed lockfiles using `npm ci`. |
-| Backend tests | Verify health responses, readiness behavior, configuration validation, and database timeout handling. |
-| PostgreSQL integration tests | Run the migration and resident access suites against separate fresh PostgreSQL 17 databases. |
+| Backend tests | Run the backend test suite with `npm test`. |
+| PostgreSQL integration tests | Run the migration, authentication and Reservation suites against three separate PostgreSQL 17 databases. The Reservation suite also exercises equipment faults, reports and notification persistence. |
 | Frontend build | Confirm that the React application compiles successfully for production. |
 | Documentation validation | Check knowledge ledger consistency without modifying files. |
 
-A failed command marks the workflow as failed and prevents subsequent steps from
-running. Execution logs are available in GitHub's **Actions** tab, with check
-results also displayed on pull requests.
-
-The workflow uses no real business data or repository secrets. The standard
-backend tests use test doubles and a local TCP server. The integration job
-starts its own disposable PostgreSQL service and discards both test databases
-when the job ends. Workflow permissions are limited to read access to
-repository contents.
-
-A successful run confirms that the configured checks passed for that revision.
-Browser rendering, accessibility, and the application's Docker Compose stack
-require separate verification.
-Those areas require separate verification. The workflow does not merge changes,
-publish releases, or deploy the application. It becomes available on GitHub after
-the workflow file is pushed; manual execution requires it on the default branch.
+Results are available under GitHub **Actions** and on pull requests. The workflow
+uses disposable databases and synthetic fixtures. Browser behaviour, device
+delivery and the local Compose stack are verified separately.
 
 ## Stop and troubleshoot
 
@@ -199,28 +169,12 @@ normal startup or test procedure.
 - Docker permission/daemon failure: confirm Docker Desktop WSL integration or
   your Linux Docker daemon access before starting this project.
 
-## Indicative roadmap
-
-1. Technical foundation and local verification (this stage).
-2. Interviews: identify real users, roles, resource types and operational constraints.
-3. Demonstrate local resident access and confirm remaining authorization requirements.
-4. Reservations and live queue after ordering, availability and concurrency rules
-   are approved; choose the live transport then.
-5. Fair-use quotas and no-show handling after policies and exceptions are confirmed.
-6. Maintenance tickets with photos after access and storage requirements are confirmed.
-7. Push notifications after events, recipients and consent requirements are confirmed.
-8. Railway deployment after production configuration and verification are approved.
-
-No business durations, quotas, penalties, priorities, or interview evidence are
-assumed. Any future temporary product values must be explicitly marked
-**demonstrative**. No delivery dates are implied by this roadmap.
-
 ## PostgreSQL migrations
 
-Keep schema changes in `backend/migrations/`, using numbered filenames such as
-`001_create_resources.sql`. Use transaction-compatible SQL and leave transaction
-control to the runner. After a migration has been applied, add a new migration
-to correct it. The runner checks the SHA-256 checksum of each applied file.
+Keep schema changes in numbered files under `backend/migrations/`. Use
+transaction-compatible SQL and leave transaction control to the runner.
+Correct an applied migration with a new file. The runner checks the SHA-256
+checksum of each applied file.
 
 With the normal shell password and Compose configuration in place, start
 PostgreSQL and rebuild the backend image so it includes the current SQL files.
@@ -234,12 +188,9 @@ docker compose run --rm --no-deps backend npm run migrate
 
 ### Recover from a failed migration
 
-Suppose `001_create_resources.sql` succeeds and `002_add_location.sql` fails.
-The apply command exits with an error naming `002_add_location.sql`. PostgreSQL
-rolls back that file, including its history entry. Run `migrate:status` to
-confirm that `001` is applied and `002` is pending. Correct the pending SQL,
-run `docker compose build backend` again, then rerun the apply command above.
-A second status check should show both files as applied.
+If a migration fails, PostgreSQL rolls it back and earlier successful files
+stay applied. Run `migrate:status` to identify the pending migration. Correct
+the pending SQL, rebuild the backend image and run the apply command again.
 
 If status reports a history mismatch, restore the original applied file from
 Git. Use a new migration for the desired schema change. If another run is
@@ -247,29 +198,25 @@ active, let it finish before retrying. If the command cannot connect, verify
 that the database is healthy and the shell has the password used to initialize
 its volume.
 
-### Run the migration integration tests
+### Run PostgreSQL integration tests locally
 
-Use a fresh, disposable PostgreSQL 17 instance with a database named
-`app_camin_migrations_test`. Install backend dependencies and point the
-standard `PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE` and `PGPASSWORD` environment
-variables at that instance. Keep the password in the shell. Then run:
+Install backend dependencies and use fresh, disposable PostgreSQL 17 databases.
+Set `PGHOST`, `PGPORT`, `PGUSER` and `PGPASSWORD` for that instance in the shell.
+Create each database before running its suite.
 
 ```bash
-npm --prefix backend run test:migrations
+PGDATABASE=app_camin_migrations_test npm --prefix backend run test:migrations
+PGDATABASE=app_camin_auth_test npm --prefix backend run test:auth
+PGDATABASE=app_camin_reservations_test npm --prefix backend run test:reservations
 ```
 
-The suite leaves its test objects in the disposable database. Use a fresh
-instance for each run.
+Use a fresh database for each run because the suites leave test objects behind.
 
 ## Local resident access
 
-With the shell password and Compose configuration from [First run](#first-run),
-start the services, apply the migrations and issue an invitation from the backend
-container.
+After [First run](#first-run), issue an invitation from the backend container.
 
 ```bash
-docker compose up --build -d --wait
-docker compose exec backend npm run migrate
 docker compose exec backend npm run invite:create
 ```
 
@@ -283,7 +230,9 @@ and enter the same email.
 Open the link in a browser, choose a password of 15–128 characters and confirm
 it. Sign in at `/autentificare` with the invited email. The app opens
 **Resurse** at `/resurse`, with links to both laundry rooms and the drying room.
-Select an equipment card to see its technical condition and operating hours where known.
+Select an equipment card to see its technical condition, operating hours and
+Reservation calendar. The washers and dryers follow the same weekday schedule,
+08:00–20:00.
 Open **Contul meu** at `/cont` to see the email and select **Deconectare**.
 A session lasts 24 hours.
 
@@ -294,29 +243,15 @@ scheme, host and port, with no trailing slash, and recreate the backend.
 The command uses that origin in links and the API uses it for write requests.
 In development, setting `APP_ORIGIN` also keeps the two local origins enabled.
 
-Run the automated access flow on a fresh, disposable PostgreSQL 17 database
-named `app_camin_auth_test`. Configure the same `PG*` variables described for
-the migration tests, then run `npm --prefix backend run test:auth`.
-
 ### Inspect reservations and database tables
 
 The account authorized for service status can open `/admin/rezervari` to filter
 reservation history or `/admin/baza-de-date` to browse equipment, reservations
-and migrations. Both pages are read-only. Apply migration 005 before using
-the reservation views.
-
-Run the corresponding integration suite with the same `PG*` configuration as
-the migration tests, using a fresh database named `app_camin_reservations_test`:
-
-```bash
-npm --prefix backend run test:reservations
-```
+and migrations. Both pages are read-only.
 
 ### Clean up expired sessions
 
-After applying the migration, run this command manually from the repository
-root with the current backend image running. Rebuild the backend if you started
-it before the command was added (`docker compose up --build -d --wait backend`).
+With the backend running, clean up expired sessions from the repository root.
 
 ```bash
 docker compose exec backend npm run sessions:cleanup
@@ -328,8 +263,7 @@ sessions and prints the number deleted. Active sessions remain usable.
 
 ### Managing laundry equipment faults
 
-Rebuild the services and apply the pending migrations. To grant equipment
-management access to an existing account, run
+To grant equipment management access to an existing account, run
 `docker compose exec backend npm run equipment:access -- grant` and enter the
 account email at the prompt. Use `revoke` to withdraw access. The backend checks
 this permission on every equipment management request.
@@ -345,16 +279,15 @@ Open **Resurse → Gestionează echipamentele** and select the machine by room a
 - **Repune în serviciu** opens the machine for new bookings. Cancelled reservations
   stay in history. Residents can book an available slot again.
 
-After applying migration 008, **Notificări** shows shutdown, inspection and
-restoration notices to the affected resident. During inspection, an operator
-can edit and send one notice. On restoration, eligible residents can accept
-or decline a five-minute offer. The cancelled original remains in history.
-Live-queue rules and equipment-fault integration are tracked together in
-[issue #10](https://github.com/AlexBarac7/app-camin/issues/10).
+**Notificări** shows shutdown, inspection and restoration notices to the
+affected resident. During inspection, an operator can edit and send one
+notice. On restoration, eligible residents can accept or decline a
+five-minute offer. The cancelled original stays in history.
+
+### Web Push
 
 For browser alerts, export `VAPID_SUBJECT` (an HTTPS origin or a valid contact
-`mailto:` URI),
-`VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` in the shell and recreate the
+`mailto:` URI), `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` in the shell and recreate the
 backend. Use a persistent VAPID key pair for the environment. With the backend
 dependencies installed, the following Bash commands generate a new pair
 without displaying the private key. Set the subject separately.
@@ -369,5 +302,49 @@ export VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY
 Open **Notificări** and enable alerts on the device. For a phone test, use a
 private test origin accessible over HTTPS and set the backend's `APP_ORIGIN`
 to that exact origin. On iPhone, add the web app to the home screen and open
-it there before enabling alerts. The operator can exercise all three flows
-with test accounts and confirm the alert opens the correct notice.
+it there before enabling alerts. Use test accounts to verify an alert arrives
+with the app closed and opens the matching notice.
+
+### Reporting a laundry equipment fault
+
+In **Resurse**, open a washer or dryer and select **Semnalează o defecțiune**.
+Any authenticated resident can report a problem and follow it in **Sesizările mele**.
+
+An operator with equipment management permission can open **Vezi sesizările**
+from the equipment management page. New reports appear in the operator's
+inbox and trigger Web Push on subscribed devices. Taking a report notifies
+its author in the app. Resolving it notifies the author in the app and on
+subscribed devices. When necessary,
+**Rezolvă și repune în serviciu** closes the report and returns the equipment
+to the reservation calendar through the existing restoration workflow.
+
+After resolution the author can optionally confirm the repair. The checkmark
+appears on the equipment for up to 48 hours and clears on a new report or
+technical condition change. The confirmation stays in report history.
+
+The laundry pilot covers part of the maintenance workflow tracked in
+[issue #16](https://github.com/AlexBarac7/app-camin/issues/16).
+
+## Roadmap
+
+- Define Live-queue priority alongside Reservations and the reception notebook,
+  then implement live updates, turn notifications, concurrency tests and
+  integration with equipment faults.
+  [Issue #10](https://github.com/AlexBarac7/app-camin/issues/10)
+- Confirm the residence's no-show rules, including confirmation, strike
+  correction and suspension. Implement the approved policy and idempotent jobs.
+  [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13)
+- Add the reminder 10 minutes before a Reservation starts and the reminder
+  15 minutes before use ends. Add email fallback in a later stage.
+  [Project brief](CONTEXT.md) · [Issue #14](https://github.com/AlexBarac7/app-camin/issues/14)
+- Define rolling fair-use quotas and configurable resource rules, including
+  quiet hours and approved exceptions. Test the quota window, cancellations
+  and concurrent requests. [Issue #15](https://github.com/AlexBarac7/app-camin/issues/15)
+- Extend maintenance tickets beyond the laundry pilot. Define categories,
+  locations and priority, then add photos with controlled access, resizing
+  and object storage. [Issue #16](https://github.com/AlexBarac7/app-camin/issues/16)
+- Add administrator announcements with optional read acknowledgement and
+  usage and maintenance statistics. [Project brief](CONTEXT.md)
+- Prepare production configuration and a release procedure for Railway.
+  Verify the live app and demonstrate at least 10 resident accounts and 20
+  real Reservations. [Issue #17](https://github.com/AlexBarac7/app-camin/issues/17)
