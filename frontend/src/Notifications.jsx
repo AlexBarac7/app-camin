@@ -212,6 +212,10 @@ export default function Notifications({ onUnreadCount }) {
           {status && status !== 'pending' && <p className="font-medium">{offerLabels[status]}</p>}
           {!offer && item.kind === 'restored' && <a className="underline"
             href={'/spalatorie/' + encodeURIComponent(item.room) + '?echipament=' + item.machineId}>Deschide calendarul</a>}
+          {item.reportId && <a className="underline"
+            href={(item.kind === 'report-new' ? '/admin/sesizari' : '/sesizari') + '#sesizare-' + item.reportId}>
+            Deschide sesizarea
+          </a>}
           {!item.readAt && <button type="button" className={button + ' justify-self-end bg-blue-700 text-white hover:bg-blue-800'
             + ' focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'}
             aria-label="OK, marchează notificarea ca citită" disabled={reading !== null}

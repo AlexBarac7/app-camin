@@ -4,6 +4,50 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-25 · Manual acceptance of laundry reports
+
+The project owner confirmed that all cases in the manual checklist behaved
+as expected. The checklist covered report submission, access permissions,
+concurrent actions, restoration and Reservations, optional verification and
+checkmark removal, and Web Push with the app closed. The owner did not
+specify device models or browser versions.
+
+## 2026-11-25 · Laundry equipment reports
+
+**What I asked for** — Implement the approved laundry reporting pilot. Any
+invited resident can report a washer or dryer. An authorized operator takes
+and resolves the report, and the author can optionally verify the repair
+after it closes. The equipment mark lasts 48 hours or until a new fault is
+reported. Use Web Push for operators on new reports and for the author on
+resolution. Defer photos, priority and email fallback.
+
+**What I got** — Migration 011 adds reports, notification links and the
+temporary equipment mark. The report form uses the inventory. Residents can
+follow their own reports, and operators can take, resolve and explicitly
+return equipment to service. The existing restoration offers still apply.
+The report author can confirm the repair without changing reservation rights.
+D-019 records the approved behaviour in English. PATTERN-011 describes the
+equipment revision check as a candidate. Migration 010 separately records
+the confirmed condition of dryers 1A and 2A in Laundry Room 2.
+
+**Checks** — The new integration test first returned `404` instead of
+`401` because the report route was missing. All 13 backend tests, the three
+disposable PostgreSQL suites, the frontend build, ledger validation and the
+whitespace check passed. The reservation suite checked report permissions,
+concurrent transitions, notification recipients, restoration of equipment
+with an unconfirmed status and the verification expiry. Chromium exercised
+both roles across 390 and 1280 pixel viewports, including the inbox links and
+the equipment mark appearing and clearing. Its first launch failed with
+`libnspr4.so: cannot open shared object file`; temporary libraries allowed
+the rerun.
+
+Migration 011 was applied to the local Compose database. The first Compose
+status command lacked the shell password. The backend watcher also returned
+`ERR_MODULE_NOT_FOUND` while the new route was being written. After a
+restart, the backend and database were healthy, and the signed-out API
+returned `401` through the frontend. The automated tests verified queued
+Web Push deliveries. The owner's manual device check is recorded above.
+
 ## 2026-11-25 · Issue #9 delivery checks
 
 The owner confirmed Web Push delivery with the desktop tab closed and verified

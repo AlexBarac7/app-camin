@@ -2,12 +2,16 @@ import { json, Router } from 'express';
 import { requireSession, localOrigins } from '../auth/auth.routes.js';
 import { notifyInspection, notifyRestoration, notifyShutdown, withdrawOffers } from '../notifications/laundry-notifications.js';
 
-async function updateCondition(client, id, action, body) {
+export async function lockEquipment(client, id) {
   const { rows: [machine] } = await client.query(
     `SELECT id, type, label, location, technical_status, inspection_reservation_id, inspection_started_at,
-       inspection_notified, current_fault_at FROM laundry_machines WHERE id = $1 AND room IS NOT NULL FOR UPDATE`, [id]);
-  if (!machine) return 404;
-  const { rows: [{ now }] } = await client.query('SELECT clock_timestamp() AS now');
+       inspection_notified, current_fault_at, report_revision
+     FROM laundry_machines WHERE id = $1 AND room IS NOT NULL FOR UPDATE`, [id]);
+  return machine;
+}
+
+export async function applyEquipmentCondition(client, machine, action, body, now) {
+  const { id } = machine;
   if (action === 'notify-inspection') {
     if (machine.technical_status !== 'inspection' ||
         machine.inspection_started_at.toISOString() !== body.inspectionStartedAt) return 409;
@@ -37,14 +41,15 @@ async function updateCondition(client, id, action, body) {
     await notifyShutdown(client, machine, cancelled, now);
     await withdrawOffers(client, machine.id, now);
   } else {
-    if (machine.technical_status === 'unspecified') return 409;
+    if (machine.technical_status === 'unspecified' && action !== 'restore-reported') return 409;
     if (machine.technical_status === 'working') return 204;
     status = 'working';
     if (machine.technical_status === 'broken') await notifyRestoration(client, machine, now);
   }
   await client.query(
     `UPDATE laundry_machines SET technical_status = $2, inspection_reservation_id = $3,
-       current_fault_at = $4, inspection_started_at = $5, inspection_notified = false WHERE id = $1`,
+       current_fault_at = $4, inspection_started_at = $5, inspection_notified = false,
+       report_revision = report_revision + 1, repair_verified_until = NULL WHERE id = $1`,
     [id, status, reservation, status === 'broken' ? now : null, status === 'inspection' ? now : null]);
   return 204;
 }
@@ -67,7 +72,9 @@ export function conditionRoutes(database, origins = localOrigins) {
     let discard = false;
     try {
       await client.query('BEGIN');
-      const status = await updateCondition(client, id, action, req.body);
+      const machine = await lockEquipment(client, id);
+      const { rows: [{ now }] } = await client.query('SELECT clock_timestamp() AS now');
+      const status = machine ? await applyEquipmentCondition(client, machine, action, req.body, now) : 404;
       await client.query('COMMIT');
       res.sendStatus(status);
     } catch (error) {

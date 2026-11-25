@@ -1,25 +1,39 @@
 const minute = 60_000;
 
-async function notify(client, machine, userIds, kind, message, now) {
+async function notify(client, machine, userIds, kind, message, now, reportId = null, push = true) {
   if (!userIds.length) return;
   const { rows } = await client.query(`
     WITH notices AS (
-      INSERT INTO laundry_notifications (user_id, machine_id, kind, message, created_at)
-      SELECT DISTINCT user_id, $1::integer, $2::text, $3::text, $4::timestamptz
+      INSERT INTO laundry_notifications (user_id, machine_id, kind, message, created_at, report_id)
+      SELECT DISTINCT user_id, $1::integer, $2::text, $3::text, $4::timestamptz, $6::bigint
       FROM unnest($5::bigint[]) AS user_id
       RETURNING id, user_id
     ), deliveries AS (
       INSERT INTO push_deliveries (notification_id, subscription_id)
       SELECT notices.id, subscription.id FROM notices
       JOIN push_subscriptions subscription USING (user_id)
+      WHERE $7::boolean
     )
-    SELECT id FROM notices`, [machine.id, kind, message, now, userIds]);
+    SELECT id FROM notices`, [machine.id, kind, message, now, userIds, reportId, push]);
   return rows[0]?.id;
 }
 
 function equipment(machine) {
   const name = machine.type === 'washer' ? 'Mașina de spălat' : 'Uscătorul';
   return `${name} ${machine.label} (${machine.location})`;
+}
+
+export async function notifyReport(client, machine, report, kind, now) {
+  if (kind === 'report-new') {
+    const { rows } = await client.query('SELECT id FROM users WHERE can_manage_equipment');
+    await notify(client, machine, rows.map(user => user.id), kind,
+      equipment(machine) + ' are o sesizare nouă.', now, report.id);
+    return;
+  }
+  const resolved = kind === 'report-resolved';
+  const status = resolved ? 'rezolvată' : 'preluată';
+  await notify(client, machine, [report.resident_id], kind,
+    'Sesizarea ta a fost ' + status + '. Echipament: ' + equipment(machine) + '.', now, report.id, resolved);
 }
 
 export async function notifyInspection(client, machine, message, now) {

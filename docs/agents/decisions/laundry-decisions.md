@@ -92,3 +92,30 @@
   acknowledge each one individually.
 - **Evidence:** The owner approved the unread count and acknowledgement plan.
 - **Confirmed:** 2026-11-25
+
+## D-019 · Pilot digital reports for laundry equipment
+- **Status:** approved
+- **Rule:** Any authenticated resident may report a washer or dryer from the
+  published inventory by providing a description, regardless of whether they
+  have a Reservation. Using the reception notebook is optional. Reports are
+  visible to their author and operators with equipment management permission.
+  Submitting a report alone does not change availability or Reservations.
+- **Workflow:** An operator takes and resolves the report. Resolution closes it.
+  The operator explicitly confirms that the equipment works and can return it
+  to service in the same action, including equipment with an unconfirmed
+  technical status. Existing fault and restoration rules apply. The author may
+  verify the repair after resolution. Verification leaves booking rights
+  unchanged. Show a green repair verification mark for up to 48 hours after
+  the author's confirmation. Remove it when a new issue is reported or the
+  equipment is taken out of service or put under inspection. Keep the
+  verification in report history.
+- **Notifications:** Operators receive an in-app notice and opt-in Web Push
+  when a report is submitted. The author receives an in-app notice when the
+  operator takes the report and both an in-app notice and opt-in Web Push when
+  it is resolved. Read acknowledgement follows D-018.
+- **Scope:** Photos, priority and email fallback are deferred pilot work.
+- **Why:** Give residents a way to inform the administration about equipment
+  faults and check the outcome using the existing inventory and operator tools.
+- **Evidence:** The owner confirmed the workflow, optional verification,
+  48-hour mark, notification channels and the pilot implementation.
+- **Confirmed:** 2026-11-25

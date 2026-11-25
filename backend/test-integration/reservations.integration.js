@@ -25,16 +25,20 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     await db.query('INSERT INTO sessions (user_id, token_hash) VALUES ($1, $2)', [user.id, tokenHash(token)]);
     cookies.push('camin_session=' + token);
   }
+  const { rows: [unknownDryer] } = await db.query(`
+    INSERT INTO laundry_machines (name, location, room, type, label, technical_status)
+    VALUES ('Test dryer', 'Test location', '2', 'dryer', 'TEST', 'unspecified') RETURNING id`);
   const { rows: [fixture] } = await db.query(`
     SELECT (SELECT id FROM laundry_machines WHERE technical_status = 'working' AND type = 'washer' LIMIT 1) AS machine,
-           (SELECT id FROM laundry_machines WHERE technical_status = 'working' AND type = 'dryer' LIMIT 1) AS dryer,
+           (SELECT id FROM laundry_machines WHERE technical_status = 'working' AND type = 'dryer'
+            AND room = 'uscatorie' LIMIT 1) AS dryer,
            (SELECT id FROM laundry_machines WHERE technical_status = 'broken' LIMIT 1) AS broken,
-           (SELECT id FROM laundry_machines WHERE technical_status = 'unspecified' LIMIT 1) AS unspecified,
+           $1::integer AS unspecified,
            to_char(day, 'YYYY-MM-DD') AS day,
            ((day + time '10:00') AT TIME ZONE 'Europe/Bucharest') AS start
     FROM (SELECT (now() AT TIME ZONE 'Europe/Bucharest')::date + offset_day AS day
           FROM generate_series(1, 3) offset_day) days
-    WHERE extract(isodow FROM day) <= 5 ORDER BY day LIMIT 1`);
+    WHERE extract(isodow FROM day) <= 5 ORDER BY day LIMIT 1`, [unknownDryer.id]);
   const path = '/api/laundry-machines/' + fixture.machine;
   const at = minutes => new Date(+fixture.start + minutes * 60_000).toISOString();
   const request = (path, method = 'GET', resident = 0, body) => fetch(
@@ -51,6 +55,7 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
   assert.equal((await calendar(2)).status, 401);
   assert.equal((await book(0, 0, 60, fixture.broken)).status, 409);
   assert.equal((await book(0, 0, 60, fixture.unspecified)).status, 409);
+  await db.query('DELETE FROM laundry_machines WHERE id = $1', [unknownDryer.id]);
 
   const results = await Promise.all([book(0, 0, 60), book(1, 0, 60)]);
   assert.deepEqual(results.map(response => response.status).sort(), [201, 409]);
@@ -376,4 +381,96 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
   assert.equal((await notices(0)).length, inbox.length);
   await db.query('UPDATE users SET can_manage_equipment = false WHERE id = $1', [users[0].id]);
   assert.equal((await change('stop')).status, 403);
+
+  const roomTwoDryers = (await (await request('/api/laundry-machines?availability=1')).json())
+    .filter(machine => machine.room === '2' && machine.type === 'dryer');
+  assert.deepEqual(roomTwoDryers.map(machine => [machine.label, machine.technicalStatus, machine.status]), [
+    ['1A', 'working', 'available'], ['2A', 'working', 'available'],
+  ]);
+  for (const dryer of roomTwoDryers) {
+    assert.equal((await book(0, 0, 60, dryer.id)).status, 201);
+  }
+
+  await t.test('laundry reports, targeted notices and temporary verification', async () => {
+    const reports = '/api/laundry-reports';
+    const dryer = roomTwoDryers[0];
+    const draft = { machineId: dryer.id, description: 'Tamburul nu se rotește.' };
+    const action = (id, name, resident, body = {}) => request(reports + '/' + id + '/' + name, 'POST', resident, body);
+    const list = async (resident, operator = false) =>
+      (await (await request(reports + (operator ? '/operator' : ''), 'GET', resident)).json()).items;
+    const reportMachine = async () => (await (await request('/api/laundry-machines?availability=1')).json())
+      .find(machine => machine.id === dryer.id);
+
+    assert.equal((await request(reports, 'POST', 2, draft)).status, 401);
+    assert.equal((await request(reports + '/operator', 'GET', 1)).status, 403);
+    assert.equal((await request(reports, 'POST', 1, { ...draft, description: ' ' })).status, 400);
+    await db.query('UPDATE users SET can_manage_equipment = true WHERE id = $1', [users[0].id]);
+    await db.query(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+      VALUES ($1, 'https://fcm.googleapis.com/fcm/send/report-operator', $3, $4),
+             ($2, 'https://fcm.googleapis.com/fcm/send/report-resident', $3, $4)`,
+    [users[0].id, users[1].id, subscription.keys.p256dh, subscription.keys.auth]);
+    const created = await request(reports, 'POST', 1, draft);
+    assert.equal(created.status, 201);
+    const { id } = await created.json();
+    assert.equal((await list(1))[0].status, 'new');
+    assert.deepEqual(await list(0), []);
+    assert.equal((await reportMachine()).technicalStatus, 'working');
+    assert.equal((await action(id, 'take', 1)).status, 403);
+    assert.equal((await action(id, 'verify', 1)).status, 409);
+    const taken = await Promise.all([action(id, 'take', 0), action(id, 'take', 0)]);
+    assert.deepEqual(taken.map(response => response.status), [204, 204]);
+    const getRevision = async () => (await list(0, true)).find(report => report.id === id).machineRevision;
+    const beforeShutdown = await getRevision();
+    assert.equal((await request('/api/laundry-machines/' + dryer.id + '/condition', 'POST', 0, { action: 'stop' })).status, 204);
+    assert.equal((await action(id, 'resolve', 0, { machineRevision: beforeShutdown })).status, 409);
+    const machineRevision = await getRevision();
+    const resolved = await Promise.all([
+      action(id, 'resolve', 0, { machineRevision }), action(id, 'resolve', 0, { machineRevision }),
+    ]);
+    assert.deepEqual(resolved.map(response => response.status), [204, 204]);
+    assert.equal((await list(1))[0].status, 'resolved');
+    assert.equal((await reportMachine()).technicalStatus, 'working');
+    assert.equal((await book(1, 80, 140, dryer.id)).status, 201);
+    assert.equal((await action(id, 'verify', 0)).status, 404);
+    assert.equal((await action(id, 'verify', 1)).status, 204);
+    assert.equal((await action(id, 'verify', 1)).status, 204);
+    const verified = (await list(1))[0];
+    assert.equal(verified.status, 'verified');
+    assert.equal(Date.parse((await reportMachine()).repairVerifiedUntil) - Date.parse(verified.verifiedAt), 48 * 60 * 60 * 1000);
+
+    const deliveries = await db.query(`
+      SELECT notice.kind, notice.user_id, count(delivery.subscription_id)::integer AS deliveries
+      FROM laundry_notifications notice LEFT JOIN push_deliveries delivery ON delivery.notification_id = notice.id
+      WHERE notice.report_id = $1 GROUP BY notice.id ORDER BY notice.id`, [id]);
+    assert.deepEqual(deliveries.rows, [
+      { kind: 'report-new', user_id: users[0].id, deliveries: 1 },
+      { kind: 'report-taken', user_id: users[1].id, deliveries: 0 },
+      { kind: 'report-resolved', user_id: users[1].id, deliveries: 1 },
+    ]);
+    await db.query("UPDATE laundry_machines SET repair_verified_until = now() - interval '1 second' WHERE id = $1", [dryer.id]);
+    assert.equal((await reportMachine()).repairVerifiedUntil, undefined);
+    await db.query("UPDATE laundry_machines SET repair_verified_until = now() + interval '1 hour' WHERE id = $1", [dryer.id]);
+    const another = await request(reports, 'POST', 1, draft);
+    assert.equal(another.status, 201);
+    assert.equal((await reportMachine()).repairVerifiedUntil, undefined);
+    assert.equal((await action(id, 'verify', 1)).status, 204);
+    assert.equal((await reportMachine()).repairVerifiedUntil, undefined);
+    assert.equal((await reportMachine()).technicalStatus, 'working');
+
+    const { rows: [unconfirmed] } = await db.query(`
+      INSERT INTO laundry_machines (name, location, room, type, label, technical_status)
+      VALUES ('Test dryer', 'Test location', '2', 'dryer', 'TEST', 'unspecified') RETURNING id`);
+    const extra = { ...draft, machineId: unconfirmed.id };
+    const report = await (await request(reports, 'POST', 1, extra)).json();
+    assert.equal((await action(report.id, 'take', 0)).status, 204);
+    const operatorView = (await list(0, true)).find(item => item.id === report.id);
+    assert.equal(operatorView.technicalStatus, 'unspecified');
+    assert.equal((await action(report.id, 'resolve', 0, { machineRevision: operatorView.machineRevision })).status, 204);
+    assert.equal((await book(1, 80, 140, unconfirmed.id)).status, 201);
+    assert.equal((await request(reports, 'POST', 1, extra)).status, 201);
+    assert.equal((await action(report.id, 'verify', 1)).status, 204);
+    const { rows: [equipment] } = await db.query(
+      'SELECT technical_status, repair_verified_until FROM laundry_machines WHERE id = $1', [unconfirmed.id]);
+    assert.deepEqual(equipment, { technical_status: 'working', repair_verified_until: null });
+  });
 });

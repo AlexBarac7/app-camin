@@ -16,6 +16,7 @@
 - PATTERN-008 · Serialize bookings on the equipment row · candidate
 - PATTERN-009 · Serialize equipment faults with booking creation · candidate
 - PATTERN-010 · Persist browser alerts with the event that produced them · candidate
+- PATTERN-011 · Check the equipment revision before resolving a report · candidate
 
 ---
 
@@ -95,3 +96,11 @@
   and retry transient provider errors. Keep the notice readable in the app.
 - **Example:** backend/src/modules/notifications/laundry-notifications.js;
   backend/src/modules/notifications/push.js.
+
+## PATTERN-011 · Check the equipment revision before resolving a report
+- **Status:** candidate
+- **How:** Lock the equipment row before advancing the report. Compare its
+  revision with the operator's view before restoring equipment. Record the
+  revision at resolution and compare it again before showing a public
+  verification mark.
+- **Example:** backend/src/modules/laundry/reports.routes.js.

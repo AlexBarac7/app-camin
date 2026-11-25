@@ -22,6 +22,9 @@
 - Q-011 · What happens to reservations when equipment is marked defective? · _answered_
 - Q-012 · When is equipment restored in time to notify a resident? · _answered_
 
+### [Laundry reports](questions/laundry-reports.md)
+- Q-013 · How should residents report laundry equipment faults? · _answered_
+
 ---
 
 ## Q-001 · What does app-camin do, and who uses it?
@@ -65,7 +68,7 @@
   transport, fair-use quotas, no-show definitions and consequences, maintenance
   workflow and photo storage, notification events and recipients.
 - **Who answers:** Project owner, after interviews
-- **Evidence:** [INTERVIEW.md](../../INTERVIEW.md) documents current residence practices and identifies details still to clarify.
+- **Evidence:** [INTERVIEW.md](../../INTERVIEW.md) documents residence practices. [Q-013](questions/laundry-reports.md#q-013--how-should-residents-report-laundry-equipment-faults) records the confirmed laundry reporting scope.
 
 ## Q-006 · Who manages the laundry catalog and with what permissions?
 - **Status:** open
@@ -74,7 +77,7 @@
 - **Owner input:** Both the administrator and admin should be able to change
   equipment status manually. For example, the administrator can mark equipment
   as defective while it is occupied or available.
-- **Pilot status changes:** D-014 grants equipment management explicitly per account from the terminal. Operators change equipment status in the application.
+- **Pilot status changes:** D-014 grants equipment management per account from the terminal. Under D-019, those operators also manage reports and can explicitly confirm that a machine with an unconfirmed status is functional when resolving its report.
 - **To clarify:** Who confirms and publishes inventory updates, who can add, edit or
   retire machines, what autonomy the residence administrator has, and whether
   changes happen through the terminal or the application. See also

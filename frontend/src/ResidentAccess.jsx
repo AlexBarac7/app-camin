@@ -2,6 +2,7 @@ import LaundryStatus from './LaundryStatus.jsx';
 import { useEffect, useState } from 'react';
 import LaundryCalendar, { upcomingInterval } from './LaundryCalendar.jsx';
 import Notifications, { disableDevicePush } from './Notifications.jsx';
+import LaundryReports, { ReportEquipment } from './LaundryReports.jsx';
 
 const invalidLink = 'Invitația nu mai este valabilă. Cere o invitație nouă.';
 const unavailable = 'Momentan nu putem finaliza cererea. Încearcă din nou.';
@@ -192,7 +193,8 @@ function ResidentNav({ inboxUnreadCount }) {
   const count = route === '/notificari' ? inboxUnreadCount : unreadCount;
   return (
     <nav aria-label="Navigare principală" className="mb-5 flex flex-wrap gap-2">
-      {[['/resurse', 'Resurse'], ['/notificari', 'Notificări'], ['/cont', 'Contul meu']].map(([path, label]) => {
+      {[['/resurse', 'Resurse'], ['/sesizari', 'Sesizările mele'], ['/notificari', 'Notificări'],
+        ['/cont', 'Contul meu']].map(([path, label]) => {
         const showCount = path === '/notificari' && count > 0;
         return <a key={path} href={path} aria-current={route === path ? 'page' : undefined}
           className={'inline-flex items-center gap-2 rounded-lg px-3 py-3 font-semibold aria-[current=page]:bg-slate-900 aria-[current=page]:text-white hover:underline ' + linkFocus}>
@@ -243,6 +245,10 @@ function EquipmentCard({ machine, selected, onSelect, onChange }) {
             <LaundryStatus status={machine.status}>{occupancy[machine.status]}</LaundryStatus>
             {machine.status === 'occupied' && machine.technicalStatus === 'inspection' &&
               <LaundryStatus status="inspection">Verificare după ciclu</LaundryStatus>}
+            {Date.parse(machine.repairVerifiedUntil) > Date.now() &&
+              <span className="rounded-full bg-green-50 px-2 py-1 text-sm font-medium text-green-800">
+                <span aria-hidden="true">✓ </span>Remediere verificată
+              </span>}
           </span>
           {machine.nextReservation && <span className="mt-2 block text-sm">
             Următoarea rezervare · {upcomingInterval(machine.nextReservation)}
@@ -255,6 +261,7 @@ function EquipmentCard({ machine, selected, onSelect, onChange }) {
             {selected ? 'Închide calendarul' : 'Vezi calendarul'}
           </button>
           {selected && <LaundryCalendar machine={machine} onChange={onChange} />}
+          <ReportEquipment machine={machine} onChange={onChange} />
         </div>
       </details>
     </li>
@@ -291,8 +298,8 @@ function Resources({ room }) {
         const inventory = room ? (await response.json()).filter(machine => machine.room === room.id) : [];
         if (controller.signal.aborted) return;
         for (const machine of inventory) {
-          if (machine.nextStatusAt) {
-            const delay = Date.parse(machine.nextStatusAt) - Date.parse(machine.observedAt);
+          for (const changeAt of [machine.nextStatusAt, machine.repairVerifiedUntil].filter(Boolean)) {
+            const delay = Date.parse(changeAt) - Date.parse(machine.observedAt);
             refreshAfter = Math.min(refreshAfter, Math.max(1, delay));
           }
         }
@@ -353,6 +360,7 @@ const headings = {
   '/cont': 'Contul meu',
   '/notificari': 'Notificări',
   '/resurse': 'Resurse',
+  '/sesizari': 'Sesizările mele',
   '/spalatorie': 'Resurse',
   ...Object.fromEntries(laundryRooms.map(room => [room.path, room.name])),
 };
@@ -370,10 +378,11 @@ export default function ResidentAccess() {
     if (legacyRoute) window.location.replace('/resurse');
   }, [legacyRoute]);
 
-  const showNav = route === '/cont' || route === '/notificari' || route === '/resurse' || currentRoom;
+  const showNav = route === '/cont' || route === '/notificari' || route === '/resurse' || route === '/sesizari' || currentRoom;
   let content;
   if (route === '/cont') content = <Account />;
   else if (route === '/notificari') content = <Notifications onUnreadCount={setInboxUnreadCount} />;
+  else if (route === '/sesizari') content = <LaundryReports />;
   else if (route === '/resurse' || currentRoom) content = <Resources room={currentRoom} />;
   else if (legacyRoute) content = <a href="/resurse">Deschide Resurse</a>;
   else content = <AccessForm activation={route === '/activeaza'} />;
