@@ -18,11 +18,47 @@ const dateTime = new Intl.DateTimeFormat('ro-RO', {
   dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Bucharest',
 });
 const imageTypes = 'image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif';
+const unconfirmed = 'Conexiunea s-a întrerupt înainte de confirmarea trimiterii. Verifică „Sesizările mele” înainte să încerci din nou.';
+
+async function preparePhoto(file) {
+  const copy = new File([await file.arrayBuffer()], file.name, { type: file.type });
+  if (copy.size <= 512 * 1024) return copy;
+
+  const url = URL.createObjectURL(copy);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext('2d', { alpha: false });
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const jpeg = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+    if (jpeg && jpeg.size < copy.size) {
+      return new File([jpeg], 'sesizare.jpg', { type: jpeg.type });
+    }
+  } catch {
+    // Let the server decode formats the browser cannot read, such as HEIC on some devices.
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  return copy;
+}
 
 async function reportRequest(path, { signal, body } = {}) {
   const options = body instanceof FormData ? { method: 'POST', body }
     : body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {};
-  const response = await fetch(endpoint + path, { signal, ...options });
+  let response;
+  try {
+    response = await fetch(endpoint + path, { signal, ...options });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new Error(path === '' && body ? unconfirmed : 'Conexiunea nu este disponibilă momentan.');
+  }
   if (response.status === 401) window.location.replace('/autentificare');
   if (!response.ok) {
     const messages = {
@@ -32,6 +68,7 @@ async function reportRequest(path, { signal, body } = {}) {
       422: 'Poza nu a putut fi citită. Alege o imagine JPEG, PNG, WebP sau HEIC.',
       503: 'Fotografiile nu sunt disponibile momentan. Încearcă din nou sau trimite sesizarea fără poză.',
     };
+    if (path === '' && body && [502, 504].includes(response.status)) throw new Error(unconfirmed);
     throw new Error(messages[response.status] || 'Cererea nu a putut fi finalizată. Încearcă din nou.');
   }
   return response.status === 204 ? null : response.json();
@@ -41,31 +78,42 @@ function ReportForm({ machine, onCancel, onSaved }) {
   const [locationType, setLocationType] = useState('room');
   const [description, setDescription] = useState('');
   const [photo, setPhoto] = useState(null);
+  const [preparing, setPreparing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const suffix = machine?.id ?? 'general';
 
-  function choosePhoto(event) {
-    const image = event.target.files[0];
-    event.target.value = '';
+  async function choosePhoto(event) {
+    const input = event.currentTarget;
+    const image = input.files[0];
     if (!image) return;
     if (image.size > 10 * 1024 * 1024) {
       setError('Poza depășește limita de 10 MB.');
+      input.value = '';
       return;
     }
-    setPhoto(image);
     setError('');
+    setPreparing(true);
+    try {
+      setPhoto({ name: image.name, file: await preparePhoto(image) });
+    } catch {
+      setPhoto(null);
+      setError('Poza nu a putut fi citită de pe dispozitiv. Alege-o din nou.');
+    } finally {
+      input.value = '';
+      setPreparing(false);
+    }
   }
 
   async function submit(event) {
     event.preventDefault();
-    if (busy || !description.trim()) return;
+    if (busy || preparing || !description.trim()) return;
     const form = new FormData(event.currentTarget);
-    if (photo) form.set('photo', photo);
+    if (photo) form.set('photo', photo.file);
     setBusy(true);
     setError('');
     try {
-      const report = await reportRequest('', { body: form });
+      const report = await reportRequest('', { body: photo ? form : Object.fromEntries(form) });
       onSaved(report.id);
     } catch (failure) {
       setError(failure.message);
@@ -107,11 +155,12 @@ function ReportForm({ machine, onCancel, onSaved }) {
         <legend className="mb-1 font-medium">Fotografie (opțional)</legend>
         <label className={button + ' w-fit cursor-pointer focus-within:outline-2'}>
           Încarcă o poză
-          <input type="file" accept={imageTypes} className="sr-only" onChange={choosePhoto} />
+          <input type="file" accept={imageTypes} className="sr-only" onChange={choosePhoto} disabled={preparing} />
         </label>
+        {preparing && <p role="status">Pregătim fotografia…</p>}
         {photo && <div className="flex flex-wrap items-center gap-2">
           <span className="break-all">{photo.name}</span>
-          <button type="button" className={button} onClick={() => {
+          <button type="button" className={button} disabled={preparing} onClick={() => {
             setPhoto(null);
             setError('');
           }}>Elimină poza</button>
@@ -120,7 +169,9 @@ function ReportForm({ machine, onCancel, onSaved }) {
     </fieldset>
     {error && <p role="alert" className="text-red-800">{error}</p>}
     <div className="flex flex-wrap gap-2">
-      <button type="submit" className={button} disabled={busy || !description.trim()}>Trimite sesizarea</button>
+      <button type="submit" className={button} disabled={busy || preparing || !description.trim()}>
+        {busy ? 'Se trimite sesizarea…' : 'Trimite sesizarea'}
+      </button>
       <button type="button" className={button} disabled={busy} onClick={onCancel}>Renunță</button>
     </div>
   </form>;

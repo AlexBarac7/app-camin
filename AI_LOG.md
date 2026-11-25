@@ -4,6 +4,24 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-25 · Slower phone report uploads
+
+The project owner reported an intermittent `Load failed` after submitting
+from the phone. The desktop HTTPS route returned in about 40 ms, while
+Tailscale pings to the connected iOS device ranged from 703 to 1,429 ms.
+The local database had one recent report with a photo. That observation
+did not identify which submission produced it.
+
+The form now reads the selected photo before clearing the device picker
+and resizes large images before uploading when the browser can decode them.
+The server still validates and normalizes every attachment. A synthetic
+12-megapixel JPEG fell from 6,198 KiB to 491 KiB in the browser upload test.
+The backend runs HEIC decoding in a worker so other requests can progress.
+For the test HEIC, a 100 ms timer fired after 1,729 ms before the change
+and 100 ms afterwards. Simulated connection loss verified that the form
+keeps the draft and asks the resident to check report history before retrying.
+The delivery outcome on the physical phone remains a manual check.
+
 ## 2026-11-25 · Full-screen report photo viewer
 
 The project owner reported that opening an attachment in a separate tab

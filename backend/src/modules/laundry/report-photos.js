@@ -1,10 +1,22 @@
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import convertHeic from 'heic-convert';
+import { Worker } from 'node:worker_threads';
 import sharp from 'sharp';
 
 export const photoByteLimit = 10 * 1024 * 1024;
 const imageOptions = { limitInputPixels: 32_000_000, failOn: 'warning' };
 const formats = new Set(['jpeg', 'png', 'webp', 'heif']);
+let heicProcessing = Promise.resolve();
+
+function decodeHeic(bytes) {
+  const decoded = heicProcessing.then(() => new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./report-photo-heic.js', import.meta.url), { workerData: bytes, execArgv: [] });
+    worker.once('message', image => resolve(Buffer.from(image)));
+    worker.once('error', reject);
+    worker.once('exit', () => reject(new Error('HEIC decoder did not return an image.')));
+  }));
+  heicProcessing = decoded.catch(() => {});
+  return decoded;
+}
 
 export async function resizeReportPhoto(bytes) {
   const metadata = await sharp(bytes, imageOptions).metadata();
@@ -13,7 +25,7 @@ export async function resizeReportPhoto(bytes) {
     throw new Error('Unsupported report photo.');
   }
   const input = metadata.format === 'heif' && metadata.compression === 'hevc'
-    ? Buffer.from(await convertHeic({ buffer: bytes, format: 'JPEG', quality: 0.9 }))
+    ? await decodeHeic(bytes)
     : bytes;
   return sharp(input, imageOptions).rotate()
     .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })

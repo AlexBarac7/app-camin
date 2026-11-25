@@ -333,7 +333,9 @@ stay in the report history.
 Select **Încarcă o poză** in either report form. On a phone, the device picker
 offers the camera or gallery where supported. After selecting an image, use
 **Elimină poza** to remove it or select another image to replace it before
-submitting the report.
+submitting the report. The browser can resize large photos before upload.
+If the connection drops during submission, check **Sesizările mele** before
+sending again.
 
 The report shows the attached photo as a thumbnail. Tap it to open the
 full-screen viewer. Pinch or use **+** and **−** to zoom, then drag the
