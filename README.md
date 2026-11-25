@@ -5,8 +5,8 @@ or residential building. The pilot covers the two laundry rooms and the drying
 room in the residence.
 
 The application includes resident access by invitation, the laundry inventory
-and Reservation calendar, equipment fault management, laundry reports, and
-in-app and opt-in Web Push notifications.
+and Reservation calendar, equipment fault management, maintenance reports for
+equipment, rooms and shared spaces, and in-app and opt-in Web Push notifications.
 
 ## Stack and layout
 
@@ -301,28 +301,72 @@ export VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY
 
 Open **Notificări** and enable alerts on the device. For a phone test, use a
 private test origin accessible over HTTPS and set the backend's `APP_ORIGIN`
-to that exact origin. On iPhone, add the web app to the home screen and open
-it there before enabling alerts. Use test accounts to verify an alert arrives
+to that exact origin. In the same shell, set
+`__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS` to the test origin's hostname before
+starting Compose. On iPhone, add the web app to the home screen and open it
+there before enabling alerts. Use test accounts to verify that an alert arrives
 with the app closed and opens the matching notice.
 
-### Reporting a laundry equipment fault
+### Maintenance reports
 
 In **Resurse**, open a washer or dryer and select **Semnalează o defecțiune**.
-Any authenticated resident can report a problem and follow it in **Sesizările mele**.
+The application takes the equipment and location from the inventory. For a
+room or shared space, select **Sesizare nouă** in **Sesizările mele** and
+enter the category, location and description. The floor and one photo are optional.
 
 An operator with equipment management permission can open **Vezi sesizările**
 from the equipment management page. New reports appear in the operator's
-inbox and trigger Web Push on subscribed devices. Taking a report notifies
+inbox and trigger Web Push on subscribed devices. The operator chooses
+**Scăzută**, **Normală** or **Urgentă** when taking a report, which notifies
 its author in the app. Resolving it notifies the author in the app and on
 subscribed devices. When necessary,
 **Rezolvă și repune în serviciu** closes the report and returns the equipment
 to the reservation calendar through the existing restoration workflow.
 
-After resolution the author can optionally confirm the repair. The checkmark
-appears on the equipment for up to 48 hours and clears on a new report or
-technical condition change. The confirmation stays in report history.
+After resolution the author can optionally confirm the repair. Equipment
+reports can display a checkmark on the machine for up to 48 hours, until
+another report or a technical condition change. The confirmation and photo
+stay in the report history.
 
-The laundry pilot covers part of the maintenance workflow tracked in
+#### Add and view a photo
+
+Select **Încarcă o poză** in either report form. On a phone, the device picker
+offers the camera or gallery where supported. After selecting an image, use
+**Elimină poza** to remove it or select another image to replace it before
+submitting the report. The browser can resize large photos before upload.
+If the connection drops during submission, check **Sesizările mele** before
+sending again.
+
+The report shows the attached photo as a thumbnail. Tap it to open the
+full-screen viewer. Pinch or use **+** and **−** to zoom, then drag the
+enlarged photo to see details. Tap the zoom percentage to fit the image to
+the screen again. Tap **×** in the top-right corner or press **Escape** to
+return to the same report.
+
+### Local photo storage
+
+The optional Compose profile `photos` starts SeaweedFS and creates the
+private `camin-report-photos` bucket. To enable the camera and gallery upload
+flow, provide credentials in the same shell as the PostgreSQL password.
+
+```bash
+read -rp "Photo storage access key: " PHOTO_S3_ACCESS_KEY
+read -rsp "Photo storage secret key: " PHOTO_S3_SECRET_KEY
+export PHOTO_S3_ACCESS_KEY PHOTO_S3_SECRET_KEY
+echo
+docker compose --profile photos up --build -d --wait
+docker compose exec backend npm run migrate
+```
+
+Choose local credentials on the first run and reuse them with the existing
+photo volume. The bucket stays inside the Compose network. The backend
+accepts images up to 10 MiB and 32 megapixels and stores a JPEG copy with a
+maximum edge of 1,600 pixels. It strips photo metadata and serves the image
+only to its author and operators with current permission. With the profile
+disabled, residents can submit reports without a photo. To stop the app and
+photo storage while preserving their volumes, run `docker compose --profile photos stop`.
+
+Maintenance scope and acceptance are tracked in
 [issue #16](https://github.com/AlexBarac7/app-camin/issues/16).
 
 ## Roadmap
@@ -340,11 +384,9 @@ The laundry pilot covers part of the maintenance workflow tracked in
 - Define rolling fair-use quotas and configurable resource rules, including
   quiet hours and approved exceptions. Test the quota window, cancellations
   and concurrent requests. [Issue #15](https://github.com/AlexBarac7/app-camin/issues/15)
-- Extend maintenance tickets beyond the laundry pilot. Define categories,
-  locations and priority, then add photos with controlled access, resizing
-  and object storage. [Issue #16](https://github.com/AlexBarac7/app-camin/issues/16)
 - Add administrator announcements with optional read acknowledgement and
   usage and maintenance statistics. [Project brief](CONTEXT.md)
-- Prepare production configuration and a release procedure for Railway.
+- Prepare production configuration and a release procedure for Railway,
+  including the production object store for photos.
   Verify the live app and demonstrate at least 10 resident accounts and 20
   real Reservations. [Issue #17](https://github.com/AlexBarac7/app-camin/issues/17)

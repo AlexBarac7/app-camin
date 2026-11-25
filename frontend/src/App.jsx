@@ -173,7 +173,7 @@ export default function App() {
   if (path === '/admin/echipamente') return <EquipmentManagement />;
   if (path === '/admin/sesizari') return <main className="mx-auto max-w-2xl px-4 py-6 sm:px-8 sm:py-10" lang="ro">
     <a className="underline" href="/admin/echipamente">Înapoi la echipamente</a>
-    <h1 className="mt-4 text-3xl font-bold">Sesizări echipamente</h1>
+    <h1 className="mt-4 text-3xl font-bold">Sesizări de întreținere</h1>
     <LaundryReports operator />
   </main>;
   if (path === '/') return <Welcome />;

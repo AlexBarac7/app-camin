@@ -15,8 +15,21 @@
 - **Notifications:** Operators get an in-app notice and opt-in Web Push for
   new reports. The author gets an in-app notice on pickup and an in-app notice
   and opt-in Web Push on resolution.
-- **Follow-up:** Photos, priority and broader maintenance cases stay with
-  [issue #16](https://github.com/AlexBarac7/app-camin/issues/16). Email fallback
-  is deferred to a later stage.
+- **Follow-up:** [Q-014](#q-014--how-should-the-maintenance-extension-handle-location-priority-and-photos)
+  records how the completed issue #16 scope extends the original pilot.
+  Email fallback is deferred to a later stage.
 - **Confirmed:** 2026-11-25
 - **Decision:** [D-019](../decisions/laundry-decisions.md#d-019--pilot-digital-reports-for-laundry-equipment).
+
+## Q-014 · How should the maintenance extension handle location, priority and photos?
+- **Status:** answered
+- **Blocks:** [Issue #16](https://github.com/AlexBarac7/app-camin/issues/16) completion.
+- **Who answers:** Project owner
+- **Answer:** Support rooms and shared spaces alongside the existing equipment
+  reports. Use the approved categories and accept the room number or shared
+  space name with an optional floor. Operators assign Low, Normal or Urgent
+  at pickup. One photo is optional. The same operator permission applies
+  to reports and photos across all locations. Photos remain in report
+  history and are visible to the author and authorized operators.
+- **Confirmed:** 2026-11-25
+- **Decision:** [D-020](../decisions/laundry-decisions.md#d-020--extend-maintenance-reports-to-rooms-and-shared-spaces).

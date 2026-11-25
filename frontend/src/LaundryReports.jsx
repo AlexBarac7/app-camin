@@ -1,45 +1,120 @@
 import { useEffect, useState } from 'react';
+import ReportPhoto from './ReportPhoto.jsx';
 
 const endpoint = '/api/laundry-reports';
 const button = 'min-h-11 rounded-lg border border-slate-400 px-4 py-2 font-semibold hover:bg-slate-50 disabled:opacity-50';
+const field = 'min-h-11 w-full rounded-lg border border-slate-400 bg-white p-2';
 const labels = { new: 'Nouă', taken: 'Preluată', resolved: 'Rezolvată', verified: 'Verificată' };
+const priorities = { low: 'Scăzută', normal: 'Normală', urgent: 'Urgentă' };
+const categories = {
+  'laundry-equipment': 'Echipament de spălătorie',
+  plumbing: 'Apă și instalații sanitare',
+  electrical: 'Electricitate și iluminat',
+  furniture: 'Mobilier și amenajări',
+  cleaning: 'Curățenie',
+  other: 'Altă problemă',
+};
 const dateTime = new Intl.DateTimeFormat('ro-RO', {
   dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Bucharest',
 });
+const imageTypes = 'image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif';
+const unconfirmed = 'Conexiunea s-a întrerupt înainte de confirmarea trimiterii. Verifică „Sesizările mele” înainte să încerci din nou.';
+
+async function preparePhoto(file) {
+  const copy = new File([await file.arrayBuffer()], file.name, { type: file.type });
+  if (copy.size <= 512 * 1024) return copy;
+
+  const url = URL.createObjectURL(copy);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext('2d', { alpha: false });
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const jpeg = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+    if (jpeg && jpeg.size < copy.size) {
+      return new File([jpeg], 'sesizare.jpg', { type: jpeg.type });
+    }
+  } catch {
+    // Let the server decode formats the browser cannot read, such as HEIC on some devices.
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  return copy;
+}
 
 async function reportRequest(path, { signal, body } = {}) {
-  const response = await fetch(endpoint + path, {
-    signal,
-    ...(body && { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
-  });
+  const options = body instanceof FormData ? { method: 'POST', body }
+    : body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {};
+  let response;
+  try {
+    response = await fetch(endpoint + path, { signal, ...options });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new Error(path === '' && body ? unconfirmed : 'Conexiunea nu este disponibilă momentan.');
+  }
   if (response.status === 401) window.location.replace('/autentificare');
   if (!response.ok) {
-    throw new Error(response.status === 403 ? 'Nu ai permisiunea pentru această acțiune.'
-      : response.status === 409 ? 'Starea s-a schimbat. Verifică sesizarea și încearcă din nou.'
-        : 'Cererea nu a putut fi finalizată. Încearcă din nou.');
+    const messages = {
+      403: 'Nu ai permisiunea pentru această acțiune.',
+      409: 'Starea s-a schimbat. Verifică sesizarea și încearcă din nou.',
+      413: 'Poza depășește limita de 10 MB.',
+      422: 'Poza nu a putut fi citită. Alege o imagine JPEG, PNG, WebP sau HEIC.',
+      503: 'Fotografiile nu sunt disponibile momentan. Încearcă din nou sau trimite sesizarea fără poză.',
+    };
+    if (path === '' && body && [502, 504].includes(response.status)) throw new Error(unconfirmed);
+    throw new Error(messages[response.status] || 'Cererea nu a putut fi finalizată. Încearcă din nou.');
   }
   return response.status === 204 ? null : response.json();
 }
 
-export function ReportEquipment({ machine, onChange }) {
-  const [open, setOpen] = useState(false);
+function ReportForm({ machine, onCancel, onSaved }) {
+  const [locationType, setLocationType] = useState('room');
   const [description, setDescription] = useState('');
+  const [photo, setPhoto] = useState(null);
+  const [preparing, setPreparing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [reportId, setReportId] = useState(null);
-  const field = 'descriere-defect-' + machine.id;
+  const suffix = machine?.id ?? 'general';
+
+  async function choosePhoto(event) {
+    const input = event.currentTarget;
+    const image = input.files[0];
+    if (!image) return;
+    if (image.size > 10 * 1024 * 1024) {
+      setError('Poza depășește limita de 10 MB.');
+      input.value = '';
+      return;
+    }
+    setError('');
+    setPreparing(true);
+    try {
+      setPhoto({ name: image.name, file: await preparePhoto(image) });
+    } catch {
+      setPhoto(null);
+      setError('Poza nu a putut fi citită de pe dispozitiv. Alege-o din nou.');
+    } finally {
+      input.value = '';
+      setPreparing(false);
+    }
+  }
 
   async function submit(event) {
     event.preventDefault();
-    if (busy || !description.trim()) return;
+    if (busy || preparing || !description.trim()) return;
+    const form = new FormData(event.currentTarget);
+    if (photo) form.set('photo', photo.file);
     setBusy(true);
     setError('');
     try {
-      const report = await reportRequest('', { body: { machineId: machine.id, description } });
-      setReportId(report.id);
-      setDescription('');
-      setOpen(false);
-      onChange();
+      const report = await reportRequest('', { body: photo ? form : Object.fromEntries(form) });
+      onSaved(report.id);
     } catch (failure) {
       setError(failure.message);
     } finally {
@@ -47,29 +122,80 @@ export function ReportEquipment({ machine, onChange }) {
     }
   }
 
+  return <form onSubmit={submit} className="grid gap-3">
+    <fieldset className="grid gap-3" disabled={busy}>
+      {machine ? <input type="hidden" name="machineId" value={machine.id} /> : <>
+        <label className="grid gap-1 font-medium">Categorie
+          <select name="category" className={field} required defaultValue="">
+            <option value="" disabled>Alege categoria</option>
+            {Object.entries(categories).filter(([value]) => value !== 'laundry-equipment').map(([value, label]) =>
+              <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <label className="grid gap-1 font-medium">Tipul locației
+          <select name="locationType" className={field} value={locationType}
+            onChange={event => setLocationType(event.target.value)}>
+            <option value="room">Cameră</option>
+            <option value="shared">Spațiu comun</option>
+          </select>
+        </label>
+        <label className="grid gap-1 font-medium">{locationType === 'room' ? 'Numărul camerei' : 'Denumirea spațiului'}
+          <input key={locationType} name="location" className={field} maxLength={120} required />
+        </label>
+        <label className="grid gap-1 font-medium">Etaj (opțional)
+          <input name="floor" className={field} maxLength={40} />
+        </label>
+      </>}
+      <label className="grid gap-1 font-medium" htmlFor={'descriere-defect-' + suffix}>
+        {machine ? 'Descrie problema la ' + machine.name : 'Descrie problema'}
+        <textarea id={'descriere-defect-' + suffix} name="description" className={field}
+          rows={4} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} required />
+      </label>
+      <fieldset className="grid gap-2">
+        <legend className="mb-1 font-medium">Fotografie (opțional)</legend>
+        <label className={button + ' w-fit cursor-pointer focus-within:outline-2'}>
+          Încarcă o poză
+          <input type="file" accept={imageTypes} className="sr-only" onChange={choosePhoto} disabled={preparing} />
+        </label>
+        {preparing && <p role="status">Pregătim fotografia…</p>}
+        {photo && <div className="flex flex-wrap items-center gap-2">
+          <span className="break-all">{photo.name}</span>
+          <button type="button" className={button} disabled={preparing} onClick={() => {
+            setPhoto(null);
+            setError('');
+          }}>Elimină poza</button>
+        </div>}
+      </fieldset>
+    </fieldset>
+    {error && <p role="alert" className="text-red-800">{error}</p>}
+    <div className="flex flex-wrap gap-2">
+      <button type="submit" className={button} disabled={busy || preparing || !description.trim()}>
+        {busy ? 'Se trimite sesizarea…' : 'Trimite sesizarea'}
+      </button>
+      <button type="button" className={button} disabled={busy} onClick={onCancel}>Renunță</button>
+    </div>
+  </form>;
+}
+
+export function ReportEquipment({ machine, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [reportId, setReportId] = useState(null);
   return <div className="grid gap-2">
     {reportId && <p role="status">Sesizare trimisă.{' '}
       <a className="underline" href={'/sesizari#sesizare-' + reportId}>Vezi sesizarea</a>.
     </p>}
-    {open ? <form onSubmit={submit} className="grid gap-2">
-      <label htmlFor={field} className="font-medium">Descrie problema la {machine.name}</label>
-      <textarea id={field} className="rounded-lg border border-slate-400 p-3" rows={4} maxLength={2000}
-        required disabled={busy} value={description} onChange={event => setDescription(event.target.value)} />
-      {error && <p role="alert" className="text-red-800">{error}</p>}
-      <div className="flex flex-wrap gap-2">
-        <button type="submit" className={button} disabled={busy || !description.trim()}>Trimite sesizarea</button>
-        <button type="button" className={button} disabled={busy} onClick={() => setOpen(false)}>Renunță</button>
-      </div>
-    </form> : <button type="button" className={button} onClick={() => {
-      setError('');
-      setOpen(true);
-    }}>Semnalează o defecțiune</button>}
+    {open ? <ReportForm machine={machine} onCancel={() => setOpen(false)} onSaved={id => {
+      setReportId(id);
+      setOpen(false);
+      onChange();
+    }} /> : <button type="button" className={button} onClick={() => setOpen(true)}>Semnalează o defecțiune</button>}
   </div>;
 }
 
 export default function LaundryReports({ operator = false }) {
   const [items, setItems] = useState(null);
   const [revision, setRevision] = useState(0);
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -98,15 +224,18 @@ export default function LaundryReports({ operator = false }) {
     }
   }, [items, revision]);
 
-  async function change(item, action) {
+  async function change(item, action, priority) {
     if (busy) return;
-    if (action === 'resolve' && !window.confirm('Confirmi că echipamentul funcționează și poți închide sesizarea?')) return;
+    if (action === 'resolve' && !window.confirm(item.machineId
+      ? 'Confirmi că echipamentul funcționează și poți închide sesizarea?'
+      : 'Confirmi că problema s-a rezolvat și poți închide sesizarea?')) return;
     setBusy(true);
     setError('');
     setMessage('');
     try {
       await reportRequest('/' + item.id + '/' + action, {
-        body: action === 'resolve' ? { machineRevision: item.machineRevision } : {},
+        body: action === 'take' ? { priority } : action === 'resolve' && item.machineId
+          ? { machineRevision: item.machineRevision } : {},
       });
       setMessage(action === 'take' ? 'Sesizarea a fost preluată.'
         : action === 'resolve' ? 'Sesizarea a fost rezolvată și închisă.' : 'Remedierea a fost confirmată.');
@@ -119,13 +248,21 @@ export default function LaundryReports({ operator = false }) {
   }
 
   return <section className="mt-4 grid gap-4">
-    {operator && <div className="flex flex-wrap items-center gap-4">
+    {operator ? <div className="flex flex-wrap items-center gap-4">
       <a className="underline" href="/notificari">Notificări și alerte pe dispozitiv</a>
       <button type="button" className={button} disabled={busy} onClick={() => {
         setError('');
         refresh();
       }}>Reîncarcă sesizările</button>
-    </div>}
+    </div> : open ? <ReportForm onCancel={() => setOpen(false)} onSaved={() => {
+      setOpen(false);
+      setError('');
+      setMessage('Sesizare trimisă.');
+      refresh();
+    }} /> : <button type="button" className={button + ' justify-self-start'} onClick={() => {
+      setMessage('');
+      setOpen(true);
+    }}>Sesizare nouă</button>}
     {message && <p role="status">{message}</p>}
     {error && <p role="alert" className="text-red-800">{error}</p>}
     {!items && !error && <p role="status">Se încarcă sesizările…</p>}
@@ -133,16 +270,32 @@ export default function LaundryReports({ operator = false }) {
     {!!items?.length && <ul className="grid gap-3">
       {items.map(item => <li key={item.id} id={'sesizare-' + item.id}
         className="grid gap-2 rounded-xl border border-slate-300 p-4 target:border-slate-900">
-        <h2 className="font-semibold">{item.machineName} · {item.location}</h2>
-        <p className="font-semibold">{labels[item.status]}</p>
+        <h2 className="font-semibold">{item.machineName ?? categories[item.category]}</h2>
+        <p className="break-words">{item.locationType === 'room' && 'Camera '}{item.location}
+          {item.floor && ' · Etaj: ' + item.floor}</p>
+        <p className="font-semibold">{labels[item.status]} · Prioritate: {priorities[item.priority] ?? 'Nestabilită'}</p>
         <time className="text-sm text-slate-600" dateTime={item.createdAt}>{dateTime.format(new Date(item.createdAt))}</time>
         <p className="whitespace-pre-wrap break-words">{item.description}</p>
-        {operator && (item.status === 'new' || item.status === 'taken') && <div className="flex flex-wrap items-center gap-3">
-          <a className="underline" href={'/admin/echipamente?echipament=' + item.machineId}>Gestionează echipamentul</a>
+        {item.hasPhoto && <ReportPhoto src={endpoint + '/' + item.id + '/photo'} />}
+        {operator && (item.status === 'new' || item.status === 'taken') && <div className="grid gap-3">
+          {item.machineId && <a className="w-fit underline"
+            href={'/admin/echipamente?echipament=' + item.machineId}>Gestionează echipamentul</a>}
           {item.status === 'new'
-            ? <button type="button" className={button} disabled={busy} onClick={() => change(item, 'take')}>Preia sesizarea</button>
-            : <button type="button" className={button} disabled={busy} onClick={() => change(item, 'resolve')}>
-              {item.technicalStatus === 'working' ? 'Marchează rezolvată' : 'Rezolvă și repune în serviciu'}
+            ? <form className="flex flex-wrap items-end gap-3" onSubmit={event => {
+              event.preventDefault();
+              change(item, 'take', new FormData(event.currentTarget).get('priority'));
+            }}>
+              <label className="grid gap-1 font-medium">Prioritate
+                <select name="priority" className={field} defaultValue="" required disabled={busy}>
+                  <option value="" disabled>Alege prioritatea</option>
+                  {Object.entries(priorities).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <button type="submit" className={button} disabled={busy}>Preia sesizarea</button>
+            </form>
+            : <button type="button" className={button + ' justify-self-start'} disabled={busy}
+              onClick={() => change(item, 'resolve')}>
+              {item.machineId && item.technicalStatus !== 'working' ? 'Rezolvă și repune în serviciu' : 'Marchează rezolvată'}
             </button>}
         </div>}
         {!operator && item.status === 'resolved' && <button type="button" className={button}

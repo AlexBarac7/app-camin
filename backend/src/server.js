@@ -5,6 +5,7 @@ import { loadConfig } from './config.js';
 import { createDatabase } from './db.js';
 import { createApp } from './app.js';
 import { startPushDelivery } from './modules/notifications/push.js';
+import { createReportPhotoStore } from './modules/laundry/report-photos.js';
 
 try {
   const config = loadConfig();
@@ -13,7 +14,8 @@ try {
   const origins = appOrigin
     ? [...(process.env.NODE_ENV === 'production' ? [] : localOrigins), appOrigin]
     : undefined;
-  const server = createApp(database, origins, config.push?.publicKey).listen(config.port, '0.0.0.0', () => {
+  const photos = config.photos && createReportPhotoStore(config.photos);
+  const server = createApp(database, origins, config.push?.publicKey, photos).listen(config.port, '0.0.0.0', () => {
     console.log(`Backend listening on port ${config.port}.`);
   });
   const stopPushDelivery = startPushDelivery(database, config.push);

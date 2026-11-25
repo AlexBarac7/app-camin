@@ -14,7 +14,7 @@ async function notify(client, machine, userIds, kind, message, now, reportId = n
       JOIN push_subscriptions subscription USING (user_id)
       WHERE $7::boolean
     )
-    SELECT id FROM notices`, [machine.id, kind, message, now, userIds, reportId, push]);
+    SELECT id FROM notices`, [machine?.id ?? null, kind, message, now, userIds, reportId, push]);
   return rows[0]?.id;
 }
 
@@ -26,14 +26,14 @@ function equipment(machine) {
 export async function notifyReport(client, machine, report, kind, now) {
   if (kind === 'report-new') {
     const { rows } = await client.query('SELECT id FROM users WHERE can_manage_equipment');
-    await notify(client, machine, rows.map(user => user.id), kind,
-      equipment(machine) + ' are o sesizare nouă.', now, report.id);
+    const message = machine ? equipment(machine) + ' are o sesizare nouă.' : 'Sesizare nouă de întreținere.';
+    await notify(client, machine, rows.map(user => user.id), kind, message, now, report.id);
     return;
   }
   const resolved = kind === 'report-resolved';
   const status = resolved ? 'rezolvată' : 'preluată';
-  await notify(client, machine, [report.resident_id], kind,
-    'Sesizarea ta a fost ' + status + '. Echipament: ' + equipment(machine) + '.', now, report.id, resolved);
+  const message = 'Sesizarea ta a fost ' + status + '.' + (machine ? ' Echipament: ' + equipment(machine) + '.' : '');
+  await notify(client, machine, [report.resident_id], kind, message, now, report.id, resolved);
 }
 
 export async function notifyInspection(client, machine, message, now) {

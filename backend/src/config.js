@@ -29,10 +29,18 @@ export function loadConfig(env = process.env) {
       privateKey: required(env, 'VAPID_PRIVATE_KEY'),
     }
     : undefined;
+  const photos = env.PHOTO_S3_ACCESS_KEY || env.PHOTO_S3_SECRET_KEY ? {
+    endpoint: required(env, 'PHOTO_S3_ENDPOINT'),
+    bucket: required(env, 'PHOTO_S3_BUCKET'),
+    region: env.PHOTO_S3_REGION || 'us-east-1',
+    accessKeyId: required(env, 'PHOTO_S3_ACCESS_KEY'),
+    secretAccessKey: required(env, 'PHOTO_S3_SECRET_KEY'),
+  } : undefined;
   return {
     port: port(env, 'PORT'),
     database: loadDatabaseConfig(env),
     push,
+    photos,
     internalReadinessPort: env.INTERNAL_READINESS_PORT === undefined
       ? undefined : port(env, 'INTERNAL_READINESS_PORT'),
   };

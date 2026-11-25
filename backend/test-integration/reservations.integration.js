@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import sharp from 'sharp';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { createApp } from '../src/app.js';
@@ -14,7 +15,17 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
   const db = createDatabase(loadDatabaseConfig());
   t.after(() => db.close());
   await runMigrations(db, fileURLToPath(new URL('../migrations/', import.meta.url)), 'apply');
-  const server = createApp(db, undefined, 'fixture-public-key').listen(0, '127.0.0.1');
+  const objects = new Map();
+  let storageUnavailable = false;
+  const photos = {
+    async put(key, bytes) {
+      if (storageUnavailable) throw new Error('fixture storage unavailable');
+      objects.set(key, bytes);
+    },
+    async get(key) { return objects.get(key); },
+    async remove(key) { objects.delete(key); },
+  };
+  const server = createApp(db, undefined, 'fixture-public-key', photos).listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(() => server.close());
   const { rows: users } = await db.query(
@@ -395,7 +406,8 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     const reports = '/api/laundry-reports';
     const dryer = roomTwoDryers[0];
     const draft = { machineId: dryer.id, description: 'Tamburul nu se rotește.' };
-    const action = (id, name, resident, body = {}) => request(reports + '/' + id + '/' + name, 'POST', resident, body);
+    const action = (id, name, resident, body = name === 'take' ? { priority: 'normal' } : {}) =>
+      request(reports + '/' + id + '/' + name, 'POST', resident, body);
     const list = async (resident, operator = false) =>
       (await (await request(reports + (operator ? '/operator' : ''), 'GET', resident)).json()).items;
     const reportMachine = async () => (await (await request('/api/laundry-machines?availability=1')).json())
@@ -472,5 +484,75 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     const { rows: [equipment] } = await db.query(
       'SELECT technical_status, repair_verified_until FROM laundry_machines WHERE id = $1', [unconfirmed.id]);
     assert.deepEqual(equipment, { technical_status: 'working', repair_verified_until: null });
+  });
+
+  await t.test('room and common-space reports with priority and protected photos', async () => {
+    const reports = '/api/laundry-reports';
+    const room = { category: 'plumbing', locationType: 'room', location: 'Test room', floor: '2', description: 'Test leak.' };
+    const list = async (resident, operator = false) =>
+      (await (await request(reports + (operator ? '/operator' : ''), 'GET', resident)).json()).items;
+    const action = (id, name, resident, body = {}) => request(reports + '/' + id + '/' + name, 'POST', resident, body);
+    const { rows: [otherResident] } = await db.query(
+      "INSERT INTO users (email, password_hash) VALUES ('other@example.test', 'fixture') RETURNING id");
+    const token = newToken();
+    await db.query('INSERT INTO sessions (user_id, token_hash) VALUES ($1, $2)', [otherResident.id, tokenHash(token)]);
+    cookies[3] = 'camin_session=' + token;
+    const { rows: [initial] } = await db.query('SELECT count(*) FROM laundry_reservations');
+    assert.equal((await request(reports, 'POST', 1, { ...room, category: 'unknown' })).status, 400);
+    assert.equal((await request(reports, 'POST', 1, { ...room, location: ' ' })).status, 400);
+    const common = await request(reports, 'POST', 1, { ...room, locationType: 'shared', location: 'Test kitchen' });
+    assert.equal(common.status, 201);
+
+    const png = await sharp({ create: { width: 2000, height: 1000, channels: 3, background: '#456789' } })
+      .withExif({ IFD0: { ImageDescription: 'Synthetic test metadata' } }).png().toBuffer();
+    const attach = (bytes, contentType = 'image/png', filename = 'sample.png', fields = room) => {
+      const form = new FormData();
+      for (const [key, value] of Object.entries(fields)) form.set(key, value);
+      form.set('photo', new Blob([bytes], { type: contentType }), filename);
+      return fetch('http://127.0.0.1:' + server.address().port + reports, {
+        method: 'POST', headers: { origin: 'http://localhost:5173', cookie: cookies[1] }, body: form,
+      });
+    };
+    assert.equal((await attach('not a photo')).status, 422);
+    assert.equal((await attach(Buffer.alloc(10 * 1024 * 1024 + 1))).status, 413);
+    storageUnavailable = true;
+    assert.equal((await attach(png)).status, 503);
+    storageUnavailable = false;
+    const created = await attach(png);
+    assert.equal(created.status, 201);
+    const { id } = await created.json();
+    const item = (await list(1)).find(report => report.id === id);
+    assert.equal(item.category, 'plumbing');
+    assert.equal(item.floor, '2');
+    assert.equal(item.priority, null);
+    assert.equal(item.hasPhoto, true);
+    assert.equal(item.machineId, null);
+    const photo = reports + '/' + id + '/photo';
+    assert.equal((await request(photo, 'GET', 2)).status, 401);
+    assert.equal((await request(photo, 'GET', 3)).status, 404);
+    assert.equal((await request(photo, 'GET', 0)).status, 200);
+    assert.equal((await action(id, 'take', 1, { priority: 'urgent' })).status, 403);
+    assert.equal((await action(id, 'take', 0)).status, 400);
+    assert.equal((await action(id, 'take', 0, { priority: 'urgent' })).status, 204);
+    assert.equal((await action(id, 'take', 0, { priority: 'low' })).status, 204);
+    assert.equal((await list(0, true)).find(report => report.id === id).priority, 'urgent');
+    assert.equal((await action(id, 'resolve', 0)).status, 204);
+    assert.equal((await action(id, 'verify', 1)).status, 204);
+    assert.equal((await list(1)).find(report => report.id === id).status, 'verified');
+    const image = await request(photo, 'GET', 1);
+    assert.equal(image.status, 200);
+    assert.equal(image.headers.get('content-type'), 'image/jpeg');
+    assert.equal(image.headers.get('cache-control'), 'no-store');
+    const stored = await sharp(Buffer.from(await image.arrayBuffer())).metadata();
+    assert.equal(stored.format, 'jpeg');
+    assert.equal(stored.width, 1600);
+    assert.equal(stored.height, 800);
+    assert.equal(stored.exif, undefined);
+    assert.equal(objects.size, 1);
+    assert.equal((await notices(0)).filter(notice => notice.reportId === id && notice.kind === 'report-new').length, 1);
+    assert.equal((await notices(1)).filter(notice => notice.reportId === id && notice.kind === 'report-resolved').length, 1);
+    assert.equal((await db.query('SELECT count(*) FROM laundry_reservations')).rows[0].count, initial.count);
+    await db.query('UPDATE users SET can_manage_equipment = false WHERE id = $1', [users[0].id]);
+    assert.equal((await request(photo, 'GET', 0)).status, 404);
   });
 });

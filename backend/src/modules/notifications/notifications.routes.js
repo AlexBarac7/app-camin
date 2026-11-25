@@ -61,7 +61,7 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
           THEN 'expired' ELSE offer.status END AS offer_status,
         statement_timestamp() AS now
       FROM laundry_notifications notice
-      JOIN laundry_machines machine ON machine.id = notice.machine_id
+      LEFT JOIN laundry_machines machine ON machine.id = notice.machine_id
       LEFT JOIN laundry_restoration_offers offer ON offer.notification_id = notice.id
       WHERE notice.user_id = $1 ORDER BY notice.id DESC`, [res.locals.account.id]);
     res.json({

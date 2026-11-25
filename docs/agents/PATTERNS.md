@@ -17,6 +17,7 @@
 - PATTERN-009 · Serialize equipment faults with booking creation · candidate
 - PATTERN-010 · Persist browser alerts with the event that produced them · candidate
 - PATTERN-011 · Check the equipment revision before resolving a report · candidate
+- PATTERN-012 · Authorize private report attachments through the report · candidate
 
 ---
 
@@ -104,3 +105,12 @@
   revision at resolution and compare it again before showing a public
   verification mark.
 - **Example:** backend/src/modules/laundry/reports.routes.js.
+
+## PATTERN-012 · Authorize private report attachments through the report
+- **Status:** candidate
+- **How:** Save a re-encoded image under a server-generated object key and
+  store the key in the report. Keep the key in the backend. Check the report
+  author and current operator permission on every download, and serve the
+  image with a private response that disables caching.
+- **Example:** backend/src/modules/laundry/report-photos.js and
+  backend/src/modules/laundry/reports.routes.js.

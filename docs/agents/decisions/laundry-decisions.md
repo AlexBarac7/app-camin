@@ -119,3 +119,27 @@
 - **Evidence:** The owner confirmed the workflow, optional verification,
   48-hour mark, notification channels and the pilot implementation.
 - **Confirmed:** 2026-11-25
+
+## D-020 · Extend maintenance reports to rooms and shared spaces
+- **Status:** approved
+- **Rule:** Authenticated residents may report laundry equipment, rooms and
+  shared spaces. Equipment reports obtain category and location from the
+  selected inventory item. Other reports require a description, a category
+  and a room number or shared-space name. The resident may provide a floor.
+  Categories are laundry equipment, plumbing, electrical and lighting,
+  furniture and fixtures, cleanliness, and other.
+- **Triage:** Operators with equipment management permission see and take
+  all maintenance reports. They assign Low, Normal or Urgent priority when
+  taking a report. A new report has no given priority. The existing resolution,
+  optional author verification and notice workflow applies. Equipment actions
+  and the temporary verification mark apply to inventory equipment only.
+- **Photos:** A resident can include one optional photo from the camera or
+  gallery. The backend validates and resizes it, strips metadata and stores
+  the result in a private S3-compatible bucket. Keep the photo in report
+  history after resolution. The author and currently authorized operators
+  can access it through the application.
+- **Why:** Residents can report room and shared-space problems and attach
+  evidence. Operators can triage all reports through the same workflow.
+- **Evidence:** The project owner approved the full issue #16 implementation
+  plan, including the categories, priority, access and photo retention.
+- **Confirmed:** 2026-11-25

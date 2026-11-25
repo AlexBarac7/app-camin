@@ -24,6 +24,7 @@
 
 ### [Laundry reports](questions/laundry-reports.md)
 - Q-013 · How should residents report laundry equipment faults? · _answered_
+- Q-014 · How should the maintenance extension handle location, priority and photos? · _answered_
 
 ---
 
@@ -68,7 +69,7 @@
   transport, fair-use quotas, no-show definitions and consequences, maintenance
   workflow and photo storage, notification events and recipients.
 - **Who answers:** Project owner, after interviews
-- **Evidence:** [INTERVIEW.md](../../INTERVIEW.md) documents residence practices. [Q-013](questions/laundry-reports.md#q-013--how-should-residents-report-laundry-equipment-faults) records the confirmed laundry reporting scope.
+- **Evidence:** [INTERVIEW.md](../../INTERVIEW.md) documents residence practices. [Q-013 and Q-014](questions/laundry-reports.md) cover the confirmed maintenance workflow.
 
 ## Q-006 · Who manages the laundry catalog and with what permissions?
 - **Status:** open

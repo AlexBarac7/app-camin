@@ -4,6 +4,82 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-25 · Phone acceptance of optimized photo uploads
+
+The project owner confirmed that a report with a large photo submitted
+quickly from a physical phone. The attachment opened from its thumbnail,
+zoom worked, and the close button returned to the report.
+
+## 2026-11-25 · Slower phone report uploads
+
+The project owner reported an intermittent `Load failed` after submitting
+from the phone. The desktop HTTPS route returned in about 40 ms, while
+Tailscale pings to the connected iOS device ranged from 703 to 1,429 ms.
+The local database had one recent report with a photo. That observation
+did not identify which submission produced it.
+
+The form now reads the selected photo before clearing the device picker
+and resizes large images before uploading when the browser can decode them.
+The server still validates and normalizes every attachment. A synthetic
+12-megapixel JPEG fell from 6,198 KiB to 491 KiB in the browser upload test.
+The backend runs HEIC decoding in a worker so other requests can progress.
+For the test HEIC, a 100 ms timer fired after 1,729 ms before the change
+and 100 ms afterwards. Simulated connection loss verified that the form
+keeps the draft and asks the resident to check report history before retrying.
+The subsequent physical phone check is recorded above.
+
+## 2026-11-25 · Full-screen report photo viewer
+
+The project owner reported that opening an attachment in a separate tab
+made it hard to return on the phone. The report now shows an inline thumbnail.
+Tapping it opens a full-screen viewer with zoom controls, pinch and drag
+gestures, and a close button. The zoom percentage resets the image to fit
+the screen. The close button and Escape return focus to the thumbnail in
+the same report. The README describes these controls.
+
+Chromium verified the resident and operator views at 390 and 1280 pixels,
+including simulated pinch, panning, closing and focus restoration. The
+first desktop check timed out because its test fixture missed the operator
+list URL. The corrected browser check, frontend build and ledger check passed.
+
+## 2026-11-25 · Single report photo control
+
+The project owner found that the phone's upload picker offers both the
+camera and gallery. Equipment and general reports now share one
+**Încarcă o poză** control. Chromium verified file selection in both forms.
+
+## 2026-11-25 · Maintenance reports and private photos
+
+**What I asked for** — Complete the approved issue #16 scope. Extend reports
+to rooms and shared spaces, assign priority at pickup, and support one
+optional camera or gallery photo that stays in the report history.
+
+**What I got** — Migration 012 extends the existing report and notification
+tables, keeping the equipment path and the four report states. The room
+and shared-space form captures category, location and optional floor.
+Operators use the same permission for all reports and choose priority at
+pickup. The backend bounds image uploads, re-encodes them as JPEG and strips
+metadata. It checks the report author's or operator's current permission
+before downloading from private S3-compatible storage. The local Compose
+`photos` profile uses SeaweedFS. D-020 and Q-014 record the approved
+behaviour and PATTERN-012 records the attachment access practice.
+
+**Checks** — The new integration test first returned `400` instead of
+`201` because the pilot only accepted equipment reports. The 13 backend
+tests, all three PostgreSQL suites, frontend build and ledger validation
+passed after implementation. The existing equipment test fixture now
+supplies a pickup priority and keeps its original assertions. Applying
+migration 012 to a pilot test database preserved its four equipment reports.
+
+A disposable Compose stack verified upload and download against SeaweedFS.
+Chromium at 390 and 1280 pixels exercised gallery upload with a synthetic
+HEIC image, the equipment photo field, operator priority, photo retention
+after verification and access denial for another resident. The image was
+still readable through the signed storage client after restarting SeaweedFS.
+A direct anonymous request for the stored object returned `403`. The
+camera input was exercised with a file fixture. Native camera capture on a
+physical phone remains a manual acceptance check.
+
 ## 2026-11-25 · Manual acceptance of laundry reports
 
 The project owner confirmed that all cases in the manual checklist behaved
