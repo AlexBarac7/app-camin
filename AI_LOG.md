@@ -4,6 +4,58 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-25 · Full-screen report photo viewer
+
+The project owner reported that opening an attachment in a separate tab
+made it hard to return on the phone. The report now shows an inline thumbnail.
+Tapping it opens a full-screen viewer with zoom controls, pinch and drag
+gestures, and a close button. The zoom percentage resets the image to fit
+the screen. The close button and Escape return focus to the thumbnail in
+the same report. The README describes these controls.
+
+Chromium verified the resident and operator views at 390 and 1280 pixels,
+including simulated pinch, panning, closing and focus restoration. The
+first desktop check timed out because its test fixture missed the operator
+list URL. The corrected browser check, frontend build and ledger check passed.
+
+## 2026-11-25 · Single report photo control
+
+The project owner found that the phone's upload picker offers both the
+camera and gallery. Equipment and general reports now share one
+**Încarcă o poză** control. Chromium verified file selection in both forms.
+
+## 2026-11-25 · Maintenance reports and private photos
+
+**What I asked for** — Complete the approved issue #16 scope. Extend reports
+to rooms and shared spaces, assign priority at pickup, and support one
+optional camera or gallery photo that stays in the report history.
+
+**What I got** — Migration 012 extends the existing report and notification
+tables, keeping the equipment path and the four report states. The room
+and shared-space form captures category, location and optional floor.
+Operators use the same permission for all reports and choose priority at
+pickup. The backend bounds image uploads, re-encodes them as JPEG and strips
+metadata. It checks the report author's or operator's current permission
+before downloading from private S3-compatible storage. The local Compose
+`photos` profile uses SeaweedFS. D-020 and Q-014 record the approved
+behaviour and PATTERN-012 records the attachment access practice.
+
+**Checks** — The new integration test first returned `400` instead of
+`201` because the pilot only accepted equipment reports. The 13 backend
+tests, all three PostgreSQL suites, frontend build and ledger validation
+passed after implementation. The existing equipment test fixture now
+supplies a pickup priority and keeps its original assertions. Applying
+migration 012 to a pilot test database preserved its four equipment reports.
+
+A disposable Compose stack verified upload and download against SeaweedFS.
+Chromium at 390 and 1280 pixels exercised gallery upload with a synthetic
+HEIC image, the equipment photo field, operator priority, photo retention
+after verification and access denial for another resident. The image was
+still readable through the signed storage client after restarting SeaweedFS.
+A direct anonymous request for the stored object returned `403`. The
+camera input was exercised with a file fixture. Native camera capture on a
+physical phone remains a manual acceptance check.
+
 ## 2026-11-25 · Manual acceptance of laundry reports
 
 The project owner confirmed that all cases in the manual checklist behaved

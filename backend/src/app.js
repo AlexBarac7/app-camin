@@ -8,7 +8,7 @@ import { reportRoutes } from './modules/laundry/reports.routes.js';
 
 import { laundryAvailability, reservationRoutes } from './modules/laundry/reservations.routes.js';
 
-export function createApp(database, appOrigins, pushPublicKey) {
+export function createApp(database, appOrigins, pushPublicKey, photos) {
   const app = express();
   app.disable('x-powered-by');
   app.use('/api/auth', authRoutes(database, appOrigins));
@@ -31,7 +31,7 @@ export function createApp(database, appOrigins, pushPublicKey) {
     })));
   });
   app.use('/api', conditionRoutes(database, appOrigins));
-  app.use('/api/laundry-reports', reportRoutes(database, appOrigins));
+  app.use('/api/laundry-reports', reportRoutes(database, appOrigins, photos));
   app.use('/api/laundry-machines', reservationRoutes(database, appOrigins));
   app.use('/api/admin', adminRoutes(database));
   app.use('/api', healthRoutes(database));

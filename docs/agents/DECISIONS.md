@@ -26,6 +26,7 @@
 - D-017 · Deliver pilot equipment notifications in the app and through opt-in Web Push · [Laundry decisions](decisions/laundry-decisions.md)
 - D-018 · Keep resident notices unread until acknowledged · [Laundry decisions](decisions/laundry-decisions.md)
 - D-019 · Pilot digital reports for laundry equipment · [Laundry decisions](decisions/laundry-decisions.md)
+- D-020 · Extend maintenance reports to rooms and shared spaces · [Laundry decisions](decisions/laundry-decisions.md)
 
 ---
 

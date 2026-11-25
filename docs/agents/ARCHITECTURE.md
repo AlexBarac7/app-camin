@@ -19,7 +19,7 @@ activates resident accounts by invitation and gives signed-in residents a laundr
 | Agent definitions | `.claude/agents/` | Planner and builder roles | Workflow skills |
 | Frontend | `frontend/` | Romanian welcome and resident screens, plus protected service status, reservation history and database views | REST API through Vite proxy |
 | Backend | `backend/src/` | Configuration, database pool, health and auth modules, and authenticated laundry inventory, reservations, and administrative reads | PostgreSQL |
-| Local runtime | `compose.yaml` | Three services, loopback ports, persistent volume | Docker |
+| Local runtime | `compose.yaml` | App and PostgreSQL with loopback ports, plus optional private object storage under the `photos` profile | Docker |
 
 ## Data flow
 Browser :5173 → Vite /api proxy → backend :3000 → PostgreSQL db:5432.
@@ -46,7 +46,7 @@ See README.md for verified local commands. Compose uses development servers;
 frontend npm run build produces static assets. Railway is a future target only.
 
 ## Boundaries
-Live-queue, quotas, no-show policies, photo storage and the email fallback remain
+Live-queue, quotas, no-show policies and the email fallback remain
 outside the current implementation. No Railway deployment configuration or
 authorization exists yet.
 
@@ -68,3 +68,9 @@ owner-only access for residents. Equipment changes and report transitions
 serialize on the equipment row. The inventory shows the 48-hour repair
 verification mark while its expiry is active. A new report or technical
 condition change clears the mark while retaining confirmation in report history.
+
+Migration 012 extends reports to rooms and shared spaces and stores category,
+location, priority and a private photo reference. The backend re-encodes
+uploaded images and reads them from S3-compatible storage after checking the
+current account's permission. Compose runs SeaweedFS on the internal network
+and keeps photo objects in the `report_photos` volume.
