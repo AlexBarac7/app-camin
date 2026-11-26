@@ -6,6 +6,8 @@ Add new entries at the top, in reverse chronological order.
 
 ## 2026-11-26 · Notification count on the installed app icon
 
+**Model:** GPT-6.2-Sol (Codex).
+
 The owner requested the unread count on the phone's Home Screen icon. Web Push
 now includes the recipient's unread total at delivery. The service worker updates
 the icon through the Badging API where available and still shows the push alert.
@@ -24,6 +26,8 @@ that the unread count appeared on its Home Screen icon. The README includes
 the test procedure and the Android launcher limitation.
 
 ## 2026-11-26 · Cămin 3 resident portal design and report navigation
+
+**Model:** GPT-6.2-Sol (Codex).
 
 The owner chose the building-and-tree logo reference and a layout that uses the
 laptop width. Recorded the approved tokens and the screen registry in
@@ -69,6 +73,8 @@ updates. The running local database reported migrations through 015 applied.
 
 ## 2026-11-26 · Password reset by email
 
+**Model:** GPT-6.2-Sol (Codex).
+
 The owner approved D-023. **Am uitat parola** accepts an email address and
 gives the same confirmation for any valid address. SMTP sends a link for an
 existing account. Migration 015 stores the latest link's hash and its 30-minute
@@ -100,6 +106,8 @@ running throughout the fix.
 
 ## 2026-11-26 · Invitation email and resident activation password
 
+**Model:** GPT-6.2-Sol (Codex).
+
 The owner approved SMTP delivery from **Aprobă și trimite invitația** and an
 eight-character minimum on the resident activation screen. The email contains
 Romanian plain-text and HTML versions, a button for the activation link and the
@@ -118,6 +126,8 @@ Rebuilt the local Compose stack with Mailpit on loopback port 8025, applied
 migration 014, and kept the local test mailbox available for the owner.
 
 ## 2026-11-26 · Welcome, access requests and account roles
+
+**Model:** GPT-6.2-Sol (Codex).
 
 The owner approved a public email request, Admin approval and manual delivery
 of the copied invitation link. The Romanian welcome page places the message
@@ -142,11 +152,15 @@ association corrected it and the complete browser flow passed.
 
 ## 2026-11-25 · Phone acceptance of optimized photo uploads
 
+**Model:** GPT-6.2-Sol (Codex).
+
 The project owner confirmed that a report with a large photo submitted
 quickly from a physical phone. The attachment opened from its thumbnail,
 zoom worked, and the close button returned to the report.
 
 ## 2026-11-25 · Slower phone report uploads
+
+**Model:** GPT-6.2-Sol (Codex).
 
 The project owner reported an intermittent `Load failed` after submitting
 from the phone. The desktop HTTPS route returned in about 40 ms, while
@@ -166,6 +180,8 @@ The subsequent physical phone check is recorded above.
 
 ## 2026-11-25 · Full-screen report photo viewer
 
+**Model:** GPT-6.2-Sol (Codex).
+
 The project owner reported that opening an attachment in a separate tab
 made it hard to return on the phone. The report now shows an inline thumbnail.
 Tapping it opens a full-screen viewer with zoom controls, pinch and drag
@@ -180,11 +196,15 @@ list URL. The corrected browser check, frontend build and ledger check passed.
 
 ## 2026-11-25 · Single report photo control
 
+**Model:** GPT-6.2-Sol (Codex).
+
 The project owner found that the phone's upload picker offers both the
 camera and gallery. Equipment and general reports now share one
 **Încarcă o poză** control. Chromium verified file selection in both forms.
 
 ## 2026-11-25 · Maintenance reports and private photos
+
+**Model:** GPT-6.2-Sol (Codex).
 
 **What I asked for** — Complete the approved issue #16 scope. Extend reports
 to rooms and shared spaces, assign priority at pickup, and support one
@@ -218,6 +238,8 @@ physical phone remains a manual acceptance check.
 
 ## 2026-11-25 · Manual acceptance of laundry reports
 
+**Model:** GPT-6.2-Sol (Codex).
+
 The project owner confirmed that all cases in the manual checklist behaved
 as expected. The checklist covered report submission, access permissions,
 concurrent actions, restoration and Reservations, optional verification and
@@ -225,6 +247,8 @@ checkmark removal, and Web Push with the app closed. The owner did not
 specify device models or browser versions.
 
 ## 2026-11-25 · Laundry equipment reports
+
+**Model:** GPT-6.2-Sol (Codex).
 
 **What I asked for** — Implement the approved laundry reporting pilot. Any
 invited resident can report a washer or dryer. An authorized operator takes
@@ -262,6 +286,8 @@ Web Push deliveries. The owner's manual device check is recorded above.
 
 ## 2026-11-25 · Issue #9 delivery checks
 
+**Model:** GPT-6.2-Sol (Codex).
+
 The owner confirmed Web Push delivery with the desktop tab closed and verified
 that clicking the alert opens the unread notice in the resident account. The
 owner also confirmed the flow on iPhone through the installed web app. The
@@ -276,6 +302,8 @@ Web Push delivery and navigation on a physical Android device remain pending.
 
 ## 2026-11-25 · Unread count and acknowledgement
 
+**Model:** GPT-6.2-Sol (Codex).
+
 The resident navigation shows the number of unread notifications. Selecting
 **OK** acknowledges one notice and keeps it in the inbox. Migration 009
 persists the read timestamp. Existing notices start unread, as approved in D-018.
@@ -287,6 +315,8 @@ and the ledger check passed. Chromium with a simulated server verified
 the count changing from 0 to 2 to 1 to 0, with notices kept after reloading.
 
 ## 2026-11-25 · Laundry notifications and restoration offers
+
+**Model:** GPT-6.2-Sol (Codex).
 
 Implemented the three reservation notification flows in issue #9. Equipment
 shutdown publishes targeted notices. An authorized operator can send one
@@ -314,12 +344,16 @@ test devices and a private HTTPS test origin.
 
 ## 2026-11-24 · Clear calendar notices after equipment restoration
 
+**Model:** GPT-6.2-Astra (Codex).
+
 The resident calendar shows cancellations for the current fault. Restoration
 clears the notices while keeping cancelled bookings and their reason in history.
 Migration 007 tracks the shutdown timestamp. For machines already broken at
 upgrade, it uses the most recent recorded fault cancellation if one exists.
 
 ## 2026-11-24 · Explain retained bookings during equipment inspection
+
+**Model:** GPT-6.2-Astra (Codex).
 
 The resident calendar now explains that a booking affected by inspection is
 kept and the equipment can be used after restoration within the reserved usage
