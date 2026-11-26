@@ -1,16 +1,19 @@
 import LaundryStatus from './LaundryStatus.jsx';
 import { useEffect, useState } from 'react';
 import LaundryCalendar, { upcomingInterval } from './LaundryCalendar.jsx';
-import Notifications, { disableDevicePush } from './Notifications.jsx';
+import Notifications, { disableDevicePush, syncDeviceBadge } from './Notifications.jsx';
 import LaundryReports, { ReportEquipment } from './LaundryReports.jsx';
+import logo from './camin-3-logo.png';
 
 const invalidLink = 'Invitația nu mai este valabilă. Cere o invitație nouă.';
 const invalidResetLink = 'Linkul de resetare nu mai este valabil. Cere un link nou.';
 const unavailable = 'Momentan nu putem finaliza cererea. Încearcă din nou.';
-const buttonStyle = 'rounded-lg bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-900 disabled:opacity-60';
-const authLinkStyle = 'w-fit rounded font-semibold text-teal-900 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4';
+const buttonStyle = 'camin-primary';
+const authLinkStyle = 'camin-link';
+const personalReportsPath = '/sesizari';
+const operatorReportsPath = '/admin/sesizari';
 
-const route = window.location.pathname;
+const route = window.location.pathname.replace(/\/+$/, '') || '/';
 const tokenRoute = route === '/activeaza' || route === '/reseteaza-parola';
 const linkToken = tokenRoute ? window.location.hash.slice(1) : '';
 if (tokenRoute && window.location.hash) {
@@ -40,7 +43,7 @@ function Field({ name, label, type, autoComplete, error }) {
       <label htmlFor={name} className="font-medium">{label}</label>
       <input id={name} name={name} type={type} autoComplete={autoComplete} required
         aria-invalid={error ? true : undefined} aria-describedby={error ? name + '-error' : undefined}
-        className="w-full rounded-lg border border-slate-400 bg-white px-3 py-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900" />
+        className="camin-control w-full" />
       {error && <p id={name + '-error'} role="alert" className="text-sm text-red-800">{error}</p>}
     </div>
   );
@@ -111,7 +114,7 @@ export function AccessForm({ activation = false, reset = false, embedded = false
         error={fieldErrors.confirmation} autoComplete="new-password" />}
       {!choosePassword && <a className={authLinkStyle} href="/am-uitat-parola">Am uitat parola</a>}
       {error && <p role="alert" className="text-sm text-red-800">{error}</p>}
-      <button className={buttonStyle + (embedded ? ' bg-teal-950 hover:bg-teal-800' : '')} disabled={pending}>
+      <button className={buttonStyle} disabled={pending}>
         {pending ? 'Se trimite…' : reset ? 'Schimbă parola' : activation ? 'Activează contul' : 'Autentifică-te'}
       </button>
     </form>
@@ -150,27 +153,9 @@ function PasswordResetRequest() {
   </div>;
 }
 
-function Account() {
-  const [account, setAccount] = useState(null);
+function Account({ account }) {
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    async function loadAccount() {
-      try {
-        const response = await authRequest('session');
-        const account = await response.json();
-        if (active) setAccount(account);
-      } catch (failure) {
-        if (!active) return;
-        if (failure.status === 401) window.location.replace('/autentificare');
-        else setError(unavailable);
-      }
-    }
-    loadAccount();
-    return () => { active = false; };
-  }, []);
 
   async function logout() {
     setPending(true);
@@ -178,6 +163,7 @@ function Account() {
     try {
       await disableDevicePush().catch(() => {});
       await authRequest('logout', {});
+      await syncDeviceBadge(0);
       window.location.replace('/autentificare');
     } catch {
       setError(unavailable);
@@ -198,7 +184,7 @@ function Account() {
           <nav aria-label="Administrare" className="grid gap-2 border-t border-slate-200 pt-4">
             {account.role === 'admin' && <a className="underline" href="/admin/cereri-acces">Cereri de acces și roluri</a>}
             <a className="underline" href="/admin/echipamente">Gestionează echipamentele</a>
-            <a className="underline" href="/admin/sesizari">Sesizări de întreținere</a>
+            <a className="underline" href={operatorReportsPath}>Sesizări de întreținere</a>
             <a className="underline" href="/admin/rezervari">Istoricul rezervărilor</a>
             {account.role === 'admin' && <>
               <a className="underline" href="/admin/stare-servicii">Starea serviciilor</a>
@@ -211,21 +197,18 @@ function Account() {
         </button>
       </>}
       {error && <p role="alert" className="text-red-800">{error}</p>}
-      {!account && !error && <p role="status">Se verifică sesiunea…</p>}
     </div>
   );
 }
 
 const laundryRooms = [
-  { id: '1', path: '/spalatorie/1', name: 'Spălătoria 1' },
-  { id: '2', path: '/spalatorie/2', name: 'Spălătoria 2' },
-  { id: 'uscatorie', path: '/spalatorie/uscatorie', name: 'Uscătoria' },
+  { id: '1', path: '/spalatorie/1', name: 'Spălătoria 1', accent: 'wash-first' },
+  { id: '2', path: '/spalatorie/2', name: 'Spălătoria 2', accent: 'wash-second' },
+  { id: 'uscatorie', path: '/spalatorie/uscatorie', name: 'Uscătoria', accent: 'dry' },
 ];
 
-const linkFocus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
-
-function ResidentNav({ inboxUnreadCount }) {
-  const [unreadCount, setUnreadCount] = useState(0);
+function ResidentNav({ inboxUnreadCount, canManage }) {
+  const [unreadCount, setUnreadCount] = useState(null);
   useEffect(() => {
     if (route === '/notificari') return;
     const controller = new AbortController();
@@ -237,7 +220,7 @@ function ResidentNav({ inboxUnreadCount }) {
         const response = await fetch('/api/notifications/unread-count', {
           signal: controller.signal, cache: 'no-store',
         });
-        if (response.status === 401) setUnreadCount(0);
+        if (response.status === 401 && !controller.signal.aborted) setUnreadCount(null);
         if (!response.ok) return;
         const data = await response.json();
         if (!controller.signal.aborted) setUnreadCount(data.unreadCount);
@@ -257,16 +240,17 @@ function ResidentNav({ inboxUnreadCount }) {
     };
   }, []);
   const count = route === '/notificari' ? inboxUnreadCount : unreadCount;
+  useEffect(() => { void syncDeviceBadge(count); }, [count]);
   return (
-    <nav aria-label="Navigare principală" className="mb-5 flex flex-wrap gap-2">
-      {[['/resurse', 'Resurse'], ['/sesizari', 'Sesizările mele'], ['/notificari', 'Notificări'],
+    <nav aria-label="Navigare principală" className="resident-navigation">
+      {[['/resurse', 'Resurse'], canManage ? [operatorReportsPath, 'Sesizări'] : [personalReportsPath, 'Sesizările mele'], ['/notificari', 'Notificări'],
         ['/cont', 'Contul meu']].map(([path, label]) => {
         const showCount = path === '/notificari' && count > 0;
-        return <a key={path} href={path} aria-current={route === path ? 'page' : undefined}
-          className={'inline-flex items-center gap-2 rounded-lg px-3 py-3 font-semibold aria-[current=page]:bg-slate-900 aria-[current=page]:text-white hover:underline ' + linkFocus}>
+        const current = route === path ? 'page' : path === '/resurse' && currentRoom ? 'location' : undefined;
+        return <a key={path} href={path} aria-current={current}>
           {label}
           {showCount && <>
-            <span aria-hidden="true" className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-red-700 px-1.5 text-sm text-white tabular-nums">
+            <span aria-hidden="true" className="resident-unread">
               {count}
             </span>
             <span className="sr-only">{count === 1 ? ', 1 mesaj necitit' : ', ' + count + ' mesaje necitite'}</span>
@@ -275,6 +259,16 @@ function ResidentNav({ inboxUnreadCount }) {
       })}
     </nav>
   );
+}
+
+export function CaminBrand() {
+  return <a className="camin-brand" href="/"><img src={logo} alt="" width="44" height="44" /><span>Cămin 3</span></a>;
+}
+
+function EquipmentArt({ accent }) {
+  return <span aria-hidden="true" className="equipment-art" data-accent={accent}>
+    <span className="equipment-drawing"><span /></span>
+  </span>;
 }
 
 const technicalStatus = {
@@ -293,56 +287,57 @@ const occupancy = {
   unspecified: 'Neprecizată',
 };
 
-function EquipmentCard({ machine, selected, onSelect, onChange }) {
+function EquipmentCard({ machine, selected, onSelect, onChange, canReport }) {
   const dryer = machine.type === 'dryer';
 
   return (
-    <li>
-      <details className="rounded-xl border border-slate-300" open={selected ? true : undefined}>
-        <summary className={'cursor-pointer rounded-xl px-4 py-4 ' + linkFocus}>
-          <span className="ml-1 font-semibold">
-            {dryer ? 'Uscător' : 'Mașină de spălat'}{' '}
-            <span className={'rounded border border-slate-300 bg-white px-2 py-0.5 ' + (dryer ? 'text-red-700' : 'text-black')}>
-              {machine.label}
-            </span>
-          </span>
-          <span className="mt-2 block text-sm text-slate-600">{machine.location}</span>
+    <li className={'camin-panel equipment-card' + (selected ? ' equipment-selected' : '')}>
+      <div className="equipment-card-heading">
+        <EquipmentArt accent={dryer ? 'dry' : 'wash-first'} />
+        <div className="min-w-0">
+          <h2>{dryer ? 'Uscător' : 'Mașină de spălat'} {machine.label}</h2>
+          <p className="camin-muted">{machine.location}</p>
           <span className="mt-2 flex flex-wrap gap-2">
             <LaundryStatus status={machine.status}>{occupancy[machine.status]}</LaundryStatus>
             {machine.status === 'occupied' && machine.technicalStatus === 'inspection' &&
               <LaundryStatus status="inspection">Verificare după ciclu</LaundryStatus>}
             {Date.parse(machine.repairVerifiedUntil) > Date.now() &&
-              <span className="rounded-full bg-green-50 px-2 py-1 text-sm font-medium text-green-800">
+              <span className="camin-tag" data-tone="success">
                 <span aria-hidden="true">✓ </span>Remediere verificată
               </span>}
           </span>
           {machine.nextReservation && <span className="mt-2 block text-sm">
             Următoarea rezervare · {upcomingInterval(machine.nextReservation)}
           </span>}
-        </summary>
-        <div className="grid gap-3 border-t border-slate-200 px-4 py-4 text-sm">
+        </div>
+      </div>
+      <div className="equipment-card-actions">
+        <div className="grid gap-2 text-sm">
           <p><strong>Stare tehnică</strong> · <LaundryStatus status={machine.technicalStatus}>{technicalStatus[machine.technicalStatus]}</LaundryStatus></p>
           <p><strong>Program</strong> · luni–vineri, 08:00–20:00</p>
-          <button type="button" className={buttonStyle} aria-expanded={selected} onClick={onSelect}>
+        </div>
+        <div className="grid items-start gap-3">
+          <button type="button" className={machine.status === 'available' && !selected ? buttonStyle : 'camin-control'}
+            aria-expanded={selected} aria-controls={selected ? `calendar-${machine.id}` : undefined} onClick={onSelect}>
             {selected ? 'Închide calendarul' : 'Vezi calendarul'}
           </button>
-          {selected && <LaundryCalendar machine={machine} onChange={onChange} />}
-          <ReportEquipment machine={machine} onChange={onChange} />
+          {canReport && <ReportEquipment machine={machine} onChange={onChange} />}
         </div>
-      </details>
+      </div>
+      {selected && <div id={`calendar-${machine.id}`} className="equipment-calendar"><LaundryCalendar machine={machine} onChange={onChange} /></div>}
     </li>
   );
 }
 
-function Resources({ room }) {
-  const [canManage, setCanManage] = useState(false);
-  const [machines, setMachines] = useState(null);
+function Resources({ room, canManage }) {
+  const [machines, setMachines] = useState(() => room ? null : []);
   const [selectedMachine, setSelectedMachine] = useState(() =>
     Number(new URLSearchParams(window.location.search).get('echipament')) || null);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState(false);
 
   useEffect(() => {
+    if (!room) return;
     const controller = new AbortController();
     let timer;
     const refresh = () => setRevision(value => value + 1);
@@ -353,7 +348,7 @@ function Resources({ room }) {
     async function loadResources() {
       let refreshAfter = 30_000;
       try {
-        const response = await fetch(room ? '/api/laundry-machines?availability=1' : '/api/auth/session', {
+        const response = await fetch('/api/laundry-machines?availability=1', {
           signal: controller.signal,
         });
         if (response.status === 401) {
@@ -361,7 +356,7 @@ function Resources({ room }) {
           return;
         }
         if (!response.ok) throw new Error(unavailable);
-        const inventory = room ? (await response.json()).filter(machine => machine.room === room.id) : [];
+        const inventory = (await response.json()).filter(machine => machine.room === room.id);
         if (controller.signal.aborted) return;
         for (const machine of inventory) {
           for (const changeAt of [machine.nextStatusAt, machine.repairVerifiedUntil].filter(Boolean)) {
@@ -374,14 +369,12 @@ function Resources({ room }) {
       } catch {
         if (!controller.signal.aborted) setError(true);
       } finally {
-        if (room && !controller.signal.aborted) timer = setTimeout(refresh, refreshAfter);
+        if (!controller.signal.aborted) timer = setTimeout(refresh, refreshAfter);
       }
     }
 
-    if (!room) fetch('/api/equipment-access', { signal: controller.signal })
-      .then(response => setCanManage(response.ok)).catch(() => {});
     loadResources();
-    if (room) document.addEventListener('visibilitychange', refreshOnReturn);
+    document.addEventListener('visibilitychange', refreshOnReturn);
     return () => {
       controller.abort();
       clearTimeout(timer);
@@ -392,24 +385,26 @@ function Resources({ room }) {
   return (
     <div className="mt-5 grid gap-4">
       {!room && canManage && <a className="w-fit rounded py-2 underline" href="/admin/echipamente">Gestionează echipamentele</a>}
-      {room && <a className={'w-fit rounded py-2 underline ' + linkFocus} href="/resurse">Înapoi la Resurse</a>}
       {error && <p role="alert" className="text-red-800">{unavailable}</p>}
-      {!machines && !error && <p role="status">{room ? 'Se încarcă inventarul…' : 'Se verifică sesiunea…'}</p>}
+      {!machines && !error && <p role="status">Se încarcă inventarul…</p>}
       {machines && (room ? (
         machines.length ? (
-          <ul className="grid gap-3">
+          <ul className="resident-card-grid equipment-grid">
             {machines.map(machine => <EquipmentCard key={machine.id} machine={machine}
               selected={selectedMachine === machine.id}
+              canReport={!canManage}
               onSelect={() => setSelectedMachine(selectedMachine === machine.id ? null : machine.id)}
               onChange={() => setRevision(value => value + 1)} />)}
           </ul>
         ) : <p role="status">Inventarul acestei încăperi nu a fost încă publicat.</p>
       ) : (
-        <ul className="grid gap-3">
+        <ul className="resident-card-grid">
           {laundryRooms.map(item => (
             <li key={item.id}>
-              <a href={item.path} className={'block rounded-xl border border-slate-300 p-4 font-semibold hover:bg-slate-50 ' + linkFocus}>
-                {item.name} <span className="font-normal text-slate-600">– subsol</span>
+              <a href={item.path} className="camin-panel resource-card">
+                <EquipmentArt accent={item.accent} />
+                <span className="resource-card-copy"><strong>{item.name}</strong><span className="camin-muted">Subsol</span></span>
+                <span className="resource-card-action"><span>Vezi echipamentele</span><span aria-hidden="true">→</span></span>
               </a>
             </li>
           ))}
@@ -428,7 +423,8 @@ const headings = {
   '/notificari': 'Notificări',
   '/reseteaza-parola': 'Resetează parola',
   '/resurse': 'Resurse',
-  '/sesizari': 'Sesizările mele',
+  [personalReportsPath]: 'Sesizările mele',
+  [operatorReportsPath]: 'Sesizări de întreținere',
   '/spalatorie': 'Resurse',
   ...Object.fromEntries(laundryRooms.map(room => [room.path, room.name])),
 };
@@ -441,28 +437,74 @@ if (isResidentRoute) {
 
 export default function ResidentAccess() {
   const legacyRoute = route === '/spalatorie';
-  const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
+  const reportsRoute = route === personalReportsPath || route === operatorReportsPath;
+  const showNav = Boolean(route === '/cont' || route === '/notificari' || route === '/resurse' || reportsRoute || currentRoom);
+  const [account, setAccount] = useState(null);
+  const [sessionError, setSessionError] = useState(false);
+  const [inboxUnreadCount, setInboxUnreadCount] = useState(null);
   useEffect(() => {
     if (legacyRoute) window.location.replace('/resurse');
   }, [legacyRoute]);
 
-  const showNav = route === '/cont' || route === '/notificari' || route === '/resurse' || route === '/sesizari' || currentRoom;
+  useEffect(() => {
+    if (!showNav) return;
+    const controller = new AbortController();
+    async function loadAccount() {
+      try {
+        const response = await fetch('/api/auth/session', { signal: controller.signal, cache: 'no-store' });
+        if (controller.signal.aborted) return;
+        if (response.status === 401) {
+          const notice = route === '/notificari' && /^#notificare-(\d+)$/.exec(window.location.hash)?.[1];
+          window.location.replace('/autentificare' + (notice ? '?notificare=' + notice : ''));
+          return;
+        }
+        if (!response.ok) throw new Error(unavailable);
+        const current = await response.json();
+        if (controller.signal.aborted) return;
+        if (route === personalReportsPath && current.role !== 'resident') {
+          window.location.replace(operatorReportsPath + window.location.hash);
+          return;
+        }
+        setAccount(current);
+      } catch {
+        if (!controller.signal.aborted) setSessionError(true);
+      }
+    }
+    loadAccount();
+    return () => controller.abort();
+  }, [showNav]);
+
+  const canManage = account?.role === 'admin' || account?.role === 'administrator';
   let content;
-  if (route === '/cont') content = <Account />;
+  if (showNav && !account) content = sessionError ? <p role="alert">{unavailable}</p> : <p role="status">Se verifică sesiunea…</p>;
+  else if (route === '/cont') content = <Account account={account} />;
   else if (route === '/am-uitat-parola') content = <PasswordResetRequest />;
   else if (route === '/notificari') content = <Notifications onUnreadCount={setInboxUnreadCount} />;
-  else if (route === '/sesizari') content = <LaundryReports />;
-  else if (route === '/resurse' || currentRoom) content = <Resources room={currentRoom} />;
+  else if (route === operatorReportsPath) content = canManage
+    ? <LaundryReports operator heading={headings[route]} />
+    : <div className="grid gap-3"><h1>Acces interzis</h1><a className={authLinkStyle} href={personalReportsPath}>Sesizările mele</a></div>;
+  else if (route === personalReportsPath) content = <LaundryReports heading={headings[route]} />;
+  else if (route === '/resurse' || currentRoom) content = <Resources room={currentRoom} canManage={canManage} />;
   else if (legacyRoute) content = <a href="/resurse">Deschide Resurse</a>;
   else content = <AccessForm activation={route === '/activeaza'} reset={route === '/reseteaza-parola'} />;
 
-  return (
-    <main className="mx-auto max-w-lg px-4 py-10 sm:py-20">
-      {showNav && <ResidentNav inboxUnreadCount={inboxUnreadCount} />}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{headings[route]}</h1>
-        {content}
-      </div>
-    </main>
+  if (showNav) return (
+    <div className="camin-design resident-shell">
+      <aside className="resident-sidebar">
+        <CaminBrand />
+        {account && <ResidentNav inboxUnreadCount={inboxUnreadCount} canManage={canManage} />}
+        <a className="resident-profile" href="/cont"><span aria-hidden="true">C</span><strong>Contul meu</strong></a>
+      </aside>
+      <main className="resident-page">
+        {currentRoom && <p className="resident-breadcrumb"><a href="/resurse">Resurse</a> / {currentRoom.name}</p>}
+        {!reportsRoute && <h1>{route === '/resurse' ? 'Resursele căminului' : headings[route]}</h1>}
+        {route === '/resurse' && <p className="camin-muted">Alege spațiul pe care dorești să îl utilizezi.</p>}
+        <div className={route === '/cont' ? 'camin-panel resident-account' : undefined}>{content}</div>
+      </main>
+    </div>
   );
+
+  return <main className={'camin-design standalone-access' + (route === '/autentificare' ? ' access-background' : '')}>
+    <div className="camin-panel"><CaminBrand /><h1>{headings[route]}</h1>{content}</div>
+  </main>;
 }

@@ -312,9 +312,13 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   assert.equal((await local('/api/laundry-reports/operator', undefined, fixtureCookie)).status, 200);
   assert.equal((await local('/api/equipment-access', undefined, fixtureCookie)).status, 204);
 
-  const report = await local('/api/laundry-reports', {
+  const reportDraft = {
     category: 'other', locationType: 'shared', location: 'Test', description: 'Test de integrare',
-  }, activeCookie);
+  };
+  for (const operatorCookie of [otherCookie, testCookie, fixtureCookie]) {
+    assert.equal((await local('/api/laundry-reports', reportDraft, operatorCookie)).status, 403);
+  }
+  const report = await local('/api/laundry-reports', reportDraft, activeCookie);
   assert.equal(report.status, 201);
   const { id: reportId } = await report.json();
   for (const operatorCookie of [otherCookie, testCookie, fixtureCookie]) {

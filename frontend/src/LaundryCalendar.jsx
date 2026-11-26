@@ -4,13 +4,15 @@ import { useEffect, useRef, useState } from 'react';
 const timeZone = 'Europe/Bucharest';
 const dateFormat = new Intl.DateTimeFormat('sv-SE', { timeZone, dateStyle: 'short' });
 const dayFormat = new Intl.DateTimeFormat('ro-RO', { timeZone: 'UTC', dateStyle: 'full' });
+const weekdayFormat = new Intl.DateTimeFormat('ro-RO', { timeZone: 'UTC', weekday: 'short' });
+const monthFormat = new Intl.DateTimeFormat('ro-RO', { timeZone: 'UTC', month: 'long', year: 'numeric' });
 const timeFormat = new Intl.DateTimeFormat('ro-RO', { timeZone, hour: '2-digit', minute: '2-digit' });
 const minute = 60_000;
 const step = 5 * minute;
 const handover = 10 * minute;
 const closingExtension = 15 * minute;
-const control = 'rounded-lg border border-slate-400 bg-white px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60';
-const primary = 'rounded-lg bg-slate-900 px-3 py-2 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60';
+const control = 'camin-control';
+const primary = 'camin-primary';
 const time = value => timeFormat.format(new Date(value));
 const interval = (start, end) => time(start) + '–' + time(end);
 
@@ -75,7 +77,7 @@ async function request(path, options) {
   return response;
 }
 
-function CalendarDay({ machine, day, onChange }) {
+function CalendarDay({ machine, day, onChange, children }) {
   const [data, setData] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const [revision, setRevision] = useState(0);
@@ -157,96 +159,137 @@ function CalendarDay({ machine, day, onChange }) {
   const useEnd = end && (end === +new Date(calendar.closesAt) ? end : end - handover);
 
   return (
-    <div className="grid gap-3">
-      {feedback && <div ref={feedbackRegion} tabIndex={-1}>
-        {feedback.error ? <p role="alert" className="text-red-800">{feedback.text}</p>
-          : <p role="status">{feedback.text}</p>}
-      </div>}
-      {!calendar && (feedback?.error
-        ? <button type="button" className={control} onClick={() => {
-          setFeedback(null);
-          setRevision(value => value + 1);
-        }}>Reîncarcă data</button>
-        : <p role="status">Se încarcă intervalele…</p>)}
-      {machine.technicalStatus === 'broken' && calendar?.cancellations?.map((entry, index) => <p key={index} className="rounded-lg bg-amber-50 p-3">
-        Rezervarea ta {interval(entry.startsAt, entry.endsAt)} · <LaundryStatus status="cancelled">Anulată</LaundryStatus> · {entry.reason}
-      </p>)}
-      {calendar && !calendar.bookable && <p>Rezervare indisponibilă pentru acest echipament.</p>}
-      {calendar && !calendar.open && <p><LaundryStatus status="unavailable">Închis</LaundryStatus></p>}
-      {calendar?.open && !blocks.length && <p>Nu mai sunt intervale pentru această zi.</p>}
-      {!!blocks.length && (
-        <ul aria-label="Intervalele zilei" className="grid gap-2">
-          {blocks.map(({ start, end, reservation }) => (
-            <li key={start} className="grid gap-1 rounded-lg bg-slate-100 p-2">
-              <span>{interval(start, end)} · {reservation?.hold
-                ? <LaundryStatus status="unavailable">Indisponibil temporar</LaundryStatus> : reservation
-                ? <LaundryStatus status="reserved">{reservation.id ? 'Rezervarea ta' : machine.technicalStatus === 'inspection' ? 'Rezervat' : 'Ocupat'}</LaundryStatus>
-                : calendar.bookable ? <LaundryStatus status="available">Liber</LaundryStatus>
-                  : <LaundryStatus status="unavailable">Indisponibil</LaundryStatus>}
-              </span>
-              {reservation?.id && <>
-                {machine.technicalStatus === 'inspection' && !calendar.bookable &&
-                  currentTime < Date.parse(reservation.useEndsAt) &&
-                  (start > currentTime || machine.status === 'inspection') && (
-                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
-                      {machine.status === 'occupied' ? 'Echipamentul va fi verificat după ciclul curent.' : 'Echipamentul este în verificare.'}
-                      {' '}Rezervarea ta este păstrată. Poți folosi echipamentul după repunerea în serviciu, în timpul rezervat pentru utilizare.
-                    </p>
-                  )}
-                <span>Utilizare {interval(start, reservation.useEndsAt)}</span>
-                {+new Date(reservation.useEndsAt) < end && <span><LaundryStatus status="handover">Predare</LaundryStatus> {interval(reservation.useEndsAt, end)}</span>}
-                {start > currentTime && <button type="button" className={control + ' justify-self-start'}
-                  disabled={pending} onClick={event => mutate(event, reservation.id)}>Anulează rezervarea</button>}
-              </>}
-            </li>
-          ))}
-        </ul>
-      )}
-      {calendar?.open && calendar.bookable && (options.size ? (
-        <form className="grid gap-3" onSubmit={event => mutate(event)}>
-          <fieldset disabled={pending} className="grid gap-3">
-            <legend className="font-semibold">Alege intervalul</legend>
-            <label className="grid gap-1">
-              Început
-              <select className={control} value={start}
-                onChange={event => setSelection({ start: +event.target.value, end: 0 })} required>
-                <option value={0} disabled>Alege ora</option>
-                {[...options.keys()].map(value => <option key={value} value={value}>{time(value)}</option>)}
-              </select>
-            </label>
-            <label className="grid gap-1">
-              Sfârșitul blocului
-              <select className={control} value={end} disabled={!start}
-                onChange={event => setSelection({ start, end: +event.target.value })} required>
-                <option value={0} disabled>Alege ora</option>
-                {endings.map(value => <option key={value} value={value}>{time(value)}</option>)}
-              </select>
-            </label>
-            <div aria-live="polite">
-              {end > 0 && <>
-                <p>Utilizare {interval(start, useEnd)}</p>
-                {useEnd < end && <p><LaundryStatus status="handover">Predare</LaundryStatus> {interval(useEnd, end)}</p>}
-              </>}
-            </div>
-            <button className={primary} disabled={!end}>Confirmă rezervarea</button>
-          </fieldset>
-        </form>
-      ) : <p>Nu poți face o rezervare pentru această zi. Rezervările se pot face cu până la 7 zile în avans.</p>)}
+    <div className="booking-layout">
+      <div className="camin-panel booking-availability">
+        {children}
+        <h3 className="booking-availability-title">Disponibilitatea zilei</h3>
+        {feedback && <div ref={feedbackRegion} tabIndex={-1}>
+          {feedback.error ? <p role="alert" className="camin-notice" data-tone="error">{feedback.text}</p>
+            : <p role="status" className="camin-notice" data-tone="success">{feedback.text}</p>}
+        </div>}
+        {!calendar && (feedback?.error
+          ? <button type="button" className={control} onClick={() => {
+            setFeedback(null);
+            setRevision(value => value + 1);
+          }}>Reîncarcă data</button>
+          : <p role="status" className="camin-notice" data-tone="info">Se încarcă intervalele…</p>)}
+        {machine.technicalStatus === 'broken' && calendar?.cancellations?.map((entry, index) => <p key={index} className="camin-notice" data-tone="warning">
+          Rezervarea ta {interval(entry.startsAt, entry.endsAt)} · <LaundryStatus status="cancelled">Anulată</LaundryStatus> · {entry.reason}
+        </p>)}
+        {calendar && !calendar.bookable && <p>Rezervare indisponibilă pentru acest echipament.</p>}
+        {calendar && !calendar.open && <p><LaundryStatus status="unavailable">Închis</LaundryStatus></p>}
+        {calendar?.open && !blocks.length && <p>Nu mai sunt intervale pentru această zi.</p>}
+        {!!blocks.length && (
+          <ul aria-label="Intervalele zilei" className="booking-intervals">
+            {blocks.map(({ start, end, reservation }) => (
+              <li key={start}>
+                <div className="booking-interval-row"><strong>{interval(start, end)}</strong>{reservation?.hold
+                  ? <LaundryStatus status="unavailable">Indisponibil temporar</LaundryStatus> : reservation
+                  ? <LaundryStatus status="reserved">{reservation.id ? 'Rezervarea ta' : machine.technicalStatus === 'inspection' ? 'Rezervat' : 'Ocupat'}</LaundryStatus>
+                  : calendar.bookable ? <LaundryStatus status="available">Liber</LaundryStatus>
+                    : <LaundryStatus status="unavailable">Indisponibil</LaundryStatus>}
+                </div>
+                {reservation?.id && <>
+                  {machine.technicalStatus === 'inspection' && !calendar.bookable &&
+                    currentTime < Date.parse(reservation.useEndsAt) &&
+                    (start > currentTime || machine.status === 'inspection') && (
+                      <p className="camin-notice" data-tone="warning">
+                        {machine.status === 'occupied' ? 'Echipamentul va fi verificat după ciclul curent.' : 'Echipamentul este în verificare.'}
+                        {' '}Rezervarea ta este păstrată. Poți folosi echipamentul după repunerea în serviciu, în timpul rezervat pentru utilizare.
+                      </p>
+                    )}
+                  <span>Utilizare {interval(start, reservation.useEndsAt)}</span>
+                  {+new Date(reservation.useEndsAt) < end && <span><LaundryStatus status="handover">Predare</LaundryStatus> {interval(reservation.useEndsAt, end)}</span>}
+                  {start > currentTime && <button type="button" className={control + ' justify-self-start'}
+                    disabled={pending} onClick={event => mutate(event, reservation.id)}>Anulează rezervarea</button>}
+                </>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div className="camin-panel booking-selection">
+        <h3>Alege intervalul</h3>
+        <p className="camin-muted">{dayFormat.format(new Date(day))}</p>
+        {calendar?.open && calendar.bookable && (options.size ? (
+          <form className="grid gap-3" onSubmit={event => mutate(event)}>
+            <fieldset disabled={pending} className="grid gap-3">
+              <div className="grid gap-1">
+                <label htmlFor={'start-' + machine.id}>Început</label>
+                <select id={'start-' + machine.id} className={control} value={start}
+                  onChange={event => setSelection({ start: +event.target.value, end: 0 })} required>
+                  <option value={0} disabled>Alege ora</option>
+                  {[...options.keys()].map(value => <option key={value} value={value}>{time(value)}</option>)}
+                </select>
+              </div>
+              <div className="grid gap-1">
+                <label htmlFor={'end-' + machine.id}>Sfârșitul blocului</label>
+                <select id={'end-' + machine.id} className={control} value={end} disabled={!start}
+                  onChange={event => setSelection({ start, end: +event.target.value })} required>
+                  <option value={0} disabled>Alege ora</option>
+                  {endings.map(value => <option key={value} value={value}>{time(value)}</option>)}
+                </select>
+              </div>
+              <div aria-live="polite" className="booking-recap">
+                {end > 0 && <>
+                  <p><span>Utilizare</span><strong>{interval(start, useEnd)}</strong></p>
+                  {useEnd < end && <p><span>Predare</span><strong>{interval(useEnd, end)}</strong></p>}
+                </>}
+                {!end && <p className="camin-muted">Alege orele pentru a vedea rezumatul.</p>}
+              </div>
+              <button className={primary} disabled={!end}>Confirmă rezervarea</button>
+            </fieldset>
+          </form>
+        ) : <p>Nu poți face o rezervare pentru această zi. Rezervările se pot face cu până la 7 zile în avans.</p>)}
+        {(!calendar?.open || !calendar.bookable) && <p className="camin-muted">Alege o zi cu intervale libere pentru a continua.</p>}
+      </div>
     </div>
   );
 }
 
 export default function LaundryCalendar({ machine, onChange }) {
-  const [day, setDay] = useState(() => dateFormat.format(new Date()));
+  const [today] = useState(() => dateFormat.format(new Date()));
+  const [day, setDay] = useState(today);
+  const calendarRegion = useRef(null);
+  const restoreFocus = useRef(null);
+  const weekStart = moveDay(today, 7 * Math.floor((Date.parse(day) - Date.parse(today)) / (7 * 24 * 60 * minute)));
+  const week = Array.from({ length: 7 }, (_, index) => moveDay(weekStart, index));
+  const startMonth = monthFormat.format(new Date(week[0]));
+  const endMonth = monthFormat.format(new Date(week.at(-1)));
+
+  useEffect(() => {
+    if (!restoreFocus.current) return;
+    calendarRegion.current.querySelector('[data-calendar-nav="' + restoreFocus.current + '"]')?.focus();
+    restoreFocus.current = null;
+  }, [day]);
+
+  function changeDay(date, event) {
+    if (date === day) return;
+    if (event.currentTarget.matches(':focus-visible')) restoreFocus.current = event.currentTarget.dataset.calendarNav;
+    setDay(date);
+  }
+
   return (
-    <section aria-label={'Calendar · ' + machine.name} className="grid gap-3">
-      <div className="grid grid-cols-2 gap-2">
-        <h3 aria-live="polite" aria-atomic="true" className="col-span-2 font-semibold">{dayFormat.format(new Date(day))}</h3>
-        <button type="button" className={control} onClick={() => setDay(moveDay(day, -1))}>Ziua anterioară</button>
-        <button type="button" className={control} onClick={() => setDay(moveDay(day, 1))}>Ziua următoare</button>
-      </div>
-      <CalendarDay key={day} machine={machine} day={day} onChange={onChange} />
-      <p className="text-slate-600">În pilot, calendarul aplicației are prioritate pentru rezervări. Caietul poate fi folosit pentru consemnarea utilizării.</p>
+    <section ref={calendarRegion} aria-label={'Calendar · ' + machine.name} className="booking-calendar">
+      <header><h2>Rezervă un interval</h2><p className="camin-muted">{machine.name} · {machine.location}</p></header>
+      <CalendarDay machine={machine} day={day} onChange={onChange} key={day}>
+        <div className="booking-day-header">
+          <div><h3>Alege ziua</h3><p className="camin-muted booking-month">{startMonth === endMonth ? startMonth : startMonth + ' – ' + endMonth}</p></div>
+          <div className="booking-day-arrows">
+            <button type="button" className={control} aria-label="Ziua anterioară" data-calendar-nav="previous"
+              onClick={event => changeDay(moveDay(day, -1), event)}>←</button>
+            <button type="button" className={control} aria-label="Ziua următoare" data-calendar-nav="next"
+              onClick={event => changeDay(moveDay(day, 1), event)}>→</button>
+          </div>
+        </div>
+        <div className="booking-week" role="group" aria-label="Zile din calendar">
+          {week.map(date => <button type="button" key={date} className={control} aria-pressed={date === day}
+            data-calendar-nav={date} aria-label={dayFormat.format(new Date(date))} onClick={event => changeDay(date, event)}>
+            <span>{weekdayFormat.format(new Date(date))}</span><strong>{new Date(date).getUTCDate()}</strong>
+          </button>)}
+        </div>
+      </CalendarDay>
+      <p className="camin-muted">În pilot, calendarul aplicației are prioritate pentru rezervări. Caietul poate fi folosit pentru consemnarea utilizării.</p>
     </section>
   );
 }

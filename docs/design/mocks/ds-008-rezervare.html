@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="mock-status" content="draft">
+  <title>Rezervă un interval · Cămin 3</title>
+  <link rel="stylesheet" href="ds-008-rezervare.css">
+  <script src="ds-008-rezervare.js" defer></script>
+</head>
+<body>
+  <header class="preview" aria-label="Opțiunile machetei">
+    <span><strong>DS-008</strong> · Draft · Date demonstrative</span>
+    <div class="preview-controls">
+      <label for="scenario">Stare</label>
+      <select id="scenario">
+        <option value="ready">Alege intervalul</option><option value="empty">Gol</option>
+        <option value="loading">Încărcare</option><option value="error">Eroare</option>
+        <option value="success">Succes</option><option value="long">Text lung</option>
+      </select>
+    </div>
+  </header>
+
+  <div class="portal">
+    <aside class="portal-nav" aria-label="Portalul rezidentului">
+      <div class="brand"><img src="assets/camin-3-logo.png" alt="" width="44" height="44"><span>Cămin 3</span></div>
+      <nav aria-label="Secțiunile portalului din machetă">
+        <span class="nav-current" aria-current="location">Resurse</span>
+        <span>Sesizările mele</span><span>Notificări</span><span>Contul meu</span>
+      </nav>
+      <div class="profile"><span class="profile-avatar" aria-hidden="true">C</span><strong>Contul meu</strong></div>
+    </aside>
+
+    <main>
+      <div class="page">
+        <p class="breadcrumb"><span>Resurse</span><span aria-hidden="true">/</span><span id="room">Spălătoria 1</span></p>
+        <header class="page-header">
+          <div class="equipment-tile" id="equipment-tile" aria-hidden="true"><span class="washer"><span></span></span></div>
+          <div><h1>Rezervă un interval</h1><p id="equipment">Mașina de spălat 1 · Subsol</p></div>
+        </header>
+
+        <div class="booking-grid">
+          <section class="panel calendar" aria-labelledby="calendar-title">
+            <header class="panel-header"><div><h2 id="calendar-title">Alege ziua</h2><p>Noiembrie – decembrie 2026</p></div></header>
+            <div class="week" role="group" aria-label="Zile din calendar">
+              <button type="button" data-day="0" aria-label="Joi, 26 noiembrie" aria-pressed="true"><span>Joi</span><strong>26</strong></button>
+              <button type="button" data-day="1" aria-label="Vineri, 27 noiembrie" aria-pressed="false"><span>Vin</span><strong>27</strong></button>
+              <button type="button" data-day="2" aria-label="Sâmbătă, 28 noiembrie" aria-pressed="false"><span>Sâm</span><strong>28</strong></button>
+              <button type="button" data-day="3" aria-label="Duminică, 29 noiembrie" aria-pressed="false"><span>Dum</span><strong>29</strong></button>
+              <button type="button" data-day="4" aria-label="Luni, 30 noiembrie" aria-pressed="false"><span>Lun</span><strong>30</strong></button>
+              <button type="button" data-day="5" aria-label="Marți, 1 decembrie" aria-pressed="false"><span>Mar</span><strong>1</strong></button>
+              <button type="button" data-day="6" aria-label="Miercuri, 2 decembrie" aria-pressed="false"><span>Mie</span><strong>2</strong></button>
+            </div>
+
+            <div class="availability" id="availability" aria-labelledby="availability-title">
+              <h2 id="availability-title">Disponibilitatea zilei</h2>
+              <div id="availability-message" class="availability-message" hidden>
+                <p id="availability-status" role="status" hidden></p>
+                <p id="availability-error" role="alert" hidden></p>
+                <button id="retry" type="button" hidden>Reîncearcă</button>
+              </div>
+              <ul id="blocks" aria-label="Intervalele zilei"></ul>
+            </div>
+          </section>
+
+          <section class="panel details" aria-labelledby="details-title">
+            <header class="panel-header"><div><h2 id="details-title">Alege intervalul</h2><p id="chosen-day">Joi, 26 noiembrie</p></div></header>
+            <div id="booking-success" class="notice success" role="status" hidden></div>
+            <p id="booking-unavailable" class="notice" hidden>Alege o zi cu intervale libere pentru a continua.</p>
+            <form id="booking-form">
+              <div class="time-fields">
+                <div><label for="start">Început</label><select id="start" required></select></div>
+                <div><label for="end">Sfârșitul blocului</label><select id="end" required></select></div>
+              </div>
+              <div class="recap" id="recap" aria-live="polite">
+                <p id="recap-empty">Alege ora de început și sfârșitul blocului pentru a vedea rezumatul.</p>
+                <dl id="recap-values" hidden>
+                  <div><dt>Utilizare</dt><dd id="use-time"></dd></div>
+                  <div id="handover-row"><dt>Predare</dt><dd id="handover-time"></dd></div>
+                </dl>
+              </div>
+              <button class="primary confirm" id="confirm" type="submit" disabled>Confirmă rezervarea</button>
+            </form>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

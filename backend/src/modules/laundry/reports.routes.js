@@ -134,6 +134,8 @@ export function reportRoutes(database, origins = localOrigins, photos) {
   const router = Router();
   const resident = requireSession(database);
   const operator = requireSession(database, { manageEquipment: true });
+  const authorizeSubmission = (_req, res, next) =>
+    res.locals.account.role === 'resident' ? next() : res.sendStatus(403);
   const write = (req, res, next) => {
     if (!origins.includes(req.get('origin'))) return res.sendStatus(403);
     next();
@@ -166,7 +168,7 @@ export function reportRoutes(database, origins = localOrigins, photos) {
     if (!image) return res.sendStatus(503);
     res.set('X-Content-Type-Options', 'nosniff').type('image/jpeg').send(image);
   });
-  router.post('/', resident, write, reportBody, async (req, res) => {
+  router.post('/', resident, write, authorizeSubmission, reportBody, async (req, res) => {
     const input = reportInput(req.body);
     if (!input) return res.sendStatus(400);
 

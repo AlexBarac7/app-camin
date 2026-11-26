@@ -1,0 +1,282 @@
+/* Approved tokens from docs/design/DESIGN.md, scoped to the resident interface. */
+.camin-design {
+  color-scheme: light;
+  --background: #F7F3E9;
+  --surface: #FFFDF7;
+  --text: #17332B;
+  --text-muted: #506359;
+  --border: #D9DED4;
+  --control-border: #72887A;
+  --primary: #426C59;
+  --on-primary: #FFFFFF;
+  --focus: #0D6755;
+  --nav-bg: #E8EEE4;
+  --nav-text: #29453C;
+  --nav-active: #D4E3D4;
+  --on-nav-active: #164C40;
+  --nav-focus: #0D6755;
+  --resource-wash-first: #DDEBE0;
+  --resource-dry: #F0E5CE;
+  --on-resource: #17332B;
+  --success-bg: #E1F1E6;
+  --success-text: #155538;
+  --warning-bg: #F9EBD4;
+  --warning-text: #734308;
+  --error-bg: #F8E7E5;
+  --error-text: #8B3034;
+  --info-bg: #E6EDF3;
+  --info-text: #254A5F;
+  --resource-wash-second: #E6EDF3;
+  --welcome-start: #DDEBE0;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-strong: 650;
+  --type-meta: 14px;
+  --type-body: 16px;
+  --type-card: 18px;
+  --type-section: 22px;
+  --type-page: 28px;
+  --leading-body: 1.5;
+  --leading-heading: 1.2;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --radius-control: 8px;
+  --radius-card: 14px;
+  --radius-panel: 20px;
+  --touch-target: 44px;
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --nav-width: 232px;
+  --content-max: 1280px;
+  --text-measure: 68ch;
+  --page-gutter: var(--space-4);
+  --grid-gap: var(--space-4);
+  --color-slate-50: var(--background);
+  --color-slate-100: var(--background);
+  --color-slate-200: var(--border);
+  --color-slate-300: var(--border);
+  --color-slate-400: var(--control-border);
+  --color-slate-600: var(--text-muted);
+  --color-slate-700: var(--text-muted);
+  --color-slate-900: var(--text);
+  --color-red-800: var(--error-text);
+  --color-teal-50: var(--success-bg);
+  --color-teal-950: var(--success-text);
+  background: var(--background);
+  color: var(--text);
+  font: var(--weight-regular) var(--type-body)/var(--leading-body) var(--font-sans);
+}
+
+.camin-design :is(h1, h2, h3) {
+  font-weight: var(--weight-strong);
+  line-height: var(--leading-heading);
+  overflow-wrap: anywhere;
+}
+.camin-design h1 { font-size: var(--type-page); }
+.camin-design h2 { font-size: var(--type-section); }
+.camin-design h3 { font-size: var(--type-card); }
+.camin-design strong { font-weight: var(--weight-strong); }
+.camin-design .bg-white { background: var(--surface); }
+.camin-design :is(input, textarea, select) { color: var(--text); }
+.camin-design :focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+.camin-muted { color: var(--text-muted); }
+.camin-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-panel); padding: var(--page-gutter); min-inline-size: 0; }
+
+.camin-control, .camin-primary, .camin-confirm-repair {
+  min-block-size: var(--touch-target);
+  min-inline-size: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+}
+.camin-primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: var(--weight-strong);
+}
+.camin-primary:enabled:hover { text-decoration: underline; text-underline-offset: var(--space-1); }
+.camin-primary:disabled, .camin-control:disabled { color: var(--text-muted); background: var(--background); border-color: var(--control-border); }
+.camin-link { width: fit-content; border-radius: var(--radius-control); color: var(--primary); font-weight: var(--weight-strong); text-decoration: underline; text-underline-offset: var(--space-1); }
+.camin-tag, .camin-notice { overflow-wrap: anywhere; border-radius: var(--radius-control); }
+.camin-tag { display: inline-block; padding: var(--space-1) var(--space-2); font-size: var(--type-meta); }
+.camin-notice { padding: var(--space-3); }
+.camin-design :is([data-tone="success"], [data-laundry-status="working"], [data-laundry-status="available"], .camin-confirm-repair) { background: var(--success-bg); color: var(--success-text); }
+.camin-design :is([data-tone="warning"], [data-laundry-status="handover"], [data-laundry-status="inspection"]) { background: var(--warning-bg); color: var(--warning-text); }
+.camin-design :is([data-tone="error"], [data-laundry-status="broken"], [data-laundry-status="cancelled"]) { background: var(--error-bg); color: var(--error-text); }
+.camin-design :is([data-tone="info"], [data-laundry-status="occupied"], [data-laundry-status="reserved"], [data-laundry-status="unavailable"], [data-laundry-status="unspecified"]) { background: var(--info-bg); color: var(--info-text); }
+
+.resident-shell { min-block-size: 100svh; }
+.resident-sidebar { display: contents; }
+.camin-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font: var(--weight-strong) var(--type-section)/var(--leading-heading) var(--font-sans);
+}
+.camin-brand img { flex: none; inline-size: var(--touch-target); block-size: var(--touch-target); object-fit: contain; border-radius: var(--radius-control); background: var(--surface); }
+.resident-sidebar > .camin-brand { padding: var(--space-3) var(--page-gutter); background: var(--nav-bg); color: var(--on-nav-active); }
+.resident-navigation {
+  position: fixed;
+  z-index: 3;
+  inset: auto 0 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-2) max(var(--space-2), env(safe-area-inset-bottom));
+  background: var(--nav-bg);
+  color: var(--nav-text);
+}
+.resident-navigation a {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-1);
+  min-block-size: var(--touch-target);
+  border-radius: var(--radius-control);
+  padding: var(--space-1);
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-size: var(--type-meta);
+}
+.resident-navigation a :not(.sr-only) { flex-shrink: 0; }
+.resident-navigation a:has(.resident-unread) { flex-direction: column; }
+.resident-navigation a:is([aria-current], :hover) { background: var(--nav-active); color: var(--on-nav-active); }
+.resident-navigation a[aria-current] { font-weight: var(--weight-strong); }
+.resident-sidebar :focus-visible { outline-color: var(--nav-focus); }
+.resident-unread {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: var(--space-5);
+  block-size: var(--space-5);
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--nav-text);
+  font-variant-numeric: tabular-nums;
+}
+.resident-profile { display: none; }
+.resident-page {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-inline-size: 0;
+  inline-size: 100%;
+  max-inline-size: var(--content-max);
+  margin-inline: auto;
+  padding: var(--page-gutter);
+  padding-block-end: calc(var(--space-8) + var(--space-6) + env(safe-area-inset-bottom));
+}
+.resident-breadcrumb { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--text-muted); font-size: var(--type-meta); }
+.resident-breadcrumb a { color: var(--primary); text-decoration: underline; text-underline-offset: var(--space-1); }
+.resident-account { max-inline-size: var(--text-measure); }
+.resident-card-grid { display: grid; gap: var(--grid-gap); grid-template-columns: minmax(0, 1fr); align-items: start; }
+.resource-card { display: grid; min-height: 100%; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-3); }
+.resource-card:hover { border-color: var(--control-border); }
+.resource-card-copy { display: grid; gap: var(--space-1); }
+.resource-card-copy strong { font-size: var(--type-card); }
+.resource-card-action { color: var(--primary); }
+.resource-card-action span:first-child { display: none; }
+.equipment-art { display: grid; flex: none; place-items: center; border-radius: var(--radius-card); inline-size: var(--space-8); block-size: var(--space-8); color: var(--on-resource); background: var(--resource-wash-first); }
+.equipment-art[data-accent="wash-second"] { background: var(--resource-wash-second); }
+.equipment-art[data-accent="dry"] { background: var(--resource-dry); }
+.equipment-drawing { display: block; position: relative; inline-size: var(--space-6); block-size: var(--space-7); border: var(--focus-width) solid currentColor; border-radius: var(--space-1); }
+.equipment-drawing::before { content: ''; position: absolute; inset: var(--space-2) 0 auto; border-block-start: var(--focus-width) solid currentColor; }
+.equipment-drawing::after { content: ''; position: absolute; inset: var(--space-4) var(--space-1) auto; aspect-ratio: 1; border: var(--focus-width) solid currentColor; border-radius: 50%; }
+.equipment-drawing > span { position: absolute; inset: var(--space-1) var(--space-1) auto auto; inline-size: var(--space-1); block-size: var(--space-1); border-radius: 50%; background: currentColor; }
+[data-accent="dry"] .equipment-drawing::after { border: var(--space-1) double currentColor; }
+[data-accent="dry"] .equipment-drawing > span { inline-size: var(--space-2); border-radius: var(--space-1); }
+.equipment-card { display: grid; gap: var(--space-4); padding: var(--space-4); }
+.equipment-selected { grid-column: 1 / -1; }
+.equipment-card-heading { display: flex; align-items: flex-start; gap: var(--space-3); }
+.equipment-card-heading p { overflow-wrap: anywhere; }
+.equipment-card-actions { display: grid; gap: var(--space-3); }
+.equipment-calendar { padding-block-start: var(--space-4); border-block-start: 1px solid var(--border); }
+
+.booking-calendar, .booking-layout, .booking-availability, .booking-selection { display: grid; gap: var(--space-4); }
+.booking-layout { grid-template-columns: minmax(0, 1fr); align-items: start; }
+.booking-calendar .camin-panel { padding: var(--space-4); }
+.booking-day-header, .booking-interval-row, .booking-recap p { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.booking-day-arrows { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.booking-day-arrows button { min-inline-size: var(--touch-target); }
+.booking-month { text-transform: capitalize; }
+.booking-week { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.booking-week button { display: grid; align-content: center; justify-items: center; padding: var(--space-1); }
+.booking-week button span { text-transform: capitalize; font-size: var(--type-meta); }
+.booking-week button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.booking-availability-title { border-block-start: 1px solid var(--border); padding-block-start: var(--space-4); }
+.booking-intervals > li { display: grid; gap: var(--space-2); padding-block: var(--space-2); border-block-end: 1px solid var(--border); }
+.booking-intervals > li:last-child { border: 0; }
+.booking-interval-row { min-block-size: var(--space-6); }
+.booking-interval-row strong, .booking-recap strong { font-variant-numeric: tabular-nums; }
+.booking-selection h3 + p { margin-block-start: calc(-1 * var(--space-3)); }
+.booking-selection select { inline-size: 100%; }
+.booking-recap { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-card); background: var(--background); }
+
+.resident-reports { display: grid; gap: var(--space-4); }
+.resident-report-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.resident-report { display: grid; gap: var(--space-4); }
+.resident-report:target { border-color: var(--focus); }
+.resident-report .report-copy { min-inline-size: 0; }
+.resident-report .report-photo { min-inline-size: 0; }
+.resident-report .camin-confirm-repair { justify-self: start; font-weight: var(--weight-strong); }
+.resident-page [id^="notificare-"] { background: var(--surface); padding: var(--space-4); border-radius: var(--radius-card); }
+
+.welcome-page, .standalone-access { display: grid; place-items: center; min-block-size: 100svh; padding: var(--page-gutter); background: linear-gradient(145deg, var(--welcome-start), var(--background)); }
+.welcome-shell { display: grid; inline-size: min(100%, calc(var(--content-max) - var(--nav-width))); border: 1px solid var(--border); border-radius: var(--radius-panel); overflow: hidden; background: var(--surface); }
+.welcome-intro { display: grid; align-content: center; gap: var(--space-4); padding: var(--space-5); background: linear-gradient(145deg, var(--welcome-start), var(--background)); }
+.welcome-intro h1 { font-size: 36px; }
+.welcome-form { display: grid; align-content: center; padding: var(--space-5); min-inline-size: 0; }
+.welcome-footer { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin-block-start: var(--space-5); border-block-start: 1px solid var(--border); padding-block-start: var(--space-4); font-size: var(--type-meta); }
+.standalone-access > .camin-panel { inline-size: min(100%, calc(var(--nav-width) * 2)); }
+.standalone-access h1 { margin-block-start: var(--space-5); }
+.access-background {
+  background: #102E26 url('./camin-sign-in.webp') 18% center / cover no-repeat;
+}
+
+@media (min-width: 768px) {
+  .access-background { background-position: center; }
+  .welcome-shell { grid-template-columns: 1.12fr 1fr; }
+  .welcome-form, .welcome-intro { padding: var(--space-7); }
+  .welcome-intro h1 { font-size: 48px; }
+  .resident-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .resident-report:has(.report-photo) { grid-template-columns: minmax(0, 1fr) calc(var(--space-8) * 2); }
+  .resident-report .camin-confirm-repair { grid-column: 1 / -1; }
+}
+
+/* desktop-start from DESIGN.md */
+@media (min-width: 1024px) {
+  .camin-design { --page-gutter: var(--space-6); --grid-gap: var(--space-5); --type-page: 36px; }
+  .resident-shell { display: grid; grid-template-columns: var(--nav-width) minmax(0, 1fr); }
+  .resident-sidebar { position: sticky; inset-block-start: 0; display: flex; flex-direction: column; gap: var(--space-5); block-size: 100svh; overflow: auto; padding: var(--space-5) var(--space-4); background: var(--nav-bg); color: var(--nav-text); }
+  .resident-sidebar > .camin-brand { padding: var(--space-1) var(--space-2); }
+  .resident-navigation { position: static; grid-template-columns: 1fr; padding: 0; }
+  .resident-navigation a { justify-content: space-between; padding-inline: var(--space-3); font-size: var(--type-body); text-align: start; }
+  .resident-navigation a:has(.resident-unread) { flex-direction: row; }
+  .resident-profile { display: flex; align-items: center; gap: var(--space-3); margin-block-start: auto; border-block-start: 1px solid var(--nav-active); padding: var(--space-4) var(--space-2) 0; font-size: var(--type-meta); }
+  .resident-profile span { display: grid; place-items: center; flex: none; inline-size: var(--touch-target); block-size: var(--touch-target); border-radius: 50%; background: var(--nav-active); color: var(--on-nav-active); }
+  .resident-page { padding-block-end: var(--space-7); }
+  .resource-card { grid-template-columns: 1fr; padding: var(--space-4); }
+  .resource-card .equipment-art { inline-size: 100%; block-size: calc(var(--space-8) + var(--space-4)); }
+  .resource-card-action { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); min-block-size: var(--touch-target); padding-inline: var(--space-3); background: var(--primary); color: var(--on-primary); border-radius: var(--radius-control); font-weight: var(--weight-strong); }
+  .resource-card-action span:first-child { display: inline; }
+  .equipment-selected { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); align-items: start; }
+  .equipment-selected .equipment-card-actions { grid-template-columns: 1fr 1fr; }
+  .equipment-calendar { grid-column: 1 / -1; }
+  .booking-layout { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--grid-gap); }
+  .booking-calendar .camin-panel { padding: var(--space-5); }
+  .booking-week { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .booking-week button { min-block-size: var(--space-8); }
+}
+
+@media (min-width: 1280px) {
+  .resident-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

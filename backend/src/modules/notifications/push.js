@@ -26,7 +26,7 @@ export async function deliverPush(delivery, send) {
     await send({
       endpoint: delivery.endpoint,
       keys: { p256dh: delivery.p256dh, auth: delivery.auth },
-    }, JSON.stringify({ id: delivery.notification_id }), {
+    }, JSON.stringify({ id: delivery.notification_id, unreadCount: delivery.unread_count }), {
       TTL: offerTtl ?? 3600, urgency: offerTtl === null ? 'normal' : 'high', timeout: 4000,
     });
     return 'done';
@@ -50,6 +50,8 @@ export async function dispatchPushDeliveries(database, send) {
       RETURNING delivery.*
     )
     SELECT leased.*, subscription.endpoint, subscription.p256dh, subscription.auth,
+      (SELECT count(*)::integer FROM laundry_notifications notice
+       WHERE notice.user_id = subscription.user_id AND notice.read_at IS NULL) AS unread_count,
       offer.expires_at, offer.status AS offer_status, statement_timestamp() AS now
     FROM leased JOIN push_subscriptions subscription ON subscription.id = leased.subscription_id
     LEFT JOIN laundry_restoration_offers offer ON offer.notification_id = leased.notification_id`);

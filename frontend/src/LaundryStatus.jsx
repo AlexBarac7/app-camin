@@ -15,7 +15,7 @@ const colors = {
 };
 
 export default function LaundryStatus({ status, children }) {
-  return <span className={'inline-block rounded-md px-2 py-1 text-sm font-semibold ' + colors[status]}>
+  return <span data-laundry-status={status} className={'inline-block rounded-md px-2 py-1 text-sm font-semibold ' + colors[status]}>
     {children}
   </span>;
 }

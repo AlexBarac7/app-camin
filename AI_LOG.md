@@ -4,6 +4,68 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-26 · Notification count on the installed app icon
+
+The owner requested the unread count on the phone's Home Screen icon. Web Push
+now includes the recipient's unread total at delivery. The service worker updates
+the icon through the Badging API where available and still shows the push alert.
+It uses the authenticated count when available, with the push total as a fallback
+if the session or network is unavailable. The open app keeps the icon and its
+navigation count in sync when the resident selects **OK**. The icon clears at
+zero, when local alerts are disabled, or on sign-out.
+
+The new sender test initially found a payload containing only the notification
+ID. The worker simulation initially recorded no badge update. After the change,
+the sender, PostgreSQL dispatch and worker simulations passed. Chromium verified
+the count moving from 2 to 1 to 0 with a simulated platform badge. Updated the
+worker served by the running local frontend and verified that it matched the
+source. A physical iPhone or iPad check is still pending. The README includes
+the test procedure and the Android launcher limitation.
+
+## 2026-11-26 · Cămin 3 resident portal design and report navigation
+
+The owner chose the building-and-tree logo reference and a layout that uses the
+laptop width. Recorded the approved tokens and the screen registry in
+[DESIGN.md](docs/design/DESIGN.md) and [registry.yaml](docs/design/registry.yaml).
+The [DS-008 draft](docs/design/mocks/ds-008-rezervare.html) demonstrates booking
+with empty, loading, error, success and long-text states. The initial draft
+covered light and dark themes. The owner subsequently chose a light-only portal
+with a pale sage sidebar and a cream background. Arial now applies throughout
+the application. **Bun venit** and **Autentificare** share a generated illustration
+of a campus residence at dusk behind their existing forms.
+
+On laptops, Resurse uses a multi-column layout and the booking calendar places
+availability beside the form. On phones, the two panels stack and navigation is
+at the bottom. Date selection keeps keyboard focus. The redesign keeps the
+existing start and end rules and displays usage and handover separately.
+**Contul meu** is the shortcut at the bottom of the desktop sidebar.
+
+The owner asked for **Sesizări** in the navigation for Admin and Administrator.
+It opens the existing maintenance queue. Rezident keeps **Sesizările mele** and
+the submission and repair confirmation actions. Operators retain report pickup
+and resolution. The API rejects new report submissions from operator accounts.
+An old personal report URL redirects operators to the maintenance view while
+preserving its report anchor. The new integration assertion first received
+`201` instead of `403` for an operator submission, and the first browser test
+found no **Sesizări** link. Both passed after the change.
+
+The local administrator setup transferred the single owner slot to the address
+provided by the owner and left the previous account in the database. Created
+the reserved test Admin in local test mode. Verified sign-in and admin access
+for both accounts. Password setup messages went to local Mailpit. The database
+stores password hashes.
+
+The existing access work was merged into `main` in
+[PR #21](https://github.com/AlexBarac7/app-camin/pull/21) after its checks passed.
+The explanatory guide remains in the locally ignored `explicatii/` directory.
+
+Before committing `feat/resident-portal-design`, all 15 backend unit tests,
+the three PostgreSQL integration suites, the frontend build, Compose validation
+and the ledger check passed. Chromium verified the portal and DS-008 at 320,
+390, 1280 and 1440 pixels, the access page artwork, navigation for all three
+roles, reservation and report actions with mocked API responses, and badge
+updates. The running local database reported migrations through 015 applied.
+
 ## 2026-11-26 · Password reset by email
 
 The owner approved D-023. **Am uitat parola** accepts an email address and
