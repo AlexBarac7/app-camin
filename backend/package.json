@@ -13,8 +13,7 @@
     "migrate": "node src/migrate.js apply",
     "migrate:status": "node src/migrate.js status",
     "test:migrations": "node --test test-integration/migrations.integration.js",
-    "invite:create": "node src/invite.js create",
-    "invite:revoke": "node src/invite.js revoke",
+    "admin:setup": "node src/service-status-access.js setup",
     "equipment:access": "node src/service-status-access.js --equipment",
     "service-status:access": "node src/service-status-access.js",
     "sessions:cleanup": "node src/cleanup-sessions.js",
@@ -26,6 +25,7 @@
     "express": "^5.1.0",
     "heic-convert": "^2.1.0",
     "multer": "^2.5.0",
+    "nodemailer": "^10.6.1",
     "pg": "^8.16.0",
     "sharp": "^0.35.5",
     "web-push": "^4.0.0"

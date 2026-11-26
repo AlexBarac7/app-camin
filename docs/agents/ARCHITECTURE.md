@@ -23,10 +23,19 @@ activates resident accounts by invitation and gives signed-in residents a laundr
 
 ## Data flow
 Browser :5173 → Vite /api proxy → backend :3000 → PostgreSQL db:5432.
-Service status and readiness behavior is owned by [C-002](CONTRACTS.md#c-002--authorized-service-status-and-internal-readiness). Compose checks readiness on backend loopback port 3001. This port is unpublished.
-The operator authorized under D-008 can inspect reservation history and
-paginated equipment, reservation and migration data. The admin module checks
-permission on every data request and selects explicit columns from fixed queries.
+Service status and readiness behavior is owned by [C-003](CONTRACTS.md#c-003--admin-service-status-and-internal-readiness). Compose checks readiness on backend loopback port 3001. This port is unpublished.
+Admin and Administrator can inspect reservation history. Admin can also
+inspect paginated equipment, reservation and migration data. The admin module
+checks permission on every request and selects explicit columns from fixed queries.
+
+Migration 013 adds access requests and their in-app notices. Request creation
+and approval serialize per normalized email with account activation. Admin
+receives the activation URL at approval, and PostgreSQL keeps its token hash.
+Each authenticated request resolves the account role from the current user
+record and local test configuration. Migration 014 tracks SMTP delivery on
+the access request. The server commits the invitation hash before sending.
+The approving request reports SMTP acceptance or the option to retry. A
+retry invalidates the previous invitation and creates a new one.
 
 ## State and storage
 PostgreSQL 17 stores data in the named postgres_data volume, mounted at

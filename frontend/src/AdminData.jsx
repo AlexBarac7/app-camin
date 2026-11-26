@@ -12,15 +12,17 @@ const tables = [
   ['migrations', 'Migrări', 'schema_migrations'],
 ];
 
-export function AdminNav({ current }) {
+export function AdminNav({ current, role }) {
   const links = [
     ['/admin/stare-servicii', 'Starea serviciilor'],
     ['/admin/rezervari', 'Rezervări'],
     ['/admin/baza-de-date', 'Baza de date'],
+    ['/admin/cereri-acces', 'Cereri de acces'],
   ];
   return (
     <nav lang="ro" aria-label="Administrare" className="flex flex-wrap gap-x-5 gap-y-2">
-      {links.map(([href, label]) => (
+      <a href="/cont" className="rounded py-1 underline focus-visible:outline-2 focus-visible:outline-offset-2">Contul meu</a>
+      {links.filter(([href]) => role === 'admin' || href === '/admin/rezervari').map(([href, label]) => (
         <a key={href} href={href} aria-current={href === current ? 'page' : undefined}
           className="rounded py-1 underline focus-visible:outline-2 focus-visible:outline-offset-2 aria-[current=page]:font-bold">
           {label}
@@ -80,7 +82,7 @@ function DataPage({ title, path, result, authorized, controls, children }) {
 
   return (
     <main lang="ro" className="mx-auto grid max-w-5xl gap-5 px-5 py-12">
-      {authorized.allowed && <AdminNav current={path} />}
+      {authorized.allowed && <AdminNav current={path} role={authorized.data.role} />}
       <h1 className="text-3xl font-bold">{title}</h1>
       {authorized.allowed && controls}
       {result.data ? children : result.error || authorized.error ? (
@@ -227,8 +229,11 @@ function AdminDatabase({ path, authorized }) {
 }
 
 export default function AdminData({ path }) {
-  const access = useData('/api/admin/access');
-  const authorized = { ...access, allowed: access.data === true };
-  return path === '/admin/rezervari' ? <AdminReservations path={path} authorized={authorized} />
+  const access = useData('/api/auth/session');
+  const reservations = path === '/admin/rezervari';
+  const role = access.data?.role;
+  const allowed = role === 'admin' || (reservations && role === 'administrator');
+  const authorized = { ...access, allowed, denied: access.denied || (Boolean(role) && !allowed) };
+  return reservations ? <AdminReservations path={path} authorized={authorized} />
     : <AdminDatabase path={path} authorized={authorized} />;
 }

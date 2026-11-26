@@ -1,6 +1,7 @@
 import express from 'express';
-import { newToken, normalizeEmail, passwordLength, tokenHash, validToken, verifyPassword } from './credentials.js';
-import { activateInvitation } from './invitations.js';
+import { invitationEmail, newToken, normalizeEmail, passwordLength, tokenHash, validToken, verifyPassword } from './credentials.js';
+import { activateInvitation, requestAccess } from './invitations.js';
+import { accountRole, isTestAccount, testResidentEmail } from './account-roles.js';
 
 const sessionCookie = 'camin_session';
 const sessionLifetime = 24 * 60 * 60 * 1000;
@@ -14,21 +15,23 @@ function readSession(req) {
   return validToken(token) ? tokenHash(token) : null;
 }
 
-export function requireSession(database, { serviceStatus = false, manageEquipment = false } = {}) {
+export function requireSession(database, { serviceStatus = false, manageEquipment = false, admin = false } = {}) {
   return async (req, res, next) => {
     res.set('Cache-Control', 'no-store');
     const digest = readSession(req);
     if (!digest) return res.status(401).end();
     const { rows: [account] } = await database.query(
-      `SELECT users.id, users.email${serviceStatus ? ', users.can_view_service_status' : ''}${manageEquipment ? ', users.can_manage_equipment' : ''}
+      `SELECT users.*
        FROM sessions JOIN users ON users.id = sessions.user_id
        WHERE sessions.token_hash = $1 AND sessions.expires_at > clock_timestamp()`,
       [digest],
     );
-    if (!account) return res.status(401).end();
-    if (manageEquipment && !account.can_manage_equipment) return res.status(403).end();
-    if (serviceStatus && !account.can_view_service_status) return res.status(403).end();
-    res.locals.account = account;
+    const { testAccounts } = req.app.locals;
+    if (!account || (!testAccounts && isTestAccount(account.email))) return res.status(401).end();
+    const role = accountRole(account, testAccounts);
+    if ((serviceStatus || admin) && role !== 'admin') return res.status(403).end();
+    if (manageEquipment && role === 'resident') return res.status(403).end();
+    res.locals.account = { id: account.id, email: account.email, role };
     next();
   };
 }
@@ -58,6 +61,7 @@ export function authRoutes(database, origins = localOrigins) {
   const router = express.Router();
   const allowActivation = limitedAttempts();
   const allowLogin = limitedAttempts();
+  const allowRequest = limitedAttempts();
   const json = express.json({ limit: '8kb' });
   const cookieOptions = req => ({
     httpOnly: true,
@@ -78,14 +82,24 @@ export function authRoutes(database, origins = localOrigins) {
     const { token, password } = req.body ?? {};
     if (!validToken(token)) return res.status(400).json({ code: 'invalid_invitation' });
     const length = passwordLength(password);
-    if (length < 15 || length > 128) {
-      return res.status(400).json({ message: 'Parola trebuie să aibă între 15 și 128 de caractere.' });
+    if (length < 8 || length > 128) {
+      return res.status(400).json({ message: 'Parola trebuie să aibă între 8 și 128 de caractere.' });
     }
     if (!allowActivation(req, res)) return;
     if (!await activateInvitation(database, token, password)) {
       return res.status(400).json({ code: 'invalid_invitation' });
     }
     res.status(201).end();
+  });
+
+  router.post('/request-access', json, async (req, res) => {
+    const email = invitationEmail(req.body?.email);
+    if (!email) return res.status(400).json({ message: 'Introdu o adresă de e-mail validă.' });
+    if (!allowRequest(req, res)) return;
+    if (!isTestAccount(email) || (req.app.locals.testAccounts && email === testResidentEmail)) {
+      await requestAccess(database, email, req.app.locals.testAccounts);
+    }
+    res.status(202).end();
   });
 
   router.post('/login', json, async (req, res) => {
@@ -97,7 +111,8 @@ export function authRoutes(database, origins = localOrigins) {
     }
     if (!allowLogin(req, res)) return;
     const { rows: [user] } = await database.query('SELECT id, password_hash FROM users WHERE email = $1', [normalized]);
-    if (!await verifyPassword(password, user?.password_hash)) {
+    const storedHash = !req.app.locals.testAccounts && isTestAccount(normalized) ? undefined : user?.password_hash;
+    if (!await verifyPassword(password, storedHash)) {
       return res.status(401).json({ message: 'Adresa de e-mail sau parola este incorectă.' });
     }
 
@@ -108,7 +123,8 @@ export function authRoutes(database, origins = localOrigins) {
   });
 
   router.get('/session', requireSession(database), (_req, res) => {
-    res.json({ email: res.locals.account.email });
+    const { email, role } = res.locals.account;
+    res.json({ email, role });
   });
 
   router.post('/logout', async (req, res) => {

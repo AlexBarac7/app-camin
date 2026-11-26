@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import test from 'node:test';
 import { createApp } from '../src/app.js';
+import { newToken } from '../src/modules/auth/credentials.js';
 
 test('auth requires the app origin, validates inputs and limits repeated login attempts', async t => {
   const server = createApp({ check() {}, query: async () => ({ rows: [] }) }).listen(0, '127.0.0.1');
@@ -13,6 +14,13 @@ test('auth requires the app origin, validates inputs and limits repeated login a
   });
   assert.equal((await post('logout', {}, 'https://example.test')).status, 403);
   assert.equal((await post('activate', {})).status, 400);
+  const token = newToken();
+  const shortPassword = await post('activate', { token, password: '1234567' });
+  assert.equal(shortPassword.status, 400);
+  assert.match((await shortPassword.json()).message, /8 și 128/);
+  const validLength = await post('activate', { token, password: '12345678' });
+  assert.equal(validLength.status, 400);
+  assert.deepEqual(await validLength.json(), { code: 'invalid_invitation' });
   assert.equal((await post('login', {})).status, 400);
   assert.equal((await fetch(base + '/api/auth/session')).status, 401);
 

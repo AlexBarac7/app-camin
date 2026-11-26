@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { json, Router } from 'express';
 import multer from 'multer';
 import { localOrigins, requireSession } from '../auth/auth.routes.js';
+import { operatorAccountsSql, roleQueryValues } from '../auth/account-roles.js';
 import { notifyReport } from '../notifications/laundry-notifications.js';
 import { applyEquipmentCondition, lockEquipment } from './condition.routes.js';
 import { photoByteLimit, resizeReportPhoto } from './report-photos.js';
@@ -55,7 +56,7 @@ async function writeReport(database, operation) {
   }
 }
 
-async function submitReport(client, input, residentId, photoKey) {
+async function submitReport(client, input, residentId, photoKey, testAccounts) {
   const { machineId, category, locationType, location, floor, description } = input;
   const machine = machineId ? await lockEquipment(client, machineId) : null;
   if (machineId && !machine) return null;
@@ -69,7 +70,7 @@ async function submitReport(client, input, residentId, photoKey) {
       UPDATE laundry_machines SET report_revision = report_revision + 1, repair_verified_until = NULL
       WHERE id = $1`, [machineId]);
   }
-  await notifyReport(client, machine, report, 'report-new', report.created_at);
+  await notifyReport(client, machine, report, 'report-new', report.created_at, testAccounts);
   return report.id;
 }
 
@@ -151,9 +152,9 @@ export function reportRoutes(database, origins = localOrigins, photos) {
     const { id } = req.params;
     if (!validId(id)) return res.sendStatus(404);
     const { rows: [report] } = await database.query(`
-      SELECT photo_key FROM laundry_reports WHERE id = $1 AND photo_key IS NOT NULL
-        AND (resident_id = $2 OR EXISTS (SELECT 1 FROM users WHERE id = $2 AND can_manage_equipment))`,
-    [id, res.locals.account.id]);
+      SELECT photo_key FROM laundry_reports WHERE id = $4 AND photo_key IS NOT NULL
+        AND (resident_id = $5 OR EXISTS (SELECT 1 FROM users WHERE id = $5 AND ${operatorAccountsSql}))`,
+    [...roleQueryValues(req.app.locals.testAccounts), id, res.locals.account.id]);
     if (!report) return res.sendStatus(404);
     if (!photos) return res.sendStatus(503);
     let image;
@@ -188,7 +189,8 @@ export function reportRoutes(database, origins = localOrigins, photos) {
     }
     let id;
     try {
-      id = await writeReport(database, client => submitReport(client, input, res.locals.account.id, photoKey));
+      id = await writeReport(database,
+        client => submitReport(client, input, res.locals.account.id, photoKey, req.app.locals.testAccounts));
     } catch (error) {
       if (photoKey) {
         // If COMMIT was interrupted, keep any photo referenced by a committed report.

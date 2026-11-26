@@ -6,16 +6,30 @@ import { createDatabase } from './db.js';
 import { createApp } from './app.js';
 import { startPushDelivery } from './modules/notifications/push.js';
 import { createReportPhotoStore } from './modules/laundry/report-photos.js';
+import { localTestAccounts } from './modules/auth/account-roles.js';
+import { createInvitationMailer } from './modules/auth/invitation-mail.js';
 
 try {
   const config = loadConfig();
   const database = createDatabase(config.database);
-  const appOrigin = process.env.APP_ORIGIN;
+  const appOrigin = process.env.APP_ORIGIN || undefined;
+  if (appOrigin) {
+    const origin = new URL(appOrigin);
+    if (!['http:', 'https:'].includes(origin.protocol) || appOrigin !== origin.origin) {
+      throw new Error('APP_ORIGIN invalid.');
+    }
+  }
+  if (config.invitationMail && process.env.NODE_ENV === 'production' && !appOrigin?.startsWith('https://')) {
+    throw new Error('An HTTPS APP_ORIGIN is required for invitation email in production.');
+  }
   const origins = appOrigin
     ? [...(process.env.NODE_ENV === 'production' ? [] : localOrigins), appOrigin]
     : undefined;
   const photos = config.photos && createReportPhotoStore(config.photos);
-  const server = createApp(database, origins, config.push?.publicKey, photos).listen(config.port, '0.0.0.0', () => {
+  const sendInvitation = config.invitationMail && createInvitationMailer(config.invitationMail);
+  const server = createApp(database, origins, config.push?.publicKey, photos, {
+    appOrigin, testAccounts: localTestAccounts(), sendInvitation,
+  }).listen(config.port, '0.0.0.0', () => {
     console.log(`Backend listening on port ${config.port}.`);
   });
   const stopPushDelivery = startPushDelivery(database, config.push);

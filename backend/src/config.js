@@ -1,3 +1,5 @@
+import { invitationEmail } from './modules/auth/credentials.js';
+
 function required(env, name) {
   if (!env[name]?.trim()) throw new Error(`Missing required environment variable: ${name}`);
   return env[name];
@@ -21,6 +23,24 @@ export function loadDatabaseConfig(env = process.env) {
   };
 }
 
+function invitationMailConfig(env) {
+  if (!env.SMTP_HOST?.trim()) return undefined;
+  const host = required(env, 'SMTP_HOST');
+  const security = env.SMTP_SECURITY || 'starttls';
+  const local = security === 'local';
+  if (!['starttls', 'tls', 'local'].includes(security) || (local && (
+    !['development', 'test'].includes(env.NODE_ENV) || !['mailpit', 'localhost', '127.0.0.1'].includes(host)
+  ))) throw new Error('Invalid SMTP_SECURITY for this environment.');
+  const from = invitationEmail(required(env, 'SMTP_FROM'));
+  if (!from) throw new Error('Invalid SMTP_FROM.');
+  return {
+    host, port: port(env, 'SMTP_PORT'), secure: security === 'tls', requireTLS: security === 'starttls',
+    from, ...(local ? { ignoreTLS: true } : {
+      auth: { user: required(env, 'SMTP_USER'), pass: required(env, 'SMTP_PASSWORD') },
+    }),
+  };
+}
+
 export function loadConfig(env = process.env) {
   const push = ['VAPID_SUBJECT', 'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'].some(name => env[name])
     ? {
@@ -41,6 +61,7 @@ export function loadConfig(env = process.env) {
     database: loadDatabaseConfig(env),
     push,
     photos,
+    invitationMail: invitationMailConfig(env),
     internalReadinessPort: env.INTERNAL_READINESS_PORT === undefined
       ? undefined : port(env, 'INTERNAL_READINESS_PORT'),
   };

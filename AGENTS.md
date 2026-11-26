@@ -77,8 +77,8 @@ without new evidence. A rejected proposal is added there with the reason.
 
 ## 1. What this repo is
 `app-camin` is a shared resource management application for a student residence,
-co-working hub or residential building. Only the technical foundation exists.
-No interviews or business policies have been supplied. See
+co-working hub or residential building. The pilot covers laundry Reservations,
+equipment operations, maintenance reports and resident access. See
 `docs/agents/OPEN-QUESTIONS.md` before implementing product behavior.
 
 ## 2. Stack and commands

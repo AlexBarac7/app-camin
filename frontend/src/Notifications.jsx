@@ -212,6 +212,7 @@ export default function Notifications({ onUnreadCount }) {
           {status && status !== 'pending' && <p className="font-medium">{offerLabels[status]}</p>}
           {!offer && item.kind === 'restored' && <a className="underline"
             href={'/spalatorie/' + encodeURIComponent(item.room) + '?echipament=' + item.machineId}>Deschide calendarul</a>}
+          {item.kind === 'access-request' && <a className="underline" href="/admin/cereri-acces">Vezi cererile de acces</a>}
           {item.reportId && <a className="underline"
             href={(item.kind === 'report-new' ? '/admin/sesizari' : '/sesizari') + '#sesizare-' + item.reportId}>
             Deschide sesizarea

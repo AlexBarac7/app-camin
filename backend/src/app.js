@@ -8,9 +8,12 @@ import { reportRoutes } from './modules/laundry/reports.routes.js';
 
 import { laundryAvailability, reservationRoutes } from './modules/laundry/reservations.routes.js';
 
-export function createApp(database, appOrigins, pushPublicKey, photos) {
+export function createApp(database, appOrigins, pushPublicKey, photos, {
+  appOrigin = 'http://localhost:5173', testAccounts = false, sendInvitation,
+} = {}) {
   const app = express();
   app.disable('x-powered-by');
+  app.locals.testAccounts = testAccounts;
   app.use('/api/auth', authRoutes(database, appOrigins));
   app.use('/api/notifications', notificationRoutes(database, appOrigins, pushPublicKey));
   app.get('/api/laundry-machines', requireSession(database), async (req, res) => {
@@ -33,7 +36,7 @@ export function createApp(database, appOrigins, pushPublicKey, photos) {
   app.use('/api', conditionRoutes(database, appOrigins));
   app.use('/api/laundry-reports', reportRoutes(database, appOrigins, photos));
   app.use('/api/laundry-machines', reservationRoutes(database, appOrigins));
-  app.use('/api/admin', adminRoutes(database));
+  app.use('/api/admin', adminRoutes(database, appOrigins, appOrigin, sendInvitation));
   app.use('/api', healthRoutes(database));
   app.use((_req, res) => res.status(404).json({ status: 'error', message: 'Endpoint not found.' }));
   app.use((_error, _req, res, _next) => {

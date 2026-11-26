@@ -14,7 +14,7 @@ if (route === '/activeaza' && window.location.hash) {
   window.history.replaceState(null, '', window.location.pathname + window.location.search);
 }
 
-async function authRequest(action, data) {
+export async function authRequest(action, data) {
   const response = await fetch('/api/auth/' + action, data === undefined ? {} : {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -43,7 +43,7 @@ function Field({ name, label, type, autoComplete, error }) {
   );
 }
 
-function AccessForm({ activation }) {
+export function AccessForm({ activation = false, embedded = false }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
@@ -60,7 +60,7 @@ function AccessForm({ activation }) {
     if (activation) {
       const length = Array.from(password).length;
       const errors = {};
-      if (length < 15 || length > 128) errors.password = 'Alege o parolă între 15 și 128 de caractere.';
+      if (length < 8 || length > 128) errors.password = 'Alege o parolă între 8 și 128 de caractere.';
       if (password !== data.get('confirmation')) errors.confirmation = 'Parolele trebuie să coincidă.';
       if (Object.keys(errors).length) {
         setFieldErrors(errors);
@@ -87,14 +87,14 @@ function AccessForm({ activation }) {
   if (invalid) return <p role="alert" className="mt-5 text-red-800">{invalidLink}</p>;
 
   return (
-    <form onSubmit={submit} className="mt-6 grid gap-5">
+    <form onSubmit={submit} className={embedded ? 'mt-5 grid gap-4' : 'mt-6 grid gap-5'}>
       {!activation && <Field name="email" label="E-mail" type="email" autoComplete="username" />}
-      <Field name="password" label="Parolă" type="password" error={fieldErrors.password}
+      <Field name="password" label={activation ? 'Alege o parolă' : 'Parolă'} type="password" error={fieldErrors.password}
         autoComplete={activation ? 'new-password' : 'current-password'} />
       {activation && <Field name="confirmation" label="Confirmă parola" type="password"
         error={fieldErrors.confirmation} autoComplete="new-password" />}
       {error && <p role="alert" className="text-sm text-red-800">{error}</p>}
-      <button className={buttonStyle} disabled={pending}>
+      <button className={buttonStyle + (embedded ? ' bg-teal-950 hover:bg-teal-800' : '')} disabled={pending}>
         {pending ? 'Se trimite…' : activation ? 'Activează contul' : 'Autentifică-te'}
       </button>
     </form>
@@ -102,7 +102,7 @@ function AccessForm({ activation }) {
 }
 
 function Account() {
-  const [email, setEmail] = useState(null);
+  const [account, setAccount] = useState(null);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
 
@@ -112,7 +112,7 @@ function Account() {
       try {
         const response = await authRequest('session');
         const account = await response.json();
-        if (active) setEmail(account.email);
+        if (active) setAccount(account);
       } catch (failure) {
         if (!active) return;
         if (failure.status === 401) window.location.replace('/autentificare');
@@ -138,14 +138,31 @@ function Account() {
 
   return (
     <div className="mt-5 grid gap-5">
-      {email && <>
-        <p className="break-all">{email}</p>
+      {account && <>
+        <dl className="grid gap-3">
+          <div><dt className="text-sm font-medium text-slate-600">E-mail</dt><dd className="break-all">{account.email}</dd></div>
+          <div><dt className="text-sm font-medium text-slate-600">Rol</dt>
+            <dd className="font-semibold">{{ admin: 'Admin', administrator: 'Administrator', resident: 'Rezident' }[account.role]}</dd>
+          </div>
+        </dl>
+        {account.role !== 'resident' && (
+          <nav aria-label="Administrare" className="grid gap-2 border-t border-slate-200 pt-4">
+            {account.role === 'admin' && <a className="underline" href="/admin/cereri-acces">Cereri de acces și roluri</a>}
+            <a className="underline" href="/admin/echipamente">Gestionează echipamentele</a>
+            <a className="underline" href="/admin/sesizari">Sesizări de întreținere</a>
+            <a className="underline" href="/admin/rezervari">Istoricul rezervărilor</a>
+            {account.role === 'admin' && <>
+              <a className="underline" href="/admin/stare-servicii">Starea serviciilor</a>
+              <a className="underline" href="/admin/baza-de-date">Baza de date</a>
+            </>}
+          </nav>
+        )}
         <button type="button" className={buttonStyle} disabled={pending} onClick={logout}>
           {pending ? 'Se deconectează…' : 'Deconectare'}
         </button>
       </>}
       {error && <p role="alert" className="text-red-800">{error}</p>}
-      {!email && !error && <p role="status">Se verifică sesiunea…</p>}
+      {!account && !error && <p role="status">Se verifică sesiunea…</p>}
     </div>
   );
 }

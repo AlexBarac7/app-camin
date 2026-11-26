@@ -70,6 +70,8 @@
   workflow and photo storage, notification events and recipients.
 - **Who answers:** Project owner, after interviews
 - **Evidence:** [INTERVIEW.md](../../INTERVIEW.md) documents residence practices. [Q-013 and Q-014](questions/laundry-reports.md) cover the confirmed maintenance workflow.
+- **Confirmed scope:** [D-022](decisions/admin-data.md#d-022--send-approved-invitations-by-email-and-let-residents-choose-an-eight-character-password)
+  defines access requests and the three roles for the current pilot.
 
 ## Q-006 · Who manages the laundry catalog and with what permissions?
 - **Status:** open
@@ -78,7 +80,9 @@
 - **Owner input:** Both the administrator and admin should be able to change
   equipment status manually. For example, the administrator can mark equipment
   as defective while it is occupied or available.
-- **Pilot status changes:** D-014 grants equipment management per account from the terminal. Under D-019, those operators also manage reports and can explicitly confirm that a machine with an unconfirmed status is functional when resolving its report.
+- **Pilot status changes:** D-022 gives Admin and Administrator equipment
+  operations and report management. Under D-019, operators can explicitly
+  confirm that a machine with an unconfirmed status works when resolving a report.
 - **To clarify:** Who confirms and publishes inventory updates, who can add, edit or
   retire machines, what autonomy the residence administrator has, and whether
   changes happen through the terminal or the application. See also
