@@ -5,3 +5,25 @@
   button { @apply cursor-pointer; }
   button:disabled { @apply cursor-wait; }
 }
+
+.welcome-page {
+  background: radial-gradient(ellipse at 15% 15%, #f7efe0, transparent 55%), #edf4f1;
+}
+
+.welcome-intro::after {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  background:
+    radial-gradient(circle at 108% 110%, transparent 0 23%, #fcdea614 23% 31%, transparent 31% 42%, #fcdea614 42% 44%, transparent 44%),
+    linear-gradient(142deg, #093b35, #10302d 64%, #165249);
+}
+
+.welcome-home {
+  width: 1rem;
+  height: 1rem;
+  background: currentColor;
+  clip-path: polygon(50% 4%, 100% 42%, 90% 55%, 90% 94%, 62% 94%, 62% 66%,
+    38% 66%, 38% 94%, 10% 94%, 10% 55%, 0 42%);
+}

@@ -1,3 +1,5 @@
+import { operatorAccountsSql, roleQueryValues } from '../auth/account-roles.js';
+
 const minute = 60_000;
 
 async function notify(client, machine, userIds, kind, message, now, reportId = null, push = true) {
@@ -23,9 +25,10 @@ function equipment(machine) {
   return `${name} ${machine.label} (${machine.location})`;
 }
 
-export async function notifyReport(client, machine, report, kind, now) {
+export async function notifyReport(client, machine, report, kind, now, testAccounts) {
   if (kind === 'report-new') {
-    const { rows } = await client.query('SELECT id FROM users WHERE can_manage_equipment');
+    const { rows } = await client.query('SELECT id FROM users WHERE ' + operatorAccountsSql,
+      roleQueryValues(testAccounts));
     const message = machine ? equipment(machine) + ' are o sesizare nouă.' : 'Sesizare nouă de întreținere.';
     await notify(client, machine, rows.map(user => user.id), kind, message, now, report.id);
     return;

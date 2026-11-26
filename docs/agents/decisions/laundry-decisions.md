@@ -26,7 +26,7 @@
 - **Confirmed:** 2026-11-23
 
 ## D-014 · Authorize equipment operations separately and restore service manually
-- **Status:** approved
+- **Status:** superseded-by D-021
 - **Rule:** Grant and revoke equipment management per administrator or admin account
   from the terminal. Scheduled inspection blocks bookings immediately and lets
   only the original usage cycle finish. Keep equipment under inspection until
@@ -36,7 +36,6 @@
 - **Why:** Operators can handle laundry faults independently of access to
   service diagnostics and reservation history.
 - **Evidence:** Owner approved the issue #9 implementation plan.
-- **Confirmed:** 2026-11-24
 
 ## D-015 · Notify affected residents when equipment returns to service in time
 - **Status:** approved

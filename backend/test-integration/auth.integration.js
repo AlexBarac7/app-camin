@@ -10,6 +10,7 @@ import { createApp } from '../src/app.js';
 import { loadDatabaseConfig } from '../src/config.js';
 import { createDatabase } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
+import { tokenHash } from '../src/modules/auth/credentials.js';
 import { issueInvitation, revokeInvitation } from '../src/modules/auth/invitations.js';
 
 test('resident access on a fresh disposable PostgreSQL database', async t => {
@@ -26,7 +27,15 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
     { filename: '001_resident_access.sql', state: 'newly applied' },
     { filename: '002_laundry_machines.sql', state: 'newly applied' },
   ]);
-  const server = createApp(db).listen(0, '127.0.0.1');
+  const outbound = [];
+  const attempts = [];
+  let rejectMail = false;
+  const sendInvitation = async (email, link) => {
+    attempts.push({ email, link });
+    if (rejectMail) throw new Error('simulated SMTP rejection');
+    outbound.push({ email, link });
+  };
+  const server = createApp(db, undefined, undefined, undefined, { sendInvitation }).listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(() => server.close());
   const base = 'http://127.0.0.1:' + server.address().port;
@@ -70,7 +79,7 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   for (let visit = 0; visit < 2; visit++) {
     const response = await request('session', undefined, cookie);
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { email });
+    assert.deepEqual(await response.json(), { email, role: 'resident' });
   }
   assert.equal((await request('logout', {}, cookie)).status, 204);
   assert.equal((await request('session', undefined, cookie)).status, 401);
@@ -142,7 +151,7 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   assert.equal(cleanup(), 'Sesiuni șterse: 0');
   const activeSession = await request('session', undefined, activeCookie);
   assert.equal(activeSession.status, 200);
-  assert.deepEqual(await activeSession.json(), { email });
+  assert.deepEqual(await activeSession.json(), { email, role: 'resident' });
 
   await cp(join(migrations, '004_service_status_access.sql'), join(baseline, '004_service_status_access.sql'));
   assert.deepEqual((await runMigrations(db, baseline, 'apply')).slice(3), [
@@ -179,4 +188,232 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   assert.equal(permission('grant', otherEmail).status, 0);
   assert.deepEqual(await statuses(otherCookie), [204, 200, 200]);
 
+  await runMigrations(db, migrations, 'apply');
+  const admin = (path, body, actor) => fetch(base + '/api/admin/' + path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: { origin: 'http://localhost:5173', 'content-type': 'application/json', ...(actor && { cookie: actor }) },
+    body: JSON.stringify(body),
+  });
+  const applicant = 'applicant@example.test';
+  assert.equal((await admin('access-requests')).status, 401);
+  assert.equal((await admin('access-requests', undefined, activeCookie)).status, 403);
+  assert.deepEqual(await (await request('session', undefined, otherCookie)).json(), {
+    email: otherEmail, role: 'admin',
+  });
+  const submissions = await Promise.all([
+    request('request-access', { email: applicant }),
+    request('request-access', { email: ' APPLICANT@example.test ' }),
+    request('request-access', { email }),
+  ]);
+  assert.deepEqual(submissions.map(response => response.status), [202, 202, 202]);
+  assert.deepEqual(await Promise.all(submissions.map(response => response.text())), ['', '', '']);
+  const requests = await (await admin('access-requests', undefined, otherCookie)).json();
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].email, applicant);
+  const notices = await (await fetch(base + '/api/notifications', { headers: { cookie: otherCookie } })).json();
+  assert.equal(notices.items.filter(item => item.kind === 'access-request').length, 1);
+  const approval = 'access-requests/' + requests[0].id + '/approve';
+  assert.equal((await admin(approval, {}, activeCookie)).status, 403);
+  const approvals = await Promise.all([admin(approval, {}, otherCookie), admin(approval, {}, otherCookie)]);
+  assert.deepEqual(approvals.map(response => response.status).sort(), [201, 409]);
+  assert.deepEqual(await approvals.find(response => response.status === 201).json(), { delivery: 'sent' });
+  assert.equal(outbound.length, 1);
+  const [{ email: recipient, link }] = outbound;
+  assert.equal(recipient, applicant);
+  const url = new URL(link);
+  assert.equal(url.origin, 'http://localhost:5173');
+  assert.equal(url.pathname, '/activeaza');
+  assert.equal((await request('activate', { token: url.hash.slice(1), password: 'demo1234' })).status, 201);
+  assert.equal((await activate(url.hash.slice(1))).status, 400);
+
+  assert.equal((await admin('account-role', { email, role: 'administrator' }, activeCookie)).status, 403);
+  assert.equal((await admin('account-role', { email, role: 'admin' }, otherCookie)).status, 400);
+  assert.equal((await admin('account-role', { email, role: 'administrator' }, otherCookie)).status, 204);
+  assert.deepEqual(await (await request('session', undefined, activeCookie)).json(), { email, role: 'administrator' });
+  assert.equal((await admin('reservations', undefined, activeCookie)).status, 200);
+  assert.equal((await admin('database/equipment', undefined, activeCookie)).status, 403);
+  assert.deepEqual(await statuses(activeCookie), [403, 403, 403]);
+  assert.equal((await admin('access-requests', undefined, activeCookie)).status, 403);
+  assert.equal((await admin('account-role', { email, role: 'resident' }, otherCookie)).status, 204);
+  assert.equal((await admin('reservations', undefined, activeCookie)).status, 403);
+
+  const retryEmail = 'retry@example.test';
+  assert.equal((await request('request-access', { email: retryEmail })).status, 202);
+  const [retryRequest] = await (await admin('access-requests', undefined, otherCookie)).json();
+  const retryPath = 'access-requests/' + retryRequest.id;
+  rejectMail = true;
+  assert.equal((await admin(retryPath + '/approve', {}, otherCookie)).status, 502);
+  const firstLink = attempts.at(-1).link;
+  const [failed] = await (await admin('access-requests', undefined, otherCookie)).json();
+  assert.equal(failed.delivery, 'failed');
+  rejectMail = false;
+  const retries = await Promise.all([
+    admin(retryPath + '/retry', {}, otherCookie), admin(retryPath + '/retry', {}, otherCookie),
+  ]);
+  assert.deepEqual(retries.map(response => response.status).sort(), [201, 409]);
+  assert.equal(outbound.filter(item => item.email === retryEmail).length, 1);
+  assert.notEqual(outbound.at(-1).link, firstLink);
+  const attemptTokens = [firstLink, outbound.at(-1).link].map(link => new URL(link).hash.slice(1));
+  const validInvitations = await db.query(`SELECT count(*)::int AS count FROM invitations
+    WHERE email = $1 AND revoked_at IS NULL AND used_at IS NULL AND expires_at > clock_timestamp()`, [retryEmail]);
+  assert.equal(validInvitations.rows[0].count, 1);
+  assert.notEqual(attemptTokens[0], attemptTokens[1]);
+
+  const testEnvironment = { ...process.env, NODE_ENV: 'development', CAMIN_LOCAL_TEST_ACCOUNTS: 'true' };
+  const configureTestAccount = (args, address, env = testEnvironment) => spawnSync(process.execPath,
+    ['src/service-status-access.js', ...args], {
+      cwd: fileURLToPath(new URL('../', import.meta.url)), input: address + '\n', env, encoding: 'utf8',
+    });
+  const ownerSetup = configureTestAccount(['setup'], 'second-owner@example.test', {
+    ...testEnvironment, CAMIN_SETUP_PASSWORD: password,
+  });
+  assert.equal(ownerSetup.status, 1);
+  const testAdmin = 'admin@example.test';
+  const setup = configureTestAccount(['setup'], testAdmin, { ...testEnvironment, CAMIN_SETUP_PASSWORD: password });
+  assert.equal(setup.status, 0, setup.stderr);
+  assert.equal((await request('login', { email: testAdmin, password })).status, 401);
+  assert.equal(configureTestAccount(['--equipment', 'grant'], email).status, 1);
+
+  const testServer = createApp(db, undefined, undefined, undefined, {
+    testAccounts: true, appOrigin: 'https://camin.example.test', sendInvitation,
+  }).listen(0, '127.0.0.1');
+  await once(testServer, 'listening');
+  t.after(() => testServer.close());
+  const testBase = 'http://127.0.0.1:' + testServer.address().port;
+  const local = (path, body, actor) => fetch(testBase + path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: { origin: 'http://localhost:5173', 'content-type': 'application/json', ...(actor && { cookie: actor }) },
+    body: JSON.stringify(body),
+  });
+  const testLogin = await local('/api/auth/login', { email: testAdmin, password });
+  assert.equal(testLogin.status, 200);
+  const testCookie = testLogin.headers.get('set-cookie').split(';')[0];
+  assert.deepEqual(await (await local('/api/auth/session', undefined, testCookie)).json(), { email: testAdmin, role: 'admin' });
+  assert.equal((await local('/api/admin/database/equipment', undefined, testCookie)).status, 200);
+  assert.equal((await local('/api/admin/access-requests', undefined, testCookie)).status, 200);
+  assert.equal((await request('session', undefined, testCookie)).status, 401);
+
+  const fixtureAddress = 'rezident@example.test';
+  assert.equal((await local('/api/auth/request-access', { email: fixtureAddress })).status, 202);
+  const [fixtureRequest] = await (await local('/api/admin/access-requests', undefined, testCookie)).json();
+  assert.equal(fixtureRequest.email, fixtureAddress);
+  const fixtureApproval = await local('/api/admin/access-requests/' + fixtureRequest.id + '/approve', {}, testCookie);
+  assert.equal(fixtureApproval.status, 201);
+  assert.deepEqual(await fixtureApproval.json(), { delivery: 'sent' });
+  const fixtureLink = new URL(outbound.at(-1).link);
+  assert.equal(fixtureLink.origin, 'https://camin.example.test');
+  assert.equal((await local('/api/auth/activate', { token: fixtureLink.hash.slice(1), password })).status, 201);
+  const fixtureLogin = await local('/api/auth/login', { email: fixtureAddress, password });
+  const fixtureCookie = fixtureLogin.headers.get('set-cookie').split(';')[0];
+  assert.equal(configureTestAccount(['--equipment', 'grant'], fixtureAddress, {
+    ...testEnvironment, NODE_ENV: 'production',
+  }).status, 1);
+  assert.equal(configureTestAccount(['--equipment', 'grant'], fixtureAddress).status, 0);
+  assert.equal((await local('/api/laundry-reports/operator', undefined, fixtureCookie)).status, 200);
+  assert.equal((await local('/api/equipment-access', undefined, fixtureCookie)).status, 204);
+
+  const report = await local('/api/laundry-reports', {
+    category: 'other', locationType: 'shared', location: 'Test', description: 'Test de integrare',
+  }, activeCookie);
+  assert.equal(report.status, 201);
+  const { id: reportId } = await report.json();
+  for (const operatorCookie of [otherCookie, testCookie, fixtureCookie]) {
+    const inbox = await (await local('/api/notifications', undefined, operatorCookie)).json();
+    assert.equal(inbox.items.filter(item => item.kind === 'report-new' && item.reportId === reportId).length, 1);
+  }
+  assert.equal((await local('/api/laundry-reports/' + reportId + '/take', { priority: 'normal' }, fixtureCookie)).status, 204);
+  assert.equal((await local('/api/laundry-reports/' + reportId + '/resolve', {}, fixtureCookie)).status, 204);
+  assert.equal(configureTestAccount(['--equipment', 'revoke'], fixtureAddress).status, 0);
+  assert.equal((await local('/api/laundry-reports/operator', undefined, fixtureCookie)).status, 403);
+
+  await t.test('password reset expires, is consumed once, and fences out stale logins', async () => {
+    const resetMail = [];
+    let pauseLogin = false;
+    const loginRead = Promise.withResolvers();
+    const resumeLogin = Promise.withResolvers();
+    const resetDatabase = {
+      ...db,
+      async query(sql, parameters) {
+        const result = await db.query(sql, parameters);
+        if (pauseLogin && sql.includes('SELECT id, password_hash FROM users WHERE email')) {
+          pauseLogin = false;
+          loginRead.resolve();
+          await resumeLogin.promise;
+        }
+        return result;
+      },
+    };
+    const resetServer = createApp(resetDatabase, undefined, undefined, undefined, {
+      appOrigin: 'https://camin.example.test',
+      sendPasswordReset: async (address, link) => resetMail.push({ address, url: new URL(link) }),
+    }).listen(0, '127.0.0.1');
+    await once(resetServer, 'listening');
+    t.after(() => resetServer.close());
+    const resetApi = (path, body, cookie) => fetch(`http://127.0.0.1:${resetServer.address().port}/api/auth/${path}`, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { origin: 'http://localhost:5173', 'content-type': 'application/json', ...(cookie && { cookie }) },
+      body: JSON.stringify(body),
+    });
+    const ask = email => resetApi('request-password-reset', { email });
+    const reset = (token, password) => resetApi('reset-password', { token, password });
+    const signIn = password => resetApi('login', { email, password });
+    const oldSession = await signIn(password);
+    assert.equal(oldSession.status, 200);
+    const oldCookie = oldSession.headers.get('set-cookie').split(';')[0];
+    const absent = await ask('absent@example.test');
+    const excluded = await ask(testAdmin);
+    const present = await ask(' DEMO@example.test ');
+    for (const response of [absent, excluded, present]) {
+      assert.equal(response.status, 202);
+      assert.equal(await response.text(), '');
+    }
+    assert.equal(resetMail.length, 1);
+    assert.equal(resetMail[0].address, email);
+    assert.equal(resetMail[0].url.origin, 'https://camin.example.test');
+    assert.equal(resetMail[0].url.pathname, '/reseteaza-parola');
+    const expiredToken = resetMail[0].url.hash.slice(1);
+    assert.match(expiredToken, /^[\w-]{43}$/);
+    const { rows: [lifetime] } = await db.query(`SELECT extract(epoch FROM expires_at - clock_timestamp())::int AS seconds
+      FROM password_resets WHERE token_hash = $1`, [tokenHash(expiredToken)]);
+    assert.ok(lifetime.seconds <= 1800 && lifetime.seconds > 1790);
+    await db.query('UPDATE password_resets SET expires_at = clock_timestamp() WHERE token_hash = $1', [tokenHash(expiredToken)]);
+    assert.equal((await reset(expiredToken, 'new test password')).status, 400);
+    assert.equal((await resetApi('session', undefined, oldCookie)).status, 200);
+
+    assert.equal((await ask(email)).status, 202);
+    const token = resetMail.at(-1).url.hash.slice(1);
+    const newPassword = 'altă1234';
+    const competingPassword = 'x'.repeat(128);
+    pauseLogin = true;
+    const staleLogin = signIn(password);
+    let results;
+    try {
+      await Promise.race([loginRead.promise, staleLogin.then(() => assert.fail('Login completed before the race barrier'))]);
+      results = await Promise.all([reset(token, newPassword), reset(token, competingPassword)]);
+    } finally {
+      resumeLogin.resolve();
+    }
+    assert.deepEqual(results.map(response => response.status).sort(), [204, 400]);
+    const staleResponse = await staleLogin;
+    assert.equal(staleResponse.status, 401);
+    assert.equal(staleResponse.headers.get('set-cookie'), null);
+    assert.equal((await reset(token, 'reuse test')).status, 400);
+    for (const actor of [oldCookie, activeCookie]) {
+      assert.equal((await resetApi('session', undefined, actor)).status, 401);
+    }
+    assert.equal((await resetApi('session', undefined, otherCookie)).status, 200);
+    assert.equal((await signIn(password)).status, 401);
+    const winner = results[0].ok ? newPassword : competingPassword;
+    const newSession = await signIn(winner);
+    assert.equal(newSession.status, 200);
+    assert.equal((await signIn(winner === newPassword ? competingPassword : newPassword)).status, 401);
+
+    assert.equal((await ask(email)).status, 202);
+    const nextToken = resetMail.at(-1).url.hash.slice(1);
+    assert.notEqual(nextToken, token);
+    const lastPassword = 'é'.repeat(128);
+    assert.equal((await reset(nextToken, lastPassword)).status, 204);
+    assert.equal((await resetApi('session', undefined, newSession.headers.get('set-cookie').split(';')[0])).status, 401);
+    assert.equal((await signIn(lastPassword)).status, 200);
+  });
 });

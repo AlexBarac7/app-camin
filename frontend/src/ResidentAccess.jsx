@@ -5,16 +5,19 @@ import Notifications, { disableDevicePush } from './Notifications.jsx';
 import LaundryReports, { ReportEquipment } from './LaundryReports.jsx';
 
 const invalidLink = 'Invitația nu mai este valabilă. Cere o invitație nouă.';
+const invalidResetLink = 'Linkul de resetare nu mai este valabil. Cere un link nou.';
 const unavailable = 'Momentan nu putem finaliza cererea. Încearcă din nou.';
 const buttonStyle = 'rounded-lg bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-900 disabled:opacity-60';
+const authLinkStyle = 'w-fit rounded font-semibold text-teal-900 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4';
 
 const route = window.location.pathname;
-const invitation = route === '/activeaza' ? window.location.hash.slice(1) : '';
-if (route === '/activeaza' && window.location.hash) {
+const tokenRoute = route === '/activeaza' || route === '/reseteaza-parola';
+const linkToken = tokenRoute ? window.location.hash.slice(1) : '';
+if (tokenRoute && window.location.hash) {
   window.history.replaceState(null, '', window.location.pathname + window.location.search);
 }
 
-async function authRequest(action, data) {
+export async function authRequest(action, data) {
   const response = await fetch('/api/auth/' + action, data === undefined ? {} : {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -25,7 +28,7 @@ async function authRequest(action, data) {
     const message = body.code === 'invalid_invitation' ? invalidLink : body.message;
     throw Object.assign(new Error(response.status >= 500 ? unavailable : message || unavailable), {
       status: response.status,
-      invalidInvitation: body.code === 'invalid_invitation',
+      code: body.code,
     });
   }
   return response;
@@ -43,11 +46,13 @@ function Field({ name, label, type, autoComplete, error }) {
   );
 }
 
-function AccessForm({ activation }) {
+export function AccessForm({ activation = false, reset = false, embedded = false }) {
+  const choosePassword = activation || reset;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
-  const [invalid, setInvalid] = useState(activation && !/^[\w-]{43}$/.test(invitation));
+  const [invalid, setInvalid] = useState(choosePassword && !/^[\w-]{43}$/.test(linkToken));
+  const [changed, setChanged] = useState(false);
 
   async function submit(event) {
     event.preventDefault();
@@ -57,10 +62,10 @@ function AccessForm({ activation }) {
     setError('');
     setFieldErrors({});
 
-    if (activation) {
+    if (choosePassword) {
       const length = Array.from(password).length;
       const errors = {};
-      if (length < 15 || length > 128) errors.password = 'Alege o parolă între 15 și 128 de caractere.';
+      if (length < 8 || length > 128) errors.password = 'Alege o parolă între 8 și 128 de caractere.';
       if (password !== data.get('confirmation')) errors.confirmation = 'Parolele trebuie să coincidă.';
       if (Object.keys(errors).length) {
         setFieldErrors(errors);
@@ -71,38 +76,82 @@ function AccessForm({ activation }) {
 
     setPending(true);
     try {
-      await authRequest(activation ? 'activate' : 'login', activation
-        ? { token: invitation, password }
+      await authRequest(reset ? 'reset-password' : activation ? 'activate' : 'login', choosePassword
+        ? { token: linkToken, password }
         : { email: data.get('email'), password });
+      if (reset) {
+        setChanged(true);
+        return;
+      }
       const notice = new URLSearchParams(window.location.search).get('notificare');
       const destination = notice && /^\d+$/.test(notice) ? '/notificari#notificare-' + notice : '/resurse';
       window.location.replace(activation ? '/autentificare' : destination);
     } catch (failure) {
-      if (failure.invalidInvitation) setInvalid(true);
+      if (failure.code === 'invalid_invitation' || failure.code === 'invalid_password_reset') setInvalid(true);
       else setError(failure.status ? failure.message : unavailable);
       setPending(false);
     }
   }
 
-  if (invalid) return <p role="alert" className="mt-5 text-red-800">{invalidLink}</p>;
+  if (changed) return <div className="mt-5 grid gap-4">
+    <p role="status" className="rounded-xl bg-teal-50 p-4 text-teal-950">Parola ta a fost schimbată</p>
+    <a className={authLinkStyle} href="/autentificare">Înapoi la autentificare</a>
+  </div>;
+  if (invalid) return <div className="mt-5 grid gap-4">
+    <p role="alert" className="text-red-800">{reset ? invalidResetLink : invalidLink}</p>
+    {reset && <a className={authLinkStyle} href="/am-uitat-parola">Cere un link nou</a>}
+  </div>;
 
   return (
-    <form onSubmit={submit} className="mt-6 grid gap-5">
-      {!activation && <Field name="email" label="E-mail" type="email" autoComplete="username" />}
-      <Field name="password" label="Parolă" type="password" error={fieldErrors.password}
-        autoComplete={activation ? 'new-password' : 'current-password'} />
-      {activation && <Field name="confirmation" label="Confirmă parola" type="password"
+    <form onSubmit={submit} className={embedded ? 'mt-5 grid gap-4' : 'mt-6 grid gap-5'}>
+      {!choosePassword && <Field name="email" label="E-mail" type="email" autoComplete="username" />}
+      <Field name="password" label={reset ? 'Parola nouă' : activation ? 'Alege o parolă' : 'Parolă'} type="password" error={fieldErrors.password}
+        autoComplete={choosePassword ? 'new-password' : 'current-password'} />
+      {choosePassword && <Field name="confirmation" label={reset ? 'Confirmă parola nouă' : 'Confirmă parola'} type="password"
         error={fieldErrors.confirmation} autoComplete="new-password" />}
+      {!choosePassword && <a className={authLinkStyle} href="/am-uitat-parola">Am uitat parola</a>}
       {error && <p role="alert" className="text-sm text-red-800">{error}</p>}
-      <button className={buttonStyle} disabled={pending}>
-        {pending ? 'Se trimite…' : activation ? 'Activează contul' : 'Autentifică-te'}
+      <button className={buttonStyle + (embedded ? ' bg-teal-950 hover:bg-teal-800' : '')} disabled={pending}>
+        {pending ? 'Se trimite…' : reset ? 'Schimbă parola' : activation ? 'Activează contul' : 'Autentifică-te'}
       </button>
     </form>
   );
 }
 
+function PasswordResetRequest() {
+  const [state, setState] = useState('ready');
+  const [error, setError] = useState('');
+
+  async function submit(event) {
+    event.preventDefault();
+    const email = new FormData(event.currentTarget).get('email');
+    setError('');
+    setState('pending');
+    try {
+      await authRequest('request-password-reset', { email });
+      setState('sent');
+    } catch (failure) {
+      setState('ready');
+      setError(failure.status ? failure.message : unavailable);
+    }
+  }
+
+  return <div className="mt-5 grid gap-5">
+    {state === 'sent' ? <p role="status" className="rounded-xl bg-teal-50 p-4 text-teal-950">
+      Dacă există un cont cu această adresă, vei primi un link de resetare prin e-mail.
+    </p> : <form className="grid gap-4" onSubmit={submit}>
+      <Field name="email" label="E-mail" type="email" autoComplete="email" />
+      {error && <p role="alert" className="text-sm text-red-800">{error}</p>}
+      <button className={buttonStyle} disabled={state === 'pending'}>
+        {state === 'pending' ? 'Se trimite…' : 'Trimite linkul de resetare'}
+      </button>
+    </form>}
+    <a className={authLinkStyle} href="/autentificare">Înapoi la autentificare</a>
+  </div>;
+}
+
 function Account() {
-  const [email, setEmail] = useState(null);
+  const [account, setAccount] = useState(null);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
 
@@ -112,7 +161,7 @@ function Account() {
       try {
         const response = await authRequest('session');
         const account = await response.json();
-        if (active) setEmail(account.email);
+        if (active) setAccount(account);
       } catch (failure) {
         if (!active) return;
         if (failure.status === 401) window.location.replace('/autentificare');
@@ -138,14 +187,31 @@ function Account() {
 
   return (
     <div className="mt-5 grid gap-5">
-      {email && <>
-        <p className="break-all">{email}</p>
+      {account && <>
+        <dl className="grid gap-3">
+          <div><dt className="text-sm font-medium text-slate-600">E-mail</dt><dd className="break-all">{account.email}</dd></div>
+          <div><dt className="text-sm font-medium text-slate-600">Rol</dt>
+            <dd className="font-semibold">{{ admin: 'Admin', administrator: 'Administrator', resident: 'Rezident' }[account.role]}</dd>
+          </div>
+        </dl>
+        {account.role !== 'resident' && (
+          <nav aria-label="Administrare" className="grid gap-2 border-t border-slate-200 pt-4">
+            {account.role === 'admin' && <a className="underline" href="/admin/cereri-acces">Cereri de acces și roluri</a>}
+            <a className="underline" href="/admin/echipamente">Gestionează echipamentele</a>
+            <a className="underline" href="/admin/sesizari">Sesizări de întreținere</a>
+            <a className="underline" href="/admin/rezervari">Istoricul rezervărilor</a>
+            {account.role === 'admin' && <>
+              <a className="underline" href="/admin/stare-servicii">Starea serviciilor</a>
+              <a className="underline" href="/admin/baza-de-date">Baza de date</a>
+            </>}
+          </nav>
+        )}
         <button type="button" className={buttonStyle} disabled={pending} onClick={logout}>
           {pending ? 'Se deconectează…' : 'Deconectare'}
         </button>
       </>}
       {error && <p role="alert" className="text-red-800">{error}</p>}
-      {!email && !error && <p role="status">Se verifică sesiunea…</p>}
+      {!account && !error && <p role="status">Se verifică sesiunea…</p>}
     </div>
   );
 }
@@ -356,9 +422,11 @@ function Resources({ room }) {
 const currentRoom = laundryRooms.find(room => room.path === route);
 const headings = {
   '/activeaza': 'Activează contul',
+  '/am-uitat-parola': 'Am uitat parola',
   '/autentificare': 'Autentificare',
   '/cont': 'Contul meu',
   '/notificari': 'Notificări',
+  '/reseteaza-parola': 'Resetează parola',
   '/resurse': 'Resurse',
   '/sesizari': 'Sesizările mele',
   '/spalatorie': 'Resurse',
@@ -381,11 +449,12 @@ export default function ResidentAccess() {
   const showNav = route === '/cont' || route === '/notificari' || route === '/resurse' || route === '/sesizari' || currentRoom;
   let content;
   if (route === '/cont') content = <Account />;
+  else if (route === '/am-uitat-parola') content = <PasswordResetRequest />;
   else if (route === '/notificari') content = <Notifications onUnreadCount={setInboxUnreadCount} />;
   else if (route === '/sesizari') content = <LaundryReports />;
   else if (route === '/resurse' || currentRoom) content = <Resources room={currentRoom} />;
   else if (legacyRoute) content = <a href="/resurse">Deschide Resurse</a>;
-  else content = <AccessForm activation={route === '/activeaza'} />;
+  else content = <AccessForm activation={route === '/activeaza'} reset={route === '/reseteaza-parola'} />;
 
   return (
     <main className="mx-auto max-w-lg px-4 py-10 sm:py-20">

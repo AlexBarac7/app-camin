@@ -16,6 +16,11 @@ export function passwordLength(value) {
   return typeof value === 'string' ? Array.from(value).length : 0;
 }
 
+export function invitationEmail(value) {
+  const email = normalizeEmail(value);
+  return email && /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(email) ? email : null;
+}
+
 export async function hashPassword(password) {
   const salt = randomBytes(16);
   const hash = await derive(password, salt, 32, options);

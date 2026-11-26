@@ -1,5 +1,8 @@
-import { Router } from 'express';
-import { requireSession } from '../auth/auth.routes.js';
+import { json, Router } from 'express';
+import { localOrigins, requireSession } from '../auth/auth.routes.js';
+import { isTestAccount, testAdminEmail } from '../auth/account-roles.js';
+import { normalizeEmail } from '../auth/credentials.js';
+import { finishInvitationDelivery, listAccessRequests, startInvitationDelivery } from '../auth/invitations.js';
 import { residenceZone, validDay } from '../laundry/reservation-rules.js';
 
 const pageSize = 25;
@@ -22,11 +25,55 @@ function pageResult(rows, page) {
   return { page, hasNext: rows.length > pageSize };
 }
 
-export function adminRoutes(database) {
+export function adminRoutes(database, origins = localOrigins, appOrigin, sendInvitation) {
   const router = Router();
-  const authorize = requireSession(database, { serviceStatus: true });
+  const authorize = requireSession(database, { admin: true });
+  const operator = requireSession(database, { manageEquipment: true });
+  const write = (req, res, next) => origins.includes(req.get('origin')) ? next() : res.sendStatus(403);
 
-  router.get('/reservations', authorize, async (req, res) => {
+  router.get('/access-requests', authorize, async (_req, res) => {
+    res.json(await listAccessRequests(database));
+  });
+
+  for (const action of ['approve', 'retry']) {
+    router.post('/access-requests/:id/' + action, authorize, write, async (req, res) => {
+      const { id } = req.params;
+      if (!/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) return res.sendStatus(404);
+      if (!sendInvitation) return res.status(503).json({ message: 'Trimiterea e-mailurilor nu este configurată.' });
+      const attempt = await startInvitationDelivery(database, id, action === 'retry');
+      if (!attempt) return res.status(409).json({ message: 'Starea cererii s-a schimbat. Lista a fost actualizată.' });
+      if (attempt.invalidEmail) return res.status(422).json({ message: 'Adresa din cerere nu poate primi invitația.' });
+
+      const link = new URL('/activeaza#' + attempt.token, appOrigin).href;
+      let state = 'sent';
+      try {
+        await sendInvitation(attempt.email, link);
+      } catch {
+        state = 'failed';
+      }
+      const current = await finishInvitationDelivery(database, id, attempt.hash, state);
+      if (!current) return res.status(409).json({ message: 'Starea cererii s-a schimbat. Lista a fost actualizată.' });
+      if (state === 'failed') return res.status(502).json({ message: 'E-mailul nu a putut fi trimis. Poți reîncerca.' });
+      res.status(201).json({ delivery: 'sent' });
+    });
+  }
+
+  router.post('/account-role', authorize, write, json({ limit: '2kb' }), async (req, res) => {
+    const email = normalizeEmail(req.body?.email);
+    const role = req.body?.role;
+    if (!email || !['administrator', 'resident'].includes(role)) {
+      return res.status(400).json({ message: 'Verifică adresa și rolul ales.' });
+    }
+    if (isTestAccount(email) && !req.app.locals.testAccounts) return res.sendStatus(404);
+    const { rowCount } = await database.query(`
+      UPDATE users SET can_manage_equipment = $2
+      WHERE email = $1 AND NOT can_view_service_status AND email <> $3`,
+    [email, role === 'administrator', testAdminEmail]);
+    if (!rowCount) return res.status(404).json({ message: 'Nu există un cont activ eligibil pentru această adresă.' });
+    res.sendStatus(204);
+  });
+
+  router.get('/reservations', operator, async (req, res) => {
     const { machineId, day, status } = req.query;
     const page = readPage(req.query.page);
     if (!page ||

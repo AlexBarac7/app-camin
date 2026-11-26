@@ -62,7 +62,10 @@ Open [the local app](http://localhost:5173), then follow
 | `POSTGRES_DB` | `app_camin_demo`, demonstrative local database name |
 | `POSTGRES_USER` | `app_camin_demo`, demonstrative local database user |
 | `POSTGRES_PASSWORD` | Required shell environment value; no committed default |
-| `APP_ORIGIN` | Exact app origin for invitations and write requests. Defaults to `http://localhost:5173`. |
+| `APP_ORIGIN` | Exact app origin for invitations, password resets and write requests. Defaults to `http://localhost:5173`. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | SMTP server, port and sender for approved resident invitations and password resets. |
+| `SMTP_SECURITY`, `SMTP_USER`, `SMTP_PASSWORD` | Use `starttls` (default) or `tls` and provide SMTP credentials in the environment. |
+| `CAMIN_LOCAL_TEST_ACCOUNTS` | Optional local test setting. Set to `true` in the shell to enable the two reserved test accounts in development. |
 | `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Optional shell settings for [Web Push](#web-push). |
 
 Compose maps the database name, user and password to `PGDATABASE`, `PGUSER` and
@@ -79,19 +82,15 @@ These are technical limits, not business policies.
 
 ## Verify PostgreSQL and service status
 
-The browser status page lives at `/admin/stare-servicii`. Apply the migrations,
-activate a resident account, and run the following command to grant access.
-Enter the existing account's email when prompted.
+The browser status page lives at `/admin/stare-servicii` and requires Admin.
+Set up the single owner account as described under [Local resident access](#local-resident-access).
+To verify PostgreSQL from the terminal, run:
 
 ```bash
-docker compose exec backend npm run service-status:access -- grant
 docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1;"'
 ```
 
-Use the same command with `revoke` to withdraw access before granting it to
-another account. Changes take effect on the next request, including existing sessions.
-
-The endpoint and readiness contract is owned by [C-002](docs/agents/CONTRACTS.md#c-002--authorized-service-status-and-internal-readiness).
+The endpoint and readiness contract is owned by [C-003](docs/agents/CONTRACTS.md#c-003--admin-service-status-and-internal-readiness).
 
 ### Verify the internal readiness probe
 
@@ -214,40 +213,94 @@ Use a fresh database for each run because the suites leave test objects behind.
 
 ## Local resident access
 
-After [First run](#first-run), issue an invitation from the backend container.
+After [First run](#first-run), create the owner account. Enter the owner's
+address at the prompt and choose a password of 15–128 characters.
 
 ```bash
-docker compose exec backend npm run invite:create
+read -rsp "Admin password: " CAMIN_SETUP_PASSWORD
+export CAMIN_SETUP_PASSWORD
+echo
+docker compose exec -e CAMIN_SETUP_PASSWORD backend npm run admin:setup
+unset CAMIN_SETUP_PASSWORD
 ```
 
-Enter the recipient's email at the prompt. For a demonstration, use an
-`@example.test` address. Verify the recipient and share the printed link
-privately. It expires after 48 hours and can be used once. Issuing a new
-invitation for the same address invalidates the previous one. To revoke an
-unused invitation, run `docker compose exec backend npm run invite:revoke`
-and enter the same email.
+If the owner already has an activated account, run
+`docker compose exec backend npm run service-status:access -- grant` and enter
+that address. To transfer the single owner slot from an existing account, use
+`revoke` with the previous address before granting it to the owner.
 
-Open the link in a browser, choose a password of 15–128 characters and confirm
-it. Sign in at `/autentificare` with the invited email. The app opens
+Residents choose **Solicită acces** on the welcome page and enter their email.
+Admin opens the new in-app notice or selects **Cereri de acces și roluri** from
+**Contul meu** and selects **Aprobă și trimite invitația**. The application
+sends the activation link to the address from the request. If the email
+server rejects the message, **Reîncearcă trimiterea** issues a new link and
+invalidates the previous one. The one-time link expires in 48 hours.
+
+The resident opens the link, chooses a password of 8–128 characters and signs
+in from the welcome page or `/autentificare`. The app opens
 **Resurse** at `/resurse`, with links to both laundry rooms and the drying room.
 Select an equipment card to see its technical condition, operating hours and
 Reservation calendar. The washers and dryers follow the same weekday schedule,
 08:00–20:00.
-Open **Contul meu** at `/cont` to see the email and select **Deconectare**.
+Open **Contul meu** at `/cont` to see the email and role or select **Deconectare**.
 A session lasts 24 hours.
 
-The invitation command prints links for `http://localhost:5173` by default.
+Invitation links use `http://localhost:5173` by default.
 The API accepts that origin and `http://127.0.0.1:5173` in local development.
 When serving the app at a different origin, set `APP_ORIGIN` to its exact
 scheme, host and port, with no trailing slash, and recreate the backend.
-The command uses that origin in links and the API uses it for write requests.
+The backend uses that origin in links and for write requests.
 In development, setting `APP_ORIGIN` also keeps the two local origins enabled.
+
+### Test invitation email locally
+
+In the same shell as the database configuration, start the private test mailbox:
+
+```bash
+export SMTP_HOST=mailpit SMTP_PORT=1025 SMTP_SECURITY=local SMTP_FROM=invitatii@example.test
+docker compose --profile mail up --build -d --wait
+docker compose exec backend npm run migrate
+```
+
+Approve a test request in the app and open [the local mailbox](http://localhost:8025/)
+to read the email and click **Activează contul**. Mailpit captures local messages.
+If using the photo storage profile as well, include `--profile photos`.
+
+For real delivery, set the SMTP host, port, authenticated credentials and
+the verified sender address in the backend environment. Set `APP_ORIGIN`
+to the HTTPS address recipients can open. Keep SMTP credentials in the shell
+or deployment environment.
+
+### Reset a password locally
+
+Start Mailpit and apply migration 015 with the commands in
+[Test invitation email locally](#test-invitation-email-locally). Select
+**Am uitat parola** on the welcome or sign-in page and submit the email of an
+activated account. The page shows the same confirmation for any valid address.
+Open the message in [Mailpit](http://localhost:8025/) and select **Alege o parolă
+nouă**. The latest link is valid for 30 minutes and can be used once.
+
+Enter and confirm a password of 8–128 characters. When **Parola ta a fost
+schimbată** appears, select **Înapoi la autentificare** and sign in with the
+new password. The reset ends the account's previous sessions. You can request
+another link from the sign-in page.
+
+### Local test roles
+
+Export `CAMIN_LOCAL_TEST_ACCOUNTS=true` in the same shell as the database
+password and recreate the local backend with `docker compose up -d backend`.
+Run the Admin setup command above with `admin@example.test` to create the local
+Admin. For `rezident@example.test`, use the usual request, approval and
+activation flow. Then use `docker compose exec backend npm run equipment:access -- grant`
+or `revoke` and enter `rezident@example.test` to switch between Administrator
+and Rezident. These test accounts sign in only with local test mode enabled.
+Use a disposable or dedicated local database for tests involving these accounts.
 
 ### Inspect reservations and database tables
 
-The account authorized for service status can open `/admin/rezervari` to filter
-reservation history or `/admin/baza-de-date` to browse equipment, reservations
-and migrations. Both pages are read-only.
+Admin and Administrator can filter reservation history at `/admin/rezervari`.
+Admin can browse equipment, reservations and migrations at `/admin/baza-de-date`.
+Both pages are read-only.
 
 ### Clean up expired sessions
 
@@ -263,10 +316,9 @@ sessions and prints the number deleted. Active sessions remain usable.
 
 ### Managing laundry equipment faults
 
-To grant equipment management access to an existing account, run
-`docker compose exec backend npm run equipment:access -- grant` and enter the
-account email at the prompt. Use `revoke` to withdraw access. The backend checks
-this permission on every equipment management request.
+From **Cereri de acces și roluri**, Admin can set an activated account to
+**Administrator** or return it to **Rezident**. The backend checks the account's
+current role on every equipment management request.
 
 Open **Resurse → Gestionează echipamentele** and select the machine by room and number.
 

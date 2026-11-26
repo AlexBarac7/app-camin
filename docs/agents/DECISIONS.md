@@ -12,21 +12,19 @@
 - D-003 · Docker and Compose for local development
 - D-004 · Keep local environment values out of Git
 - D-005 · Apply versioned PostgreSQL migrations explicitly
-- D-006 · Activate local resident accounts by invitation
 - D-007 · Require resident authentication to read the laundry catalog
-- D-008 · Limit browser access to service status to one explicitly authorized account
 - D-009 · Notify only residents waiting to use defective equipment
 - D-010 · Cancel affected reservations and Live-queue entries when equipment is defective
 - D-011 · Use the application calendar for pilot laundry reservations · _proposed_ · [Laundry decisions](decisions/laundry-decisions.md)
-- D-012 · Restrict administrative data views to the authorized operator · [Admin data](decisions/admin-data.md)
 - D-013 · Allow extended laundry use for blocks ending at 20:00 · [Laundry decisions](decisions/laundry-decisions.md)
-- D-014 · Authorize equipment operations separately and restore service manually · [Laundry decisions](decisions/laundry-decisions.md)
 - D-015 · Notify affected residents when equipment returns to service in time · [Laundry decisions](decisions/laundry-decisions.md)
 - D-016 · Offer a five-minute hold when laundry service resumes · [Laundry decisions](decisions/laundry-decisions.md)
 - D-017 · Deliver pilot equipment notifications in the app and through opt-in Web Push · [Laundry decisions](decisions/laundry-decisions.md)
 - D-018 · Keep resident notices unread until acknowledged · [Laundry decisions](decisions/laundry-decisions.md)
 - D-019 · Pilot digital reports for laundry equipment · [Laundry decisions](decisions/laundry-decisions.md)
 - D-020 · Extend maintenance reports to rooms and shared spaces · [Laundry decisions](decisions/laundry-decisions.md)
+- D-022 · Send approved invitations by email and let residents choose an eight-character password · [Admin data](decisions/admin-data.md)
+- D-023 · Let account holders reset their password by email · [Admin data](decisions/admin-data.md)
 
 ---
 
@@ -98,17 +96,6 @@
 - **Evidence:** The project owner approved the migration plan after selecting
   manual Compose execution and forward corrections.
 
-## D-006 · Activate local resident accounts by invitation
-- **Status:** approved
-- **Rule:** Activate local resident accounts through single-use invitations
-  issued from the terminal and valid for 48 hours. Authenticate with email and
-  password and use sessions valid for 24 hours.
-- **Why:** Demonstrate resident access before the shared resource inventory and
-  operating rules are available.
-- **Evidence:** The owner requested implementation of the approved resident
-  invitation plan.
-- **Confirmed:** 2026-11-21
-
 ## D-007 · Require resident authentication to read the laundry catalog
 - **Status:** approved
 - **Rule:** In the first version, residents need a valid session to view the
@@ -119,18 +106,6 @@
 - **Evidence:** The owner approved the read-only catalog plan, verified the
   browser flow and confirmed recording the access rule as a decision.
 - **Confirmed:** 2026-11-22
-
-## D-008 · Limit browser access to service status to one explicitly authorized account
-- **Status:** approved
-- **Rule:** Service status in the browser requires a valid session for the one
-  existing account that can be authorized through the local terminal command.
-  The permission is absent by default and is checked on every request. Revoke
-  the current permission before granting it to a different account.
-- **Why:** Service diagnostics are restricted to the operator selected locally.
-- **Evidence:** Owner requested implementation of the approved welcome and service
-  status plan.
-- **Confirmed:** 2026-11-23
-
 
 ## D-009 · Notify only residents waiting to use defective equipment
 - **Status:** approved

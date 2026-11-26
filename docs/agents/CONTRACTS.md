@@ -10,7 +10,8 @@
 
 ## Index
 - C-001 · Technical health API · provided · _superseded-by C-002_
-- C-002 · Authorized service status and internal readiness · provided
+- C-002 · Authorized service status and internal readiness · provided · _superseded-by C-003_
+- C-003 · Admin service status and internal readiness · provided
 
 ## Provided
 
@@ -31,7 +32,7 @@
   contract established by that implementation.
 
 ### C-002 · Authorized service status and internal readiness
-- **Status:** approved
+- **Status:** superseded-by C-003
 - **Interface:** GET /api/admin/access returns 204 for the authorized account.
   GET /api/health and GET /api/ready preserve the probe response bodies and
   status codes specified in C-001 after authorization. All three endpoints
@@ -44,7 +45,24 @@
 - **Consumers:** frontend/src/App.jsx; backend/test/health.test.js; compose.yaml.
 - **Evidence:** Owner requested implementation of the approved welcome and service
   status plan, which supersedes C-001.
-- **Confirmed:** 2026-11-23
+
+### C-003 · Admin service status and internal readiness
+- **Status:** approved
+- **Interface:** GET /api/admin/access returns 204 for a valid Admin session.
+  GET /api/health and GET /api/ready preserve the responses specified in C-001
+  after the same authorization check. A missing or expired session yields
+  401. Other authenticated roles receive 403. Responses use Cache-Control:
+  no-store and a generic server error for lookup failures. The owner is the
+  sole production Admin. An explicitly enabled local test Admin is also
+  authorized in the local test environment.
+  Compose continues to call GET /ready on the unpublished container-local
+  backend listener, which runs the four-second readiness probe without a
+  session.
+- **Consumers:** frontend/src/App.jsx, backend/test/health.test.js,
+  backend/test-integration/auth.integration.js and compose.yaml.
+- **Evidence:** Owner approved the Admin-only technical pages and local test
+  Admin exception.
+- **Confirmed:** 2026-11-26
 
 ## Consumed
 

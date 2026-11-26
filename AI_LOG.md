@@ -4,6 +4,79 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-26 · Password reset by email
+
+The owner approved D-023. **Am uitat parola** accepts an email address and
+gives the same confirmation for any valid address. SMTP sends a link for an
+existing account. Migration 015 stores the latest link's hash and its 30-minute
+expiry. Completing the reset consumes the link, changes the password and
+deletes existing sessions atomically. Login checks the verified password hash
+again under an account lock before creating a session. PATTERN-015 records that
+practice as a candidate.
+
+The new unit and PostgreSQL authentication tests initially received `404`
+instead of `400` and `202` respectively, because the reset routes were absent.
+After implementation, all 14 backend unit tests, all three PostgreSQL suites,
+the frontend build and the Compose configuration check passed. The PostgreSQL
+test checked expiration, concurrent submissions, reuse, a second reset and a
+login that had already read the old hash when the reset completed. Chromium
+with a private Mailpit and a disposable database verified the generic message,
+captured SMTP email, form validation, session revocation, sign-in with the new
+password, reuse rejection and a second reset. The ledger check initially
+flagged the missing `Why` field in D-023 and passed after it was added.
+
+The migration and mail checks ran on temporary services. The existing Compose
+services and their volumes were preserved. No external email was sent.
+
+The existing local backend subsequently returned `500` on a reset request.
+Its container still listed migrations only through 014. Copied migration 015
+into the running backend and applied it through `npm run migrate`. The local
+frontend proxy then returned the expected `202` with an empty body for an
+unknown demonstration address. Mailpit returned `200`. The services stayed
+running throughout the fix.
+
+## 2026-11-26 · Invitation email and resident activation password
+
+The owner approved SMTP delivery from **Aprobă și trimite invitația** and an
+eight-character minimum on the resident activation screen. The email contains
+Romanian plain-text and HTML versions, a button for the activation link and the
+48-hour expiry. Migration 014 records the delivery attempt. When SMTP fails,
+the request can be retried and replaces the earlier one-time link.
+
+Before implementation the new password assertion found the old message
+`Parola trebuie să aibă între 15 și 128 de caractere.` Backend tests, the
+three PostgreSQL suites, the frontend build and the knowledge ledger passed
+after the change. Integration covered concurrent approval and retry and a
+simulated SMTP rejection. Chromium and a disposable Mailpit mailbox exercised
+the complete flow from a request through a captured email, rejected seven
+characters, and accepted eight characters for activation and sign-in.
+
+Rebuilt the local Compose stack with Mailpit on loopback port 8025, applied
+migration 014, and kept the local test mailbox available for the owner.
+
+## 2026-11-26 · Welcome, access requests and account roles
+
+The owner approved a public email request, Admin approval and manual delivery
+of the copied invitation link. The Romanian welcome page places the message
+beside the sign-in form on desktop and above it on phones. Migration 013,
+D-021 and C-003 record the access flow, current account roles and the local
+test exceptions. Admin and Administrator share equipment, report and
+reservation-history access. Admin manages invitations and account roles and
+can view the technical pages.
+
+The first PostgreSQL run returned 500 for new access requests. The prior
+notification constraint required an equipment or report reference. Migration
+013 now recognizes access requests as a distinct kind with neither reference.
+The auth integration suite passed, including concurrent requests and
+approvals, session role changes, test account isolation and Docker-compatible
+grant and revoke behavior. Existing unit, migration and reservation checks,
+the frontend build, Compose configuration and ledger validation passed.
+
+Chromium verified the welcome layout at 1440, 390 and 320 pixels, the Admin
+notice, copying and using the link, and the role change in Contul meu. The
+first browser run timed out on the role selector's label. An explicit label
+association corrected it and the complete browser flow passed.
+
 ## 2026-11-25 · Phone acceptance of optimized photo uploads
 
 The project owner confirmed that a report with a large photo submitted
