@@ -19,7 +19,8 @@ ID. The worker simulation initially recorded no badge update. After the change,
 the sender, PostgreSQL dispatch and worker simulations passed. Chromium verified
 the count moving from 2 to 1 to 0 with a simulated platform badge. Updated the
 worker served by the running local frontend and verified that it matched the
-source. A physical iPhone or iPad check is still pending. The README includes
+source. The owner tested the installed app on a physical phone and confirmed
+that the unread count appeared on its Home Screen icon. The README includes
 the test procedure and the Android launcher limitation.
 
 ## 2026-11-26 · Cămin 3 resident portal design and report navigation
