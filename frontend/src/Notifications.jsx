@@ -15,6 +15,19 @@ const dateTime = new Intl.DateTimeFormat('ro-RO', {
 });
 const pushSupported = () => window.isSecureContext &&
   'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+let badgeRevision = 0;
+
+export async function syncDeviceBadge(unreadCount) {
+  if (!Number.isSafeInteger(unreadCount) || unreadCount < 0 || typeof navigator.setAppBadge !== 'function') return;
+  const revision = ++badgeRevision;
+  try {
+    const registration = unreadCount > 0 && await navigator.serviceWorker?.getRegistration();
+    const subscribed = registration && await registration.pushManager.getSubscription();
+    if (revision === badgeRevision) await navigator.setAppBadge(subscribed ? unreadCount : 0);
+  } catch {
+    // Badges are optional and can be disabled in the device settings.
+  }
+}
 
 async function send(path, method, body) {
   return fetch(endpoint + path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -29,7 +42,7 @@ export async function disableDevicePush(subscription) {
   await device.unsubscribe();
 }
 
-function PushControls({ publicKey }) {
+function PushControls({ publicKey, unreadCount }) {
   const [registration, setRegistration] = useState(null);
   const [subscription, setSubscription] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -58,12 +71,14 @@ function PushControls({ publicKey }) {
       if (subscription) {
         await disableDevicePush(subscription);
         setSubscription(null);
+        void syncDeviceBadge(0);
         setFeedback('Alertele sunt dezactivate pe acest dispozitiv.');
       } else {
         device = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: publicKey });
         const response = await send('/push-subscription', 'PUT', device.toJSON());
         if (!response.ok) throw new Error(unavailable);
         setSubscription(device);
+        void syncDeviceBadge(unreadCount);
         setFeedback('Alertele sunt activate pe acest dispozitiv.');
       }
     } catch {
@@ -131,9 +146,10 @@ export default function Notifications({ onUnreadCount }) {
     };
   }, [revision, target]);
 
+  const unreadCount = snapshot?.items.filter(item => !item.readAt).length;
   useEffect(() => {
-    if (snapshot) onUnreadCount(snapshot.items.filter(item => !item.readAt).length);
-  }, [snapshot, onUnreadCount]);
+    if (unreadCount !== undefined) onUnreadCount(unreadCount);
+  }, [unreadCount, onUnreadCount]);
 
   const showTarget = snapshot?.items.some(item => item.id === target);
   useEffect(() => {
@@ -188,7 +204,7 @@ export default function Notifications({ onUnreadCount }) {
   return <section className="mt-5 grid gap-4">
     {loadError && <p role="alert">{loadError} <button className="underline" onClick={() => refresh(value => value + 1)}>Reîncarcă</button></p>}
     {!snapshot && !loadError && <p role="status">Se încarcă notificările…</p>}
-    {snapshot && <PushControls publicKey={snapshot.pushPublicKey} />}
+    {snapshot && <PushControls publicKey={snapshot.pushPublicKey} unreadCount={unreadCount} />}
     {feedback && <p role="status">{feedback}</p>}
     {snapshot?.items.length === 0 && <p>Nu ai notificări.</p>}
     {!!snapshot?.items.length && <ul className="grid gap-3">

@@ -1,0 +1,127 @@
+# Propunere pentru inventarul de design al funcțiilor existente din README.md.
+version: 1
+status: proposed
+source: README.md
+screens:
+  - id: DS-001
+    title: Bun venit și autentificare
+    area: access
+    kind: page
+    routes: [/, /autentificare]
+
+  - id: DS-002
+    title: Solicită acces
+    area: access
+    kind: form
+    parents: [DS-001]
+
+  - id: DS-003
+    title: Activează contul
+    area: access
+    kind: page
+    routes: [/activeaza]
+
+  - id: DS-004
+    title: Am uitat parola
+    area: access
+    kind: page
+    routes: [/am-uitat-parola]
+
+  - id: DS-005
+    title: Resetează parola
+    area: access
+    kind: page
+    routes: [/reseteaza-parola]
+
+  - id: DS-006
+    title: Resurse
+    area: resident
+    kind: page
+    routes: [/resurse]
+
+  - id: DS-007
+    title: Inventarul unei încăperi
+    area: resident
+    kind: page
+    routes: [/spalatorie/1, /spalatorie/2, /spalatorie/uscatorie]
+
+  - id: DS-008
+    title: Calendarul echipamentului și rezervarea unui interval
+    area: resident
+    kind: panel
+    parents: [DS-007]
+    mock:
+      path: mocks/ds-008-rezervare.html
+      status: draft
+
+  - id: DS-009
+    title: Sesizările mele
+    area: resident
+    kind: page
+    routes: [/sesizari]
+
+  - id: DS-010
+    title: Sesizare nouă pentru o cameră sau un spațiu comun
+    area: resident
+    kind: form
+    parents: [DS-009]
+
+  - id: DS-011
+    title: Semnalează o defecțiune
+    area: resident
+    kind: form
+    parents: [DS-007]
+
+  - id: DS-012
+    title: Vizualizarea fotografiei din sesizare
+    area: maintenance
+    kind: dialog
+    parents: [DS-009, DS-016]
+
+  - id: DS-013
+    title: Notificări și alerte pe dispozitiv
+    area: resident
+    kind: page
+    routes: [/notificari]
+
+  - id: DS-014
+    title: Contul meu
+    area: resident
+    kind: page
+    routes: [/cont]
+
+  - id: DS-015
+    title: Gestionează echipamentele
+    area: operations
+    kind: page
+    routes: [/admin/echipamente]
+
+  - id: DS-016
+    title: Sesizări de întreținere pentru operatori
+    area: operations
+    kind: page
+    routes: [/admin/sesizari]
+
+  - id: DS-017
+    title: Istoricul rezervărilor
+    area: operations
+    kind: page
+    routes: [/admin/rezervari]
+
+  - id: DS-018
+    title: Cereri de acces și roluri
+    area: admin
+    kind: page
+    routes: [/admin/cereri-acces]
+
+  - id: DS-019
+    title: Baza de date
+    area: admin
+    kind: page
+    routes: [/admin/baza-de-date]
+
+  - id: DS-020
+    title: Starea serviciilor
+    area: admin
+    kind: page
+    routes: [/admin/stare-servicii]

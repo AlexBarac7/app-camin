@@ -23,6 +23,15 @@ test('push subscriptions accept the pilot push services and reject other destina
   assert.equal(subscriptionKeys({ p256dh: 'abc', auth: 'xyz' }), false);
 });
 
+test('push payload includes the current unread total, including zero', async () => {
+  for (const unreadCount of [4, 0]) {
+    const delivery = { notification_id: '5', endpoint: 'https://web.push.apple.com/abc', unread_count: unreadCount };
+    const payloads = [];
+    assert.equal(await deliverPush(delivery, async (_subscription, payload) => payloads.push(JSON.parse(payload))), 'done');
+    assert.deepEqual(payloads, [{ id: '5', unreadCount }]);
+  }
+});
+
 test('push delivery skips expired offers, bounds TTL and classifies provider failures', async () => {
   const now = new Date('2026-11-25T12:00:00Z');
   const delivery = {

@@ -192,7 +192,7 @@ export function ReportEquipment({ machine, onChange }) {
   </div>;
 }
 
-export default function LaundryReports({ operator = false }) {
+export default function LaundryReports({ operator = false, heading }) {
   const [items, setItems] = useState(null);
   const [revision, setRevision] = useState(0);
   const [open, setOpen] = useState(false);
@@ -247,36 +247,46 @@ export default function LaundryReports({ operator = false }) {
     }
   }
 
-  return <section className="mt-4 grid gap-4">
+  const newReport = !operator && !open && <button type="button" className={heading ? 'camin-primary' : button + ' justify-self-start'} onClick={() => {
+    setMessage('');
+    setOpen(true);
+  }}>Sesizare nouă</button>;
+
+  return <section className={heading ? 'resident-reports' : 'mt-4 grid gap-4'}>
+    {heading && <header className="resident-report-header">
+      <h1>{heading}</h1>
+      {operator ? <a className="camin-link" href="/admin/echipamente">Înapoi la echipamente</a> : newReport}
+    </header>}
     {operator ? <div className="flex flex-wrap items-center gap-4">
       <a className="underline" href="/notificari">Notificări și alerte pe dispozitiv</a>
       <button type="button" className={button} disabled={busy} onClick={() => {
         setError('');
         refresh();
       }}>Reîncarcă sesizările</button>
-    </div> : open ? <ReportForm onCancel={() => setOpen(false)} onSaved={() => {
+    </div> : open ? <div className={heading ? 'camin-panel' : undefined}><ReportForm onCancel={() => setOpen(false)} onSaved={() => {
       setOpen(false);
       setError('');
       setMessage('Sesizare trimisă.');
       refresh();
-    }} /> : <button type="button" className={button + ' justify-self-start'} onClick={() => {
-      setMessage('');
-      setOpen(true);
-    }}>Sesizare nouă</button>}
-    {message && <p role="status">{message}</p>}
-    {error && <p role="alert" className="text-red-800">{error}</p>}
+    }} /></div> : !heading && newReport}
+    {message && <p role="status" className={heading ? 'camin-notice' : undefined} data-tone="success">{message}</p>}
+    {error && <p role="alert" className={heading ? 'camin-notice' : 'text-red-800'} data-tone="error">{error}</p>}
     {!items && !error && <p role="status">Se încarcă sesizările…</p>}
     {items?.length === 0 && <p>Nu sunt sesizări.</p>}
     {!!items?.length && <ul className="grid gap-3">
       {items.map(item => <li key={item.id} id={'sesizare-' + item.id}
-        className="grid gap-2 rounded-xl border border-slate-300 p-4 target:border-slate-900">
-        <h2 className="font-semibold">{item.machineName ?? categories[item.category]}</h2>
-        <p className="break-words">{item.locationType === 'room' && 'Camera '}{item.location}
-          {item.floor && ' · Etaj: ' + item.floor}</p>
-        <p className="font-semibold">{labels[item.status]} · Prioritate: {priorities[item.priority] ?? 'Nestabilită'}</p>
-        <time className="text-sm text-slate-600" dateTime={item.createdAt}>{dateTime.format(new Date(item.createdAt))}</time>
-        <p className="whitespace-pre-wrap break-words">{item.description}</p>
-        {item.hasPhoto && <ReportPhoto src={endpoint + '/' + item.id + '/photo'} />}
+        className={heading ? 'camin-panel resident-report' : 'grid gap-2 rounded-xl border border-slate-300 p-4 target:border-slate-900'}>
+        <div className="report-copy grid min-w-0 gap-2">
+          <h2 className="font-semibold">{item.machineName ?? categories[item.category]}</h2>
+          <p className="break-words">{item.locationType === 'room' && 'Camera '}{item.location}
+            {item.floor && ' · Etaj: ' + item.floor}</p>
+          <p className="flex flex-wrap items-center gap-2"><span className={heading ? 'camin-tag' : 'font-semibold'} data-tone={
+            ['resolved', 'verified'].includes(item.status) ? 'success' : item.status === 'taken' ? 'warning' : 'info'
+          }>{labels[item.status]}</span><span>Prioritate: {priorities[item.priority] ?? 'Nestabilită'}</span></p>
+          <time className="text-sm text-slate-600" dateTime={item.createdAt}>{dateTime.format(new Date(item.createdAt))}</time>
+          <p className="whitespace-pre-wrap break-words">{item.description}</p>
+        </div>
+        {item.hasPhoto && <div className="report-photo"><ReportPhoto src={endpoint + '/' + item.id + '/photo'} /></div>}
         {operator && (item.status === 'new' || item.status === 'taken') && <div className="grid gap-3">
           {item.machineId && <a className="w-fit underline"
             href={'/admin/echipamente?echipament=' + item.machineId}>Gestionează echipamentul</a>}
@@ -298,7 +308,7 @@ export default function LaundryReports({ operator = false }) {
               {item.machineId && item.technicalStatus !== 'working' ? 'Rezolvă și repune în serviciu' : 'Marchează rezolvată'}
             </button>}
         </div>}
-        {!operator && item.status === 'resolved' && <button type="button" className={button}
+        {!operator && item.status === 'resolved' && <button type="button" className={heading ? 'camin-confirm-repair' : button}
           disabled={busy} onClick={() => change(item, 'verify')}>Confirm că problema s-a rezolvat</button>}
       </li>)}
     </ul>}

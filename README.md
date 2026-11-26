@@ -359,6 +359,15 @@ starting Compose. On iPhone, add the web app to the home screen and open it
 there before enabling alerts. Use test accounts to verify that an alert arrives
 with the app closed and opens the matching notice.
 
+On iPhone and iPad with iOS or iPadOS 16.4 or later, the installed app icon can
+show the account's unread count when alerts and badges are enabled. Open the
+installed app once to pick up the updated service worker. Trigger an existing
+Web Push alert while the app is closed, then compare the icon count with
+**Notificări**. Select **OK** on a notice to lower the count and clear it when
+the last notice is read. Android launchers handle their own indicator, typically
+a dot. [WebKit badging](https://webkit.org/blog/14112/badging-for-home-screen-web-apps/)
+· [Chrome badging](https://developer.chrome.com/docs/capabilities/web-apis/badging-api)
+
 ### Maintenance reports
 
 In **Resurse**, open a washer or dryer and select **Semnalează o defecțiune**.
@@ -366,8 +375,10 @@ The application takes the equipment and location from the inventory. For a
 room or shared space, select **Sesizare nouă** in **Sesizările mele** and
 enter the category, location and description. The floor and one photo are optional.
 
-An operator with equipment management permission can open **Vezi sesizările**
-from the equipment management page. New reports appear in the operator's
+Residents submit maintenance reports and can view them in **Sesizările mele**.
+Admin and Administrator open **Sesizări de întreținere** from **Sesizări** in the
+main navigation or from **Contul meu**. Operators manage reports submitted by
+residents. New reports appear in the operator's
 inbox and trigger Web Push on subscribed devices. The operator chooses
 **Scăzută**, **Normală** or **Urgentă** when taking a report, which notifies
 its author in the app. Resolving it notifies the author in the app and on

@@ -341,11 +341,16 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
   await db.query("UPDATE push_deliveries SET next_attempt_at = now() - interval '1 minute' WHERE notification_id = $1",
     [expiredNotice]);
   const sent = [];
+  const pushUnreadCounts = [];
+  const expectedPushCount = (await notices(1)).filter(notice => !notice.readAt).length;
   await dispatchPushDeliveries(db, async (_subscription, payload) => {
-    sent.push(JSON.parse(payload).id);
+    const { id, unreadCount } = JSON.parse(payload);
+    sent.push(id);
+    pushUnreadCounts.push(unreadCount);
     throw Object.assign(new Error('fixture'), { statusCode: 503 });
   });
   assert.ok(sent.length > 0);
+  assert.ok(pushUnreadCounts.every(count => count === expectedPushCount));
   assert.ok(!sent.includes(expiredNotice));
   assert.equal((await db.query('SELECT 1 FROM push_deliveries WHERE notification_id = $1', [expiredNotice])).rowCount, 0);
   const retried = await db.query('SELECT 1 FROM push_deliveries WHERE attempts = 1 AND next_attempt_at > now()');

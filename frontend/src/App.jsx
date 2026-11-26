@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import EquipmentManagement from './EquipmentManagement.jsx';
-import LaundryReports from './LaundryReports.jsx';
 import AdminData, { AdminNav } from './AdminData.jsx';
 import AdminAccessRequests from './AdminAccessRequests.jsx';
-import { AccessForm, authRequest } from './ResidentAccess.jsx';
+import { AccessForm, authRequest, CaminBrand } from './ResidentAccess.jsx';
 
 const initial = { state: 'checking', message: 'Checking service…' };
 
@@ -163,34 +162,25 @@ function Welcome() {
   }, []);
 
   return (
-    <main lang="ro" className="welcome-page flex min-h-svh items-center px-4 py-5 sm:px-8 sm:py-12">
-      <div className="mx-auto grid w-full max-w-5xl overflow-hidden rounded-3xl border border-teal-950/10
-        bg-white shadow-[0_24px_80px_-35px_#24453d60] md:grid-cols-[1.12fr_1fr]">
-        <section className="welcome-intro relative isolate flex flex-col justify-center overflow-hidden
-          bg-teal-950 px-6 py-8 text-white sm:px-10 sm:py-12 md:px-14 md:py-20">
-          <a href="/" className="mb-5 inline-flex w-fit items-center gap-2.5 rounded font-semibold
-            text-teal-50 focus-visible:outline-2 focus-visible:outline-offset-4 md:mb-12">
-            <span aria-hidden="true" className="grid size-8 place-items-center rounded-lg bg-amber-200 text-teal-950">
-              <span className="welcome-home" />
-            </span>
-            Cămin
-          </a>
-          <h1 className="max-w-md text-3xl font-semibold leading-tight tracking-tight sm:text-4xl md:text-5xl">
+    <main lang="ro" className="camin-design welcome-page access-background">
+      <div className="welcome-shell">
+        <section className="welcome-intro">
+          <CaminBrand />
+          <h1>
             Bun venit la căminul tău
           </h1>
-          <p className="mt-3 max-w-sm text-sm leading-6 text-teal-50/85 sm:mt-5 sm:text-base sm:leading-7">
+          <p className="camin-muted">
             Rezervările la spălătorie și sesizările din cămin, într-un singur loc.
           </p>
         </section>
-        <section aria-labelledby="welcome-form-title" className="flex flex-col justify-center px-6 py-7 sm:px-10 sm:py-10 md:px-12 md:py-16">
-          <h2 id="welcome-form-title" className="text-2xl font-semibold tracking-tight text-slate-900">
+        <section aria-labelledby="welcome-form-title" className="welcome-form">
+          <h2 id="welcome-form-title">
             {requestAccess ? 'Solicită acces' : 'Intră în cont'}
           </h2>
           {requestAccess ? <AccessRequestForm /> : <AccessForm embedded />}
-          <div className="mt-6 flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-slate-200 pt-5 text-sm">
-            <span className="text-slate-600">{requestAccess ? 'Ai deja cont?' : 'Ești nou aici?'}</span>
-            <button type="button" className="rounded font-semibold text-teal-900 underline underline-offset-4
-              focus-visible:outline-2 focus-visible:outline-offset-4" onClick={() => setRequestAccess(value => !value)}>
+          <div className="welcome-footer">
+            <span className="camin-muted">{requestAccess ? 'Ai deja cont?' : 'Ești nou aici?'}</span>
+            <button type="button" className="camin-link" onClick={() => setRequestAccess(value => !value)}>
               {requestAccess ? 'Înapoi la autentificare' : 'Solicită acces'}
             </button>
           </div>
@@ -220,7 +210,7 @@ function AccessRequestForm() {
   }
 
   if (state === 'sent') {
-    return <p role="status" className="mt-5 rounded-xl bg-teal-50 p-4 text-sm leading-6 text-teal-950">
+    return <p role="status" className="mt-5 camin-notice" data-tone="success">
       Cererea a fost primită. Dacă este aprobată, vei primi un link de activare prin e-mail.
     </p>;
   }
@@ -230,11 +220,10 @@ function AccessRequestForm() {
       <label className="grid gap-2 font-medium">
         E-mail
         <input name="email" type="email" autoComplete="email" maxLength={254} required
-          className="min-w-0 rounded-lg border border-slate-400 px-3 py-3 focus-visible:outline-2 focus-visible:outline-offset-2" />
+          className="camin-control min-w-0" />
       </label>
       {error && <p role="alert" className="text-sm text-red-800">{error}</p>}
-      <button className="rounded-lg bg-teal-950 px-4 py-3 font-semibold text-white hover:bg-teal-800
-        focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60" disabled={state === 'pending'}>
+      <button className="camin-primary" disabled={state === 'pending'}>
         {state === 'pending' ? 'Se trimite…' : 'Trimite cererea'}
       </button>
     </form>
@@ -244,11 +233,6 @@ function AccessRequestForm() {
 export default function App() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
   if (path === '/admin/echipamente') return <EquipmentManagement />;
-  if (path === '/admin/sesizari') return <main className="mx-auto max-w-2xl px-4 py-6 sm:px-8 sm:py-10" lang="ro">
-    <a className="underline" href="/admin/echipamente">Înapoi la echipamente</a>
-    <h1 className="mt-4 text-3xl font-bold">Sesizări de întreținere</h1>
-    <LaundryReports operator />
-  </main>;
   if (path === '/') return <Welcome />;
   if (path === '/admin/cereri-acces') return <AdminAccessRequests />;
   if (path === '/admin/stare-servicii') return <ServiceStatus />;
