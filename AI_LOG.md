@@ -4,6 +4,37 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-26 · Password reset by email
+
+The owner approved D-023. **Am uitat parola** accepts an email address and
+gives the same confirmation for any valid address. SMTP sends a link for an
+existing account. Migration 015 stores the latest link's hash and its 30-minute
+expiry. Completing the reset consumes the link, changes the password and
+deletes existing sessions atomically. Login checks the verified password hash
+again under an account lock before creating a session. PATTERN-015 records that
+practice as a candidate.
+
+The new unit and PostgreSQL authentication tests initially received `404`
+instead of `400` and `202` respectively, because the reset routes were absent.
+After implementation, all 14 backend unit tests, all three PostgreSQL suites,
+the frontend build and the Compose configuration check passed. The PostgreSQL
+test checked expiration, concurrent submissions, reuse, a second reset and a
+login that had already read the old hash when the reset completed. Chromium
+with a private Mailpit and a disposable database verified the generic message,
+captured SMTP email, form validation, session revocation, sign-in with the new
+password, reuse rejection and a second reset. The ledger check initially
+flagged the missing `Why` field in D-023 and passed after it was added.
+
+The migration and mail checks ran on temporary services. The existing Compose
+services and their volumes were preserved. No external email was sent.
+
+The existing local backend subsequently returned `500` on a reset request.
+Its container still listed migrations only through 014. Copied migration 015
+into the running backend and applied it through `npm run migrate`. The local
+frontend proxy then returned the expected `202` with an empty body for an
+unknown demonstration address. Mailpit returned `200`. The services stayed
+running throughout the fix.
+
 ## 2026-11-26 · Invitation email and resident activation password
 
 The owner approved SMTP delivery from **Aprobă și trimite invitația** and an

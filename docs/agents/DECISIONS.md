@@ -24,6 +24,7 @@
 - D-019 · Pilot digital reports for laundry equipment · [Laundry decisions](decisions/laundry-decisions.md)
 - D-020 · Extend maintenance reports to rooms and shared spaces · [Laundry decisions](decisions/laundry-decisions.md)
 - D-022 · Send approved invitations by email and let residents choose an eight-character password · [Admin data](decisions/admin-data.md)
+- D-023 · Let account holders reset their password by email · [Admin data](decisions/admin-data.md)
 
 ---
 

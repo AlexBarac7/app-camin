@@ -37,6 +37,13 @@ the access request. The server commits the invitation hash before sending.
 The approving request reports SMTP acceptance or the option to retry. A
 retry invalidates the previous invitation and creates a new one.
 
+Migration 015 stores the digest and expiry of the current password reset link
+per account. The public request uses the invitation SMTP transport and returns
+before delivery completes. Reset completion locks the account, consumes the
+link, changes the password and deletes the account's sessions in one transaction.
+Login locks the same row when creating a session and checks the verified hash
+again before inserting it.
+
 ## State and storage
 PostgreSQL 17 stores data in the named postgres_data volume, mounted at
 /var/lib/postgresql/data. Explicit backend commands inspect and apply numbered PostgreSQL migrations. The resident access migration adds users, invitations, and sessions. The laundry inventory migration records the 30 pieces of equipment listed in [INTERVIEW.md](../../INTERVIEW.md).

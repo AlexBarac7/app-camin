@@ -62,8 +62,8 @@ Open [the local app](http://localhost:5173), then follow
 | `POSTGRES_DB` | `app_camin_demo`, demonstrative local database name |
 | `POSTGRES_USER` | `app_camin_demo`, demonstrative local database user |
 | `POSTGRES_PASSWORD` | Required shell environment value; no committed default |
-| `APP_ORIGIN` | Exact app origin for invitations and write requests. Defaults to `http://localhost:5173`. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | SMTP server, port and sender for approved resident invitations. |
+| `APP_ORIGIN` | Exact app origin for invitations, password resets and write requests. Defaults to `http://localhost:5173`. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | SMTP server, port and sender for approved resident invitations and password resets. |
 | `SMTP_SECURITY`, `SMTP_USER`, `SMTP_PASSWORD` | Use `starttls` (default) or `tls` and provide SMTP credentials in the environment. |
 | `CAMIN_LOCAL_TEST_ACCOUNTS` | Optional local test setting. Set to `true` in the shell to enable the two reserved test accounts in development. |
 | `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Optional shell settings for [Web Push](#web-push). |
@@ -270,6 +270,20 @@ For real delivery, set the SMTP host, port, authenticated credentials and
 the verified sender address in the backend environment. Set `APP_ORIGIN`
 to the HTTPS address recipients can open. Keep SMTP credentials in the shell
 or deployment environment.
+
+### Reset a password locally
+
+Start Mailpit and apply migration 015 with the commands in
+[Test invitation email locally](#test-invitation-email-locally). Select
+**Am uitat parola** on the welcome or sign-in page and submit the email of an
+activated account. The page shows the same confirmation for any valid address.
+Open the message in [Mailpit](http://localhost:8025/) and select **Alege o parolă
+nouă**. The latest link is valid for 30 minutes and can be used once.
+
+Enter and confirm a password of 8–128 characters. When **Parola ta a fost
+schimbată** appears, select **Înapoi la autentificare** and sign in with the
+new password. The reset ends the account's previous sessions. You can request
+another link from the sign-in page.
 
 ### Local test roles
 

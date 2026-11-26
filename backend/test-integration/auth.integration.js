@@ -10,6 +10,7 @@ import { createApp } from '../src/app.js';
 import { loadDatabaseConfig } from '../src/config.js';
 import { createDatabase } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
+import { tokenHash } from '../src/modules/auth/credentials.js';
 import { issueInvitation, revokeInvitation } from '../src/modules/auth/invitations.js';
 
 test('resident access on a fresh disposable PostgreSQL database', async t => {
@@ -324,4 +325,95 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   assert.equal((await local('/api/laundry-reports/' + reportId + '/resolve', {}, fixtureCookie)).status, 204);
   assert.equal(configureTestAccount(['--equipment', 'revoke'], fixtureAddress).status, 0);
   assert.equal((await local('/api/laundry-reports/operator', undefined, fixtureCookie)).status, 403);
+
+  await t.test('password reset expires, is consumed once, and fences out stale logins', async () => {
+    const resetMail = [];
+    let pauseLogin = false;
+    const loginRead = Promise.withResolvers();
+    const resumeLogin = Promise.withResolvers();
+    const resetDatabase = {
+      ...db,
+      async query(sql, parameters) {
+        const result = await db.query(sql, parameters);
+        if (pauseLogin && sql.includes('SELECT id, password_hash FROM users WHERE email')) {
+          pauseLogin = false;
+          loginRead.resolve();
+          await resumeLogin.promise;
+        }
+        return result;
+      },
+    };
+    const resetServer = createApp(resetDatabase, undefined, undefined, undefined, {
+      appOrigin: 'https://camin.example.test',
+      sendPasswordReset: async (address, link) => resetMail.push({ address, url: new URL(link) }),
+    }).listen(0, '127.0.0.1');
+    await once(resetServer, 'listening');
+    t.after(() => resetServer.close());
+    const resetApi = (path, body, cookie) => fetch(`http://127.0.0.1:${resetServer.address().port}/api/auth/${path}`, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { origin: 'http://localhost:5173', 'content-type': 'application/json', ...(cookie && { cookie }) },
+      body: JSON.stringify(body),
+    });
+    const ask = email => resetApi('request-password-reset', { email });
+    const reset = (token, password) => resetApi('reset-password', { token, password });
+    const signIn = password => resetApi('login', { email, password });
+    const oldSession = await signIn(password);
+    assert.equal(oldSession.status, 200);
+    const oldCookie = oldSession.headers.get('set-cookie').split(';')[0];
+    const absent = await ask('absent@example.test');
+    const excluded = await ask(testAdmin);
+    const present = await ask(' DEMO@example.test ');
+    for (const response of [absent, excluded, present]) {
+      assert.equal(response.status, 202);
+      assert.equal(await response.text(), '');
+    }
+    assert.equal(resetMail.length, 1);
+    assert.equal(resetMail[0].address, email);
+    assert.equal(resetMail[0].url.origin, 'https://camin.example.test');
+    assert.equal(resetMail[0].url.pathname, '/reseteaza-parola');
+    const expiredToken = resetMail[0].url.hash.slice(1);
+    assert.match(expiredToken, /^[\w-]{43}$/);
+    const { rows: [lifetime] } = await db.query(`SELECT extract(epoch FROM expires_at - clock_timestamp())::int AS seconds
+      FROM password_resets WHERE token_hash = $1`, [tokenHash(expiredToken)]);
+    assert.ok(lifetime.seconds <= 1800 && lifetime.seconds > 1790);
+    await db.query('UPDATE password_resets SET expires_at = clock_timestamp() WHERE token_hash = $1', [tokenHash(expiredToken)]);
+    assert.equal((await reset(expiredToken, 'new test password')).status, 400);
+    assert.equal((await resetApi('session', undefined, oldCookie)).status, 200);
+
+    assert.equal((await ask(email)).status, 202);
+    const token = resetMail.at(-1).url.hash.slice(1);
+    const newPassword = 'altă1234';
+    const competingPassword = 'x'.repeat(128);
+    pauseLogin = true;
+    const staleLogin = signIn(password);
+    let results;
+    try {
+      await Promise.race([loginRead.promise, staleLogin.then(() => assert.fail('Login completed before the race barrier'))]);
+      results = await Promise.all([reset(token, newPassword), reset(token, competingPassword)]);
+    } finally {
+      resumeLogin.resolve();
+    }
+    assert.deepEqual(results.map(response => response.status).sort(), [204, 400]);
+    const staleResponse = await staleLogin;
+    assert.equal(staleResponse.status, 401);
+    assert.equal(staleResponse.headers.get('set-cookie'), null);
+    assert.equal((await reset(token, 'reuse test')).status, 400);
+    for (const actor of [oldCookie, activeCookie]) {
+      assert.equal((await resetApi('session', undefined, actor)).status, 401);
+    }
+    assert.equal((await resetApi('session', undefined, otherCookie)).status, 200);
+    assert.equal((await signIn(password)).status, 401);
+    const winner = results[0].ok ? newPassword : competingPassword;
+    const newSession = await signIn(winner);
+    assert.equal(newSession.status, 200);
+    assert.equal((await signIn(winner === newPassword ? competingPassword : newPassword)).status, 401);
+
+    assert.equal((await ask(email)).status, 202);
+    const nextToken = resetMail.at(-1).url.hash.slice(1);
+    assert.notEqual(nextToken, token);
+    const lastPassword = 'é'.repeat(128);
+    assert.equal((await reset(nextToken, lastPassword)).status, 204);
+    assert.equal((await resetApi('session', undefined, newSession.headers.get('set-cookie').split(';')[0])).status, 401);
+    assert.equal((await signIn(lastPassword)).status, 200);
+  });
 });

@@ -2,6 +2,7 @@ import express from 'express';
 import { invitationEmail, newToken, normalizeEmail, passwordLength, tokenHash, validToken, verifyPassword } from './credentials.js';
 import { activateInvitation, requestAccess } from './invitations.js';
 import { accountRole, isTestAccount, testResidentEmail } from './account-roles.js';
+import { issuePasswordReset, resetPassword } from './password-resets.js';
 
 const sessionCookie = 'camin_session';
 const sessionLifetime = 24 * 60 * 60 * 1000;
@@ -57,11 +58,13 @@ function limitedAttempts() {
   };
 }
 
-export function authRoutes(database, origins = localOrigins) {
+export function authRoutes(database, origins = localOrigins, { appOrigin, sendPasswordReset } = {}) {
   const router = express.Router();
   const allowActivation = limitedAttempts();
   const allowLogin = limitedAttempts();
   const allowRequest = limitedAttempts();
+  const allowResetRequest = limitedAttempts();
+  const allowReset = limitedAttempts();
   const json = express.json({ limit: '8kb' });
   const cookieOptions = req => ({
     httpOnly: true,
@@ -102,6 +105,36 @@ export function authRoutes(database, origins = localOrigins) {
     res.status(202).end();
   });
 
+  router.post('/request-password-reset', json, async (req, res) => {
+    const email = invitationEmail(req.body?.email);
+    if (!email) return res.status(400).json({ message: 'Introdu o adresă de e-mail validă.' });
+    if (!allowResetRequest(req, res)) return;
+    const token = sendPasswordReset && (req.app.locals.testAccounts || !isTestAccount(email))
+      ? await issuePasswordReset(database, email) : null;
+    res.status(202).end();
+    if (token) {
+      try {
+        await sendPasswordReset(email, new URL('/reseteaza-parola#' + token, appOrigin).href);
+      } catch {
+        console.error('Could not send password reset email.');
+      }
+    }
+  });
+
+  router.post('/reset-password', json, async (req, res) => {
+    const { token, password } = req.body ?? {};
+    if (!validToken(token)) return res.status(400).json({ code: 'invalid_password_reset' });
+    const length = passwordLength(password);
+    if (length < 8 || length > 128) {
+      return res.status(400).json({ message: 'Parola trebuie să aibă între 8 și 128 de caractere.' });
+    }
+    if (!allowReset(req, res)) return;
+    if (!await resetPassword(database, token, password)) {
+      return res.status(400).json({ code: 'invalid_password_reset' });
+    }
+    res.status(204).end();
+  });
+
   router.post('/login', json, async (req, res) => {
     const { email, password } = req.body ?? {};
     const normalized = normalizeEmail(email);
@@ -112,12 +145,18 @@ export function authRoutes(database, origins = localOrigins) {
     if (!allowLogin(req, res)) return;
     const { rows: [user] } = await database.query('SELECT id, password_hash FROM users WHERE email = $1', [normalized]);
     const storedHash = !req.app.locals.testAccounts && isTestAccount(normalized) ? undefined : user?.password_hash;
+    const invalidCredentials = () => res.status(401).json({ message: 'Adresa de e-mail sau parola este incorectă.' });
     if (!await verifyPassword(password, storedHash)) {
-      return res.status(401).json({ message: 'Adresa de e-mail sau parola este incorectă.' });
+      return invalidCredentials();
     }
 
     const token = newToken();
-    await database.query('INSERT INTO sessions (token_hash, user_id) VALUES ($1, $2)', [tokenHash(token), user.id]);
+    const session = await database.query(
+      `INSERT INTO sessions (token_hash, user_id)
+       SELECT $1, id FROM users WHERE id = $2 AND password_hash = $3 FOR UPDATE`,
+      [tokenHash(token), user.id, storedHash],
+    );
+    if (!session.rowCount) return invalidCredentials();
     res.cookie(sessionCookie, token, { ...cookieOptions(req), maxAge: sessionLifetime });
     res.status(200).end();
   });

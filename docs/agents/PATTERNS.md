@@ -20,6 +20,7 @@
 - PATTERN-012 · Authorize private report attachments through the report · candidate
 - PATTERN-013 · Approve an access request and issue its invitation together · candidate
 - PATTERN-014 · Record an invitation attempt before handing it to SMTP · candidate
+- PATTERN-015 · Serialize credential changes and session creation on the account row · candidate
 
 ---
 
@@ -134,3 +135,12 @@
   from storage.
 - **Example:** backend/src/modules/auth/invitations.js and
   backend/src/modules/admin/admin.routes.js.
+
+## PATTERN-015 · Serialize credential changes and session creation on the account row
+- **Status:** candidate
+- **How:** Lock the account before changing its password or creating a
+  session. Recheck the verified hash under the lock before inserting a
+  session. Change the password and remove existing sessions in the same
+  transaction.
+- **Example:** backend/src/modules/auth/password-resets.js and
+  backend/src/modules/auth/auth.routes.js.

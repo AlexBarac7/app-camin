@@ -9,12 +9,12 @@ import { reportRoutes } from './modules/laundry/reports.routes.js';
 import { laundryAvailability, reservationRoutes } from './modules/laundry/reservations.routes.js';
 
 export function createApp(database, appOrigins, pushPublicKey, photos, {
-  appOrigin = 'http://localhost:5173', testAccounts = false, sendInvitation,
+  appOrigin = 'http://localhost:5173', testAccounts = false, sendInvitation, sendPasswordReset,
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.locals.testAccounts = testAccounts;
-  app.use('/api/auth', authRoutes(database, appOrigins));
+  app.use('/api/auth', authRoutes(database, appOrigins, { appOrigin, sendPasswordReset }));
   app.use('/api/notifications', notificationRoutes(database, appOrigins, pushPublicKey));
   app.get('/api/laundry-machines', requireSession(database), async (req, res) => {
     const withAvailability = req.query.availability === '1';

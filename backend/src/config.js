@@ -23,7 +23,7 @@ export function loadDatabaseConfig(env = process.env) {
   };
 }
 
-function invitationMailConfig(env) {
+function authMailConfig(env) {
   if (!env.SMTP_HOST?.trim()) return undefined;
   const host = required(env, 'SMTP_HOST');
   const security = env.SMTP_SECURITY || 'starttls';
@@ -61,7 +61,7 @@ export function loadConfig(env = process.env) {
     database: loadDatabaseConfig(env),
     push,
     photos,
-    invitationMail: invitationMailConfig(env),
+    authMail: authMailConfig(env),
     internalReadinessPort: env.INTERNAL_READINESS_PORT === undefined
       ? undefined : port(env, 'INTERNAL_READINESS_PORT'),
   };

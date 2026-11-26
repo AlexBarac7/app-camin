@@ -7,7 +7,7 @@ import { createApp } from './app.js';
 import { startPushDelivery } from './modules/notifications/push.js';
 import { createReportPhotoStore } from './modules/laundry/report-photos.js';
 import { localTestAccounts } from './modules/auth/account-roles.js';
-import { createInvitationMailer } from './modules/auth/invitation-mail.js';
+import { createAuthMailer } from './modules/auth/auth-mail.js';
 
 try {
   const config = loadConfig();
@@ -19,16 +19,16 @@ try {
       throw new Error('APP_ORIGIN invalid.');
     }
   }
-  if (config.invitationMail && process.env.NODE_ENV === 'production' && !appOrigin?.startsWith('https://')) {
-    throw new Error('An HTTPS APP_ORIGIN is required for invitation email in production.');
+  if (config.authMail && process.env.NODE_ENV === 'production' && !appOrigin?.startsWith('https://')) {
+    throw new Error('An HTTPS APP_ORIGIN is required for authentication email in production.');
   }
   const origins = appOrigin
     ? [...(process.env.NODE_ENV === 'production' ? [] : localOrigins), appOrigin]
     : undefined;
   const photos = config.photos && createReportPhotoStore(config.photos);
-  const sendInvitation = config.invitationMail && createInvitationMailer(config.invitationMail);
+  const authMail = config.authMail && createAuthMailer(config.authMail);
   const server = createApp(database, origins, config.push?.publicKey, photos, {
-    appOrigin, testAccounts: localTestAccounts(), sendInvitation,
+    appOrigin, testAccounts: localTestAccounts(), ...authMail,
   }).listen(config.port, '0.0.0.0', () => {
     console.log(`Backend listening on port ${config.port}.`);
   });

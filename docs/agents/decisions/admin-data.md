@@ -67,3 +67,22 @@
 - **Evidence:** The owner requested automatic invitation delivery and the
   eight-character activation threshold, then approved the plan.
 - **Confirmed:** 2026-11-26
+
+## D-023 · Let account holders reset their password by email
+- **Status:** approved
+- **Rule:** The sign-in form links to **Am uitat parola**, where the user
+  submits their email address. Give the same public confirmation for any valid
+  address. For an existing account, send a reset link through configured SMTP
+  using `APP_ORIGIN`. The link expires after 30 minutes and can be used once.
+  A user can request another link after resetting their password.
+- **Completion:** Ask for **Parola nouă** and **Confirmă parola nouă**. Require
+  matching passwords of 8–128 characters. On success, invalidate all existing
+  sessions for that account and show **Parola ta a fost schimbată** with
+  **Înapoi la autentificare**.
+- **Why:** Account holders can recover access using the mailbox associated
+  with their account. Ending previous sessions makes the new password take
+  effect across devices.
+- **Evidence:** The owner confirmed the D-023 password reset plan and requested
+  local Mailpit verification. The owner also confirmed that a login started
+  with the old password must be rejected if the reset completes first.
+- **Confirmed:** 2026-11-26

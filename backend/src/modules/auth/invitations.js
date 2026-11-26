@@ -1,25 +1,6 @@
+import { transaction } from '../../db.js';
 import { hashPassword, invitationEmail, newToken, normalizeEmail, tokenHash } from './credentials.js';
 import { adminAccountsSql, testAdminEmail } from './account-roles.js';
-
-async function transaction(database, operation) {
-  const client = await database.connect();
-  let discard = false;
-  try {
-    await client.query('BEGIN');
-    const result = await operation(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    try {
-      await client.query('ROLLBACK');
-    } catch {
-      discard = true;
-    }
-    throw error;
-  } finally {
-    client.release(discard);
-  }
-}
 
 function lockEmail(client, email) {
   return client.query("SELECT pg_advisory_xact_lock(hashtext('app-camin auth'), hashtext($1))", [email]);
