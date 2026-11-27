@@ -4,6 +4,21 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-27 · Attendance and strike correction in the usage guide
+
+**Model:** GPT-6.2-Sol (Codex).
+
+The owner requested two Romanian sections in the existing usage guide.
+**Prezența la rezervări** explains confirmation, no-show exceptions, the
+default suspension and when strikes stop counting. **Gestionarea
+strike-urilor** is visible to Admin and Administrator and explains the in-app
+notice, direct Reservation link, correction with a reason and policy settings.
+Both sections use the existing guide accordion and icons.
+
+The frontend build and ledger check passed. Chromium verified the sections,
+expand and collapse controls, and direct section links at mobile and desktop
+widths using simulated sessions for Rezident, Administrator and Admin.
+
 ## 2026-11-27 · Excuse attendance blocked by equipment inspection
 
 **Model:** GPT-6.2-Sol (Codex).
