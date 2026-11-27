@@ -24,6 +24,7 @@
 
 ### [Laundry patterns](patterns/laundry-patterns.md)
 - PATTERN-016 · Rebuild the live queue view from committed state · candidate
+- PATTERN-017 · Serialize booking sanctions on the resident account · candidate
 
 ---
 

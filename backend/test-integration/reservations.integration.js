@@ -723,4 +723,140 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     await db.query('UPDATE users SET can_manage_equipment = false WHERE id = $1', [users[0].id]);
     assert.equal((await request(photo, 'GET', 0)).status, 404);
   });
+
+  await t.test('reservations remind, confirm, expire once and suspend until corrected', async t => {
+    const { advanceWaitingQueues } = await import('../src/modules/laundry/live-queue.js');
+    let clock = at(240);
+    const timed = (sql, args = []) => {
+      if (!/clock_timestamp\(\) AS now|statement_timestamp\(\)/.test(sql)) return [sql, args];
+      const value = '$' + (args.length + 1) + '::timestamptz';
+      return [sql.replaceAll('clock_timestamp() AS now', value + ' AS now')
+        .replaceAll('statement_timestamp()', value), [...args, clock]];
+    };
+    const database = {
+      ...db,
+      query: (sql, args) => db.query(...timed(sql, args)),
+      async connect() {
+        const client = await db.connect();
+        return { query: (sql, args) => client.query(...timed(sql, args)), release: discard => client.release(discard) };
+      },
+    };
+    const attendanceServer = createApp(database).listen(0, '127.0.0.1');
+    await once(attendanceServer, 'listening');
+    t.after(() => { attendanceServer.closeAllConnections(); attendanceServer.close(); });
+    await db.query('UPDATE users SET can_manage_equipment = true WHERE id = $1', [users[0].id]);
+    const { rows: [resident] } = await db.query(
+      "INSERT INTO users (email, password_hash) VALUES ('attendance@example.test', 'fixture') RETURNING id");
+    const token = newToken();
+    await db.query('INSERT INTO sessions (user_id, token_hash) VALUES ($1, $2)', [resident.id, tokenHash(token)]);
+    const attendanceCookies = [cookies[0], 'camin_session=' + token];
+    const { rows: [equipment] } = await db.query(`
+      INSERT INTO laundry_machines (name, location, room, type, label, technical_status)
+      VALUES ('Attendance washer', 'Test location', '1', 'washer', 'ATTENDANCE', 'working') RETURNING id`);
+    const endpoint = '/api/laundry-machines/' + equipment.id;
+    const send = (url, method = 'GET', resident = 1, body) => fetch(
+      'http://127.0.0.1:' + attendanceServer.address().port + url, {
+        method, headers: { origin: 'http://localhost:5173', 'content-type': 'application/json', cookie: attendanceCookies[resident] },
+        body: JSON.stringify(body),
+      });
+    async function create(start, minutes = 20) {
+      const { rows: [row] } = await db.query(`
+        INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at, attendance_tracked)
+        VALUES ($1, $2, $3, $4, $5, true) RETURNING id`,
+      [equipment.id, resident.id, at(start), at(start + minutes), at(start + minutes + 10)]);
+      return row.id;
+    }
+    const noticesFor = async id => (await (await send('/api/notifications')).json()).items
+      .filter(item => item.reservation?.id === id).reverse();
+    const confirm = (id, resident = 1) => send(endpoint + '/reservations/' + id + '/confirm', 'POST', resident);
+    const calendar = resident => send(endpoint + '/calendar?day=' + fixture.day, 'GET', resident).then(response => response.json());
+    const tick = () => advanceWaitingQueues(database);
+
+    const subscription = 'https://fcm.googleapis.com/fcm/send/attendance-test';
+    await db.query(`
+      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES ($1, $2, 'fixture', 'fixture')`,
+    [resident.id, subscription]);
+    const pushes = [];
+    const dispatch = async () => {
+      const { rows: [{ count }] } = await db.query(`
+        SELECT count(*)::integer FROM push_deliveries WHERE next_attempt_at <= $1`, [clock]);
+      for (let batch = 0; batch < Math.ceil(count / 8); batch++) {
+        await dispatchPushDeliveries(database, async (target, payload, options) => {
+          if (target.endpoint === subscription) pushes.push({ ...JSON.parse(payload), ttl: options.TTL });
+        });
+      }
+    };
+
+    const attended = await create(250);
+    await Promise.all([tick(), tick()]);
+    assert.deepEqual((await noticesFor(attended)).map(item => item.kind), ['reservation-reminder']);
+    await dispatch();
+    assert.equal(pushes.length, 1);
+    assert.equal(pushes[0].ttl, 600);
+    assert.equal(pushes[0].path, '/spalatorie/1?echipament=' + equipment.id + '&zi=' + fixture.day + '#rezervare-' + attended);
+    assert.equal((await confirm(attended)).status, 409);
+    assert.equal((await confirm(attended, 0)).status, 404);
+    clock = at(250);
+    await Promise.all([tick(), tick()]);
+    const alerts = await noticesFor(attended);
+    assert.deepEqual(alerts.map(item => item.kind), ['reservation-reminder', 'reservation-start']);
+    assert.equal(alerts[1].message, 'Rezervarea ta a început. Confirmă începerea în 10 minute.');
+    await dispatch();
+    assert.equal(pushes.length, 2);
+    assert.equal(pushes[1].message, alerts[1].message);
+    assert.equal(pushes[1].ttl, 600);
+    assert.equal((await calendar(1)).reservations.find(item => item.id === attended).confirmBy, at(260));
+    assert.equal((await calendar(0)).reservations.find(item => item.startsAt === at(250)).confirmBy, undefined);
+    clock = new Date(Date.parse(at(260)) - 1).toISOString();
+    assert.equal((await confirm(attended)).status, 204);
+
+    const missed = [await create(300), await create(340), await create(380)];
+    const short = await create(420, 5);
+    for (const [index, offset] of [310, 350, 390].entries()) {
+      clock = at(offset);
+      const [, , confirmation] = await Promise.all([tick(), tick(), confirm(missed[index])]);
+      assert.equal(confirmation.status, 409);
+    }
+    const residentView = await calendar(1);
+    assert.equal(residentView.suspension.until, new Date(Date.parse(at(390)) + 48 * 3_600_000).toISOString());
+    assert.equal(residentView.cancellations.filter(item => item.reason === 'Neprezentare').length, 3);
+    assert.equal((await calendar(0)).cancellations.length, 0);
+    assert.equal((await send(endpoint + '/reservations', 'POST', 1, { startsAt: at(450), endsAt: at(480) })).status, 403);
+
+    clock = at(430);
+    await tick();
+    const { rows: strikes } = await db.query(`
+      SELECT reservation_id FROM laundry_strikes WHERE user_id = $1 ORDER BY reservation_id`, [resident.id]);
+    assert.deepEqual(strikes.map(row => row.reservation_id), missed);
+    assert.equal((await db.query('SELECT cancelled_at FROM laundry_reservations WHERE id = $1', [short])).rows[0].cancelled_at, null);
+
+    const notice = async kind => (await db.query(`
+      INSERT INTO laundry_notifications (user_id, machine_id, kind, message, created_at)
+      VALUES ($1, $2, $3, 'Test offer', $4) RETURNING id`, [resident.id, equipment.id, kind, clock])).rows[0].id;
+    const { rows: [entry] } = await db.query(`
+      INSERT INTO laundry_queue_entries (machine_id, user_id, day, duration_minutes)
+      VALUES ($1, $2, $3, 20) RETURNING id`, [equipment.id, resident.id, fixture.day]);
+    const { rows: [queueOffer] } = await db.query(`
+      INSERT INTO laundry_queue_offers (entry_id, machine_id, notification_id, starts_at, ends_at, expires_at, immediate)
+      VALUES ($1, $2, $3, $4, $5, $6, false) RETURNING id`,
+    [entry.id, equipment.id, await notice('queue-turn'), at(450), at(480), at(435)]);
+    const { rows: [restorationOffer] } = await db.query(`
+      INSERT INTO laundry_restoration_offers
+        (notification_id, original_reservation_id, machine_id, starts_at, use_ends_at, ends_at, expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    [await notice('restored'), missed[0], equipment.id, at(480), at(500), at(510), at(435)]);
+    const queueAnswer = await send(endpoint + '/queue/offers/' + queueOffer.id, 'POST', 1, { action: 'accept' });
+    assert.equal(queueAnswer.status, 403);
+    assert.equal((await queueAnswer.json()).suspension.until, residentView.suspension.until);
+    const restorationAnswer = await send('/api/notifications/offers/' + restorationOffer.id, 'POST', 1, { action: 'accept' });
+    assert.equal(restorationAnswer.status, 403);
+    assert.equal((await restorationAnswer.json()).suspension.until, residentView.suspension.until);
+
+    const correction = '/api/admin/reservations/' + missed[0] + '/strike-correction';
+    assert.equal((await send(correction, 'POST', 1, { reason: 'Test' })).status, 403);
+    assert.equal((await send(correction, 'POST', 0, { reason: '' })).status, 400);
+    assert.equal((await send(correction, 'POST', 0, { reason: 'Corecție de test' })).status, 204);
+    assert.equal((await calendar(1)).suspension, null);
+    assert.equal((await send(endpoint + '/reservations', 'POST', 1, { startsAt: at(510), endsAt: at(540) })).status, 201);
+  });
 });

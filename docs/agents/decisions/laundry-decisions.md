@@ -173,3 +173,34 @@
   at entry, one offer at a time per resident, and early finish for ordinary
   Reservations. See [Q-009](../OPEN-QUESTIONS.md#q-009--how-do-reservations-and-live-queue-interact-with-the-notebook).
 - **Confirmed:** 2026-11-27
+
+
+## D-028 · Confirm laundry attendance and apply temporary booking suspensions
+- **Status:** approved
+- **Rule:** In the laundry pilot, send a reminder ten minutes before a Reservation
+  starts and an alert at its scheduled start. The resident can confirm from the
+  start until just before the ten-minute deadline, using the server clock.
+  Publish the notices in the app and deliver them through opt-in Web Push.
+  At the deadline, release the remaining block for an eligible unconfirmed
+  Reservation and record exactly one strike. A usage period shorter than ten
+  minutes is exempt and keeps its original end time. Apply attendance tracking
+  to Reservations created after rollout.
+- **Live-queue and restoration:** Starting an immediate Live-queue cycle or
+  accepting a restoration offer for immediate use confirms attendance. Future
+  Reservations created through offers follow the calendar confirmation rule.
+  An unused offer does not create a strike.
+- **Suspension:** Three uncorrected strikes in the previous seven days suspend
+  booking for 48 hours. The strikes used to trigger a suspension remain in
+  history and cannot trigger another suspension. Existing Reservations can
+  still be used. Reject attempts to create a new Reservation while suspended
+  and show the resident the reason and end date.
+- **Administration:** Admin and Administrator can edit the accumulation period
+  and suspension duration in the app. Policy edits apply to new sanctions.
+  They can correct a strike with a recorded reason. Correcting one of the
+  three strikes that triggered an active suspension lifts that suspension.
+- **Why:** Give residents time to prepare while returning unused blocks to
+  other residents and letting operators correct unfair strikes.
+- **Evidence:** The owner proposed the two alerts, seven-day window, 48-hour
+  suspension and short-use exception, then approved the revised plan for
+  [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13).
+- **Confirmed:** 2026-11-27

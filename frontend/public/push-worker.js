@@ -26,14 +26,17 @@ async function updateAppBadge(fallbackCount) {
   }
 }
 
+const reservationPath = /^\/spalatorie\/(?:1|2|uscatorie)\?echipament=\d+&zi=\d{4}-\d{2}-\d{2}#rezervare-\d+$/;
+
 self.addEventListener('push', event => {
-  const { id, unreadCount } = event.data?.json() ?? {};
+  const { id, unreadCount, message, path } = event.data?.json() ?? {};
   if (!/^\d+$/.test(id)) return;
+  const reservation = typeof message === 'string' && reservationPath.test(path);
   event.waitUntil(Promise.all([
     self.registration.showNotification('Căminul Meu', {
-      body: 'Ai un mesaj nou. Deschide aplicația pentru detalii.',
+      body: reservation ? message : 'Ai un mesaj nou. Deschide aplicația pentru detalii.',
       tag: 'laundry-notice-' + id,
-      data: { path: '/notificari#notificare-' + id },
+      data: { path: reservation ? path : '/notificari#notificare-' + id },
     }),
     updateAppBadge(unreadCount),
   ]));
@@ -42,6 +45,6 @@ self.addEventListener('push', event => {
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   const path = event.notification.data?.path;
-  if (!/^\/notificari#notificare-\d+$/.test(path)) return;
+  if (!/^\/notificari#notificare-\d+$/.test(path) && !reservationPath.test(path)) return;
   event.waitUntil(self.clients.openWindow(path));
 });

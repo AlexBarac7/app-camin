@@ -18,6 +18,8 @@ const noticeLabels = {
   'report-taken': ['Sesizare preluată', 'reports', 'info'],
   'report-resolved': ['Sesizare rezolvată', 'check', 'success'],
   'access-request': ['Cerere de acces nouă', 'account', 'info'],
+  'reservation-reminder': ['Rezervarea ta se apropie', 'clock', 'info'],
+  'reservation-start': ['Rezervarea ta a început', 'calendar', 'info'],
   'queue-turn': ['Interval disponibil astăzi', 'queue', 'info'],
 };
 const timeZone = 'Europe/Bucharest';
@@ -142,6 +144,8 @@ function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRe
   const tone = status === 'accepted' ? 'success' : status === 'expired' ? 'warning' : defaultTone;
   const equipment = [item.machineName, item.machineLocation].filter(Boolean).join(' · ');
   const calendar = item.room && item.machineId ? '/spalatorie/' + encodeURIComponent(item.room) + '?echipament=' + item.machineId : null;
+  const reservation = calendar && item.reservation && calendar +
+    '&zi=' + dayKey.format(new Date(item.reservation.startsAt)) + '#rezervare-' + item.reservation.id;
   const stamp = new Date(item.createdAt);
 
   return <li id={'notificare-' + item.id} className="notice-card" data-unread={item.readAt ? undefined : 'true'}
@@ -170,6 +174,7 @@ function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRe
           </button>
         </div>
       </>}
+      {reservation && <a className="camin-link" href={reservation}>Deschide rezervarea <span aria-hidden="true">→</span></a>}
       {calendar && (queue || (!offer && item.kind === 'restored')) &&
         <a className="camin-link" href={calendar}>Deschide calendarul <span aria-hidden="true">→</span></a>}
       {item.kind === 'access-request' && <a className="camin-link" href="/admin/cereri-acces">Vezi cererile de acces</a>}
@@ -254,7 +259,9 @@ export default function Notifications({ onUnreadCount }) {
         window.location.replace('/autentificare' + (target ? '?notificare=' + target : ''));
         return;
       }
-      if (response.status === 409) setFeedback('Oferta nu mai este disponibilă.');
+      const body = !response.ok ? await response.json().catch(() => null) : null;
+      if (body?.suspension) setFeedback(body.message);
+      else if (response.status === 409) setFeedback('Oferta nu mai este disponibilă.');
       else if (response.ok) setFeedback(action === 'accept' ? 'Rezervarea a fost confirmată.' : 'Intervalul a fost eliberat.');
       else throw new Error(unavailable);
     } catch {

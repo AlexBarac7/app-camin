@@ -1,3 +1,5 @@
+import { attendanceState, confirmationDeadline } from './reservation-attendance.js';
+
 export const residenceZone = 'Europe/Bucharest';
 const localClock = new Intl.DateTimeFormat('sv-SE', {
   timeZone: residenceZone, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -54,7 +56,10 @@ export function occupiedBlock(row) {
 export function calendarEntry(row, userId) {
   return {
     ...occupiedBlock(row),
-    ...(row.user_id === userId && { id: row.id, useEndsAt: row.use_ends_at }),
+    ...(row.user_id === userId && {
+      id: row.id, useEndsAt: row.use_ends_at,
+      ...(attendanceState(row, row.starts_at) === 'pending' && { confirmBy: confirmationDeadline(row) }),
+    }),
   };
 }
 

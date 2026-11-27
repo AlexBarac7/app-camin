@@ -25,6 +25,9 @@ export default function UsageGuide({ reportsPath, canManage }) {
       <p>În <a className="camin-link" href="/resurse">Resurse</a> vezi unde se află mașinile de spălat și uscătoarele
         și în ce stare sunt.</p>
       <p>Deschide calendarul echipamentului, alege ziua și confirmă un interval liber. Ridică cheia de la recepție.</p>
+      <p>Primești un reminder înainte de începere și o alertă la ora rezervată. Deschide calendarul și apasă
+        <strong> Confirmă începerea</strong> în primele 10 minute. Dacă nu confirmi, intervalul se eliberează și primești
+        un strike. Rezervările cu mai puțin de 10 minute de utilizare sunt scutite.</p>
       <p>Poți anula rezervarea înainte de începere sau apăsa <strong>Încheie</strong> dacă termini mai devreme.</p>
     </>,
     'coada-de-asteptare': <p>Dacă aștepți să se elibereze o mașină astăzi, intră în Live-queue din calendar și alege durata ciclului.

@@ -1,5 +1,6 @@
 import { json, Router } from 'express';
 import { localOrigins, requireSession } from '../auth/auth.routes.js';
+import { activeSuspension, suspendedBooking } from '../laundry/reservation-attendance.js';
 import { pushEndpoint, subscriptionKeys } from './push.js';
 
 async function answerOffer(database, offerId, userId, action) {
@@ -36,9 +37,13 @@ async function saveAnswer(client, offerId, userId, action) {
     await client.query("UPDATE laundry_restoration_offers SET status = 'declined' WHERE id = $1", [offerId]);
     return [204];
   }
+  const suspension = await activeSuspension(client, userId, { lock: true });
+  if (suspension) return suspendedBooking(suspension);
   const { rows: [reservation] } = await client.query(`
-    INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at)
-    VALUES ($1, $2, greatest($3::timestamptz, $4::timestamptz), $5, $6) RETURNING id`,
+    INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at, attendance_tracked, confirmed_at)
+    VALUES ($1, $2, greatest($3::timestamptz, $4::timestamptz), $5, $6,
+      $3::timestamptz > $4::timestamptz, CASE WHEN $3::timestamptz <= $4::timestamptz THEN $4::timestamptz END)
+    RETURNING id`,
   [machine.id, userId, offer.starts_at, offer.now, offer.use_ends_at, offer.ends_at]);
   await client.query(`
     UPDATE laundry_restoration_offers SET status = 'accepted', new_reservation_id = $2 WHERE id = $1`,
@@ -55,7 +60,7 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
   router.get('/', async (_req, res) => {
     const { rows } = await database.query(`
       SELECT notice.id, notice.kind, notice.message, notice.created_at, notice.read_at, notice.machine_id, machine.room,
-        notice.report_id, machine.name AS machine_name, machine.location AS machine_location,
+        notice.report_id, notice.reservation_id, reservation.starts_at AS reservation_start, machine.name AS machine_name, machine.location AS machine_location,
         COALESCE(offer.id, queue.id) AS offer_id,
         COALESCE(offer.starts_at, queue.starts_at) AS starts_at,
         COALESCE(offer.ends_at, queue.ends_at) AS ends_at,
@@ -67,6 +72,7 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
         statement_timestamp() AS now
       FROM laundry_notifications notice
       LEFT JOIN laundry_machines machine ON machine.id = notice.machine_id
+      LEFT JOIN laundry_reservations reservation ON reservation.id = notice.reservation_id
       LEFT JOIN laundry_restoration_offers offer ON offer.notification_id = notice.id
       LEFT JOIN laundry_queue_offers queue ON queue.notification_id = notice.id
       WHERE notice.user_id = $1 ORDER BY notice.id DESC`, [res.locals.account.id]);
@@ -78,6 +84,7 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
         machineId: row.machine_id, room: row.room,
         ...(row.machine_name && { machineName: row.machine_name, machineLocation: row.machine_location }),
         ...(row.report_id && { reportId: row.report_id }),
+        ...(row.reservation_id && { reservation: { id: row.reservation_id, startsAt: row.reservation_start } }),
         ...(row.offer_id && { offer: {
           id: row.offer_id, status: row.offer_status,
           startsAt: row.starts_at, endsAt: row.ends_at, expiresAt: row.expires_at,

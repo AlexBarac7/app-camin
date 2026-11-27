@@ -1,7 +1,49 @@
 import { transaction } from '../../db.js';
-import { notifyQueueTurn } from '../notifications/laundry-notifications.js';
+import { notifyQueueTurn, notifyReservation } from '../notifications/laundry-notifications.js';
 import { fitQueueOffer, queueDay, queueOpenings } from './live-queue-rules.js';
 import { handoverTime } from './reservation-rules.js';
+import {
+  activeSuspension, attendanceState, confirmationDeadline, equipmentAllowsAttendance, issueStrike, suspendedBooking,
+} from './reservation-attendance.js';
+
+async function advanceAttendance(client, machine, now) {
+  const { rows } = await client.query(`
+    SELECT reservation.*,
+      EXISTS (SELECT 1 FROM laundry_notifications
+        WHERE reservation_id = reservation.id AND kind = 'reservation-reminder') AS reminded,
+      EXISTS (SELECT 1 FROM laundry_notifications
+        WHERE reservation_id = reservation.id AND kind = 'reservation-start') AS notified
+    FROM laundry_reservations reservation
+    WHERE machine_id = $1 AND attendance_tracked AND confirmed_at IS NULL AND attendance_excused_at IS NULL
+      AND cancelled_at IS NULL AND starts_at <= $2::timestamptz + interval '10 minutes'
+      AND (use_ends_at > $2 OR use_ends_at - starts_at >= interval '10 minutes')
+    ORDER BY user_id, starts_at, id`, [machine.id, now]);
+
+  for (const reservation of rows) {
+    const state = attendanceState(reservation, now);
+    const usable = equipmentAllowsAttendance(machine, reservation);
+    if (state === 'expired') {
+      const deadline = confirmationDeadline(reservation);
+      if (usable) {
+        await client.query(`
+          UPDATE laundry_reservations SET cancelled_at = $2, cancellation_reason = 'Neprezentare' WHERE id = $1`,
+        [reservation.id, deadline]);
+        await issueStrike(client, reservation, deadline);
+      } else {
+        await client.query('UPDATE laundry_reservations SET attendance_excused_at = $2 WHERE id = $1',
+          [reservation.id, now]);
+      }
+    } else if (usable && reservation.starts_at > now && !reservation.reminded) {
+      await notifyReservation(client, machine, reservation, 'reservation-reminder',
+        'Rezervarea ta la spălătorie începe în curând. Pregătește-te pentru ora rezervată.', now);
+    } else if (usable && reservation.starts_at <= now && !reservation.notified) {
+      await notifyReservation(client, machine, reservation, 'reservation-start',
+        state === 'pending'
+          ? 'Rezervarea ta a început. Confirmă începerea în 10 minute.'
+          : 'Rezervarea ta a început.', now);
+    }
+  }
+}
 
 export async function advanceQueue(client, machine, now) {
   const { day, open, closes } = queueDay(now);
@@ -95,13 +137,16 @@ export async function answerQueueOffer(client, machine, offerId, userId, action,
     return [204];
   }
 
+  const suspension = await activeSuspension(client, userId, { lock: true });
+  if (suspension) return suspendedBooking(suspension);
   const startsAt = offer.immediate ? now : offer.starts_at;
   const useEndsAt = new Date(+startsAt + offer.duration_minutes * 60_000);
   const endsAt = +useEndsAt === queueDay(now).closes ? useEndsAt : new Date(+useEndsAt + handoverTime);
   if (endsAt > offer.ends_at) return [409];
   const { rows: [reservation] } = await client.query(`
-    INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at)
-    VALUES ($1, $2, $3, $4, $5) RETURNING id`, [machine.id, userId, startsAt, useEndsAt, endsAt]);
+    INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at, attendance_tracked, confirmed_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+  [machine.id, userId, startsAt, useEndsAt, endsAt, !offer.immediate, offer.immediate ? now : null]);
   await client.query(`
     UPDATE laundry_queue_offers SET status = 'accepted', reservation_id = $2 WHERE id = $1`, [offerId, reservation.id]);
   await client.query(`
@@ -112,12 +157,25 @@ export async function answerQueueOffer(client, machine, offerId, userId, action,
 
 export async function advanceWaitingQueues(database) {
   const { rows } = await database.query(`
-    SELECT DISTINCT machine_id FROM laundry_queue_entries WHERE ended_at IS NULL ORDER BY machine_id`);
+    SELECT machine_id FROM laundry_queue_entries WHERE ended_at IS NULL
+    UNION
+    SELECT reservation.machine_id FROM laundry_reservations reservation
+    WHERE attendance_tracked AND confirmed_at IS NULL AND attendance_excused_at IS NULL AND cancelled_at IS NULL
+      AND starts_at <= statement_timestamp() + interval '10 minutes'
+      AND (use_ends_at - starts_at >= interval '10 minutes' AND
+           starts_at <= statement_timestamp() - interval '10 minutes'
+        OR use_ends_at > statement_timestamp() AND NOT EXISTS (
+          SELECT 1 FROM laundry_notifications notice WHERE notice.reservation_id = reservation.id
+            AND notice.kind = CASE WHEN starts_at > statement_timestamp()
+                                   THEN 'reservation-reminder' ELSE 'reservation-start' END
+        ))
+    ORDER BY machine_id`);
   for (const { machine_id: machineId } of rows) {
     await transaction(database, async client => {
       const { rows: [machine] } = await client.query(
         'SELECT * FROM laundry_machines WHERE id = $1 FOR UPDATE', [machineId]);
       const { rows: [{ now }] } = await client.query('SELECT clock_timestamp() AS now');
+      await advanceAttendance(client, machine, now);
       await advanceQueue(client, machine, now);
     });
   }
@@ -128,7 +186,7 @@ export function startQueueWorker(database) {
   const run = () => {
     if (current) return;
     current = advanceWaitingQueues(database).catch(() => {
-      console.error('Could not advance laundry queues.');
+      console.error('Could not process laundry reservations and queues.');
     }).finally(() => { current = null; });
   };
   run();

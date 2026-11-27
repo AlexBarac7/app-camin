@@ -78,8 +78,7 @@ See README.md for verified local commands. Compose uses development servers;
 frontend npm run build produces static assets. Railway is a future target only.
 
 ## Boundaries
-Quotas, no-show policies and the email fallback remain
-outside the current implementation. No Railway deployment configuration or
+Quotas and the email fallback remain outside the current implementation. No Railway deployment configuration or
 authorization exists yet.
 
 Migration 006 adds the independent equipment permission, the reservation linked
@@ -113,3 +112,11 @@ and equipment operations serialize on the equipment row. The server advances
 queues without a connected browser. The calendar subscribes to authenticated
 SSE snapshots and reloads when the underlying availability changes. Queue offers
 use the existing notification inbox and Web Push delivery.
+
+
+Migration 019 adds laundry attendance, a policy editable by operators, and a
+strike and suspension history. The laundry worker handles reservation reminders,
+start alerts and expirations even when a machine has no Live-queue entries.
+Confirmation and expiration serialize on the machine row. Strike issuance,
+corrections and booking eligibility serialize on the resident account. Reminder
+and start notifications are unique per Reservation and kind.

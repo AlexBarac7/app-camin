@@ -2,12 +2,12 @@ import { operatorAccountsSql, roleQueryValues } from '../auth/account-roles.js';
 
 const minute = 60_000;
 
-async function notify(client, machine, userIds, kind, message, now, reportId = null, push = true) {
+async function notify(client, machine, userIds, kind, message, now, reportId = null, push = true, reservationId = null) {
   if (!userIds.length) return;
   const { rows } = await client.query(`
     WITH notices AS (
-      INSERT INTO laundry_notifications (user_id, machine_id, kind, message, created_at, report_id)
-      SELECT DISTINCT user_id, $1::integer, $2::text, $3::text, $4::timestamptz, $6::bigint
+      INSERT INTO laundry_notifications (user_id, machine_id, kind, message, created_at, report_id, reservation_id)
+      SELECT DISTINCT user_id, $1::integer, $2::text, $3::text, $4::timestamptz, $6::bigint, $8::bigint
       FROM unnest($5::bigint[]) AS user_id
       RETURNING id, user_id
     ), deliveries AS (
@@ -16,7 +16,7 @@ async function notify(client, machine, userIds, kind, message, now, reportId = n
       JOIN push_subscriptions subscription USING (user_id)
       WHERE $7::boolean
     )
-    SELECT id FROM notices`, [machine?.id ?? null, kind, message, now, userIds, reportId, push]);
+    SELECT id FROM notices`, [machine?.id ?? null, kind, message, now, userIds, reportId, push, reservationId]);
   return rows[0]?.id;
 }
 
@@ -70,6 +70,10 @@ export async function notifyShutdown(client, machine, reservations, now, queueUs
 export function notifyQueueTurn(client, machine, userId, immediate, now) {
   const message = immediate ? 'E rândul tău.' : 'S-a eliberat un interval azi.';
   return notify(client, machine, [userId], 'queue-turn', message + ' ' + equipment(machine) + '.', now);
+}
+
+export function notifyReservation(client, machine, reservation, kind, message, now) {
+  return notify(client, machine, [reservation.user_id], kind, message, now, null, true, reservation.id);
 }
 
 export async function withdrawOffers(client, machineId, now) {

@@ -5,6 +5,8 @@ import { normalizeEmail } from '../auth/credentials.js';
 import {
   finishAccessRejection, finishInvitationDelivery, listAccessRequests, startAccessRejection, startInvitationDelivery,
 } from '../auth/invitations.js';
+import { transaction } from '../../db.js';
+import { correctStrike } from '../laundry/reservation-attendance.js';
 import { residenceZone, validDay } from '../laundry/reservation-rules.js';
 
 const pageSize = 25;
@@ -100,6 +102,34 @@ export function adminRoutes(database, origins = localOrigins, appOrigin, { sendI
     res.sendStatus(204);
   });
 
+  router.get('/reservation-attendance-policy', operator, async (_req, res) => {
+    const { rows: [policy] } = await database.query(`
+      SELECT strike_window_days AS "strikeWindowDays", suspension_hours AS "suspensionHours"
+      FROM laundry_attendance_policy`);
+    res.json(policy);
+  });
+
+  router.put('/reservation-attendance-policy', operator, write, json({ limit: '1kb' }), async (req, res) => {
+    const { strikeWindowDays, suspensionHours } = req.body ?? {};
+    if (![strikeWindowDays, suspensionHours].every(value =>
+      Number.isInteger(value) && value > 0 && value <= 2147483647)) {
+      return res.status(400).json({ message: 'Introdu perioade pozitive, în numere întregi.' });
+    }
+    await database.query(`
+      UPDATE laundry_attendance_policy SET strike_window_days = $1, suspension_hours = $2`,
+    [strikeWindowDays, suspensionHours]);
+    res.sendStatus(204);
+  });
+
+  router.post('/reservations/:id/strike-correction', operator, write, json({ limit: '4kb' }), async (req, res) => {
+    const { id } = req.params;
+    if (!/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) return res.sendStatus(404);
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    if (!reason || reason.length > 500) return res.status(400).json({ message: 'Introdu un motiv de cel mult 500 de caractere.' });
+    const corrected = await transaction(database, client => correctStrike(client, id, res.locals.account.id, reason));
+    res.sendStatus(corrected ? 204 : 404);
+  });
+
   router.get('/reservations', operator, async (req, res) => {
     const { machineId, day, status } = req.query;
     const page = readPage(req.query.page);
@@ -112,9 +142,11 @@ export function adminRoutes(database, origins = localOrigins, appOrigin, { sendI
     }
     const { rows } = await database.query(`
       SELECT reservation.id, machine.name AS equipment, machine.location,
-        reservation.starts_at, reservation.use_ends_at, reservation.ends_at, reservation.cancelled_at, reservation.cancellation_reason
+        reservation.starts_at, reservation.use_ends_at, reservation.ends_at, reservation.cancelled_at,
+        reservation.cancellation_reason, strike.issued_at AS strike_at, strike.corrected_at, strike.correction_reason
       FROM laundry_reservations reservation
       JOIN laundry_machines machine ON machine.id = reservation.machine_id
+      LEFT JOIN laundry_strikes strike ON strike.reservation_id = reservation.id
       WHERE ($1::integer IS NULL OR reservation.machine_id = $1)
         AND ($2::date IS NULL OR (
           reservation.starts_at >= ($2::date::timestamp AT TIME ZONE $4)
