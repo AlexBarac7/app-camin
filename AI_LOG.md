@@ -4,6 +4,34 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-27 · Live-queue and early finish
+
+The owner approved D-024 for washers and dryers. Residents enter a same-day
+Live-queue with their cycle duration. The first entrant whose cycle and
+handover fit receives an offer of up to five minutes. A holder can finish
+any ongoing Reservation early. Inspection pauses the queue and confirmed
+faults close affected entries. Q-009 is answered and Q-005 records the pilot
+rules alongside its remaining questions.
+
+Migration 016 adds entries, offers and early-finish timestamps. PostgreSQL
+serializes queue and calendar writes on the equipment row. An automated job
+advances the queue and an authenticated SSE stream refreshes the calendar.
+The existing in-app and Web Push delivery paths handle offers.
+
+The initial queue rule tests failed because the rule module was absent.
+A later integration run returned `404` instead of `200` for an existing
+photo test because the new fixture changed the operator role. Restoring
+the role after the fixture fixed the failure with existing assertions intact.
+The 17 backend tests, three PostgreSQL 17 suites, frontend build and ledger
+check passed. A disposable Compose project applied migration 016 and passed
+HTTP and SQL checks. Chromium exercised the full-day panel, two simultaneous
+resident views, early finish, offer acceptance and the inbox at desktop and
+phone widths.
+
+The owner confirmed that the manual Issue #10 checklist passed on the local
+app, including the edge cases, Web Push with the app closed on a physical
+phone, and reconnection with both a valid offer and an expired one.
+
 ## 2026-11-26 · Notification count on the installed app icon
 
 **Model:** GPT-6.2-Sol (Codex).

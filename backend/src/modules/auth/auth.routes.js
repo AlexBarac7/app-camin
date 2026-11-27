@@ -16,23 +16,28 @@ function readSession(req) {
   return validToken(token) ? tokenHash(token) : null;
 }
 
+export async function sessionAccount(database, req) {
+  const digest = readSession(req);
+  if (!digest) return null;
+  const { rows: [account] } = await database.query(
+    `SELECT users.*
+     FROM sessions JOIN users ON users.id = sessions.user_id
+     WHERE sessions.token_hash = $1 AND sessions.expires_at > clock_timestamp()`,
+    [digest],
+  );
+  const { testAccounts } = req.app.locals;
+  if (!account || (!testAccounts && isTestAccount(account.email))) return null;
+  return { id: account.id, email: account.email, role: accountRole(account, testAccounts) };
+}
+
 export function requireSession(database, { serviceStatus = false, manageEquipment = false, admin = false } = {}) {
   return async (req, res, next) => {
     res.set('Cache-Control', 'no-store');
-    const digest = readSession(req);
-    if (!digest) return res.status(401).end();
-    const { rows: [account] } = await database.query(
-      `SELECT users.*
-       FROM sessions JOIN users ON users.id = sessions.user_id
-       WHERE sessions.token_hash = $1 AND sessions.expires_at > clock_timestamp()`,
-      [digest],
-    );
-    const { testAccounts } = req.app.locals;
-    if (!account || (!testAccounts && isTestAccount(account.email))) return res.status(401).end();
-    const role = accountRole(account, testAccounts);
-    if ((serviceStatus || admin) && role !== 'admin') return res.status(403).end();
-    if (manageEquipment && role === 'resident') return res.status(403).end();
-    res.locals.account = { id: account.id, email: account.email, role };
+    const account = await sessionAccount(database, req);
+    if (!account) return res.status(401).end();
+    if ((serviceStatus || admin) && account.role !== 'admin') return res.status(403).end();
+    if (manageEquipment && account.role === 'resident') return res.status(403).end();
+    res.locals.account = account;
     next();
   };
 }

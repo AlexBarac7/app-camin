@@ -156,11 +156,16 @@ export default function Notifications({ onUnreadCount }) {
     if (showTarget) document.getElementById('notificare-' + target)?.scrollIntoView({ block: 'center' });
   }, [showTarget, target]);
 
-  async function answer(offer, action) {
+  async function answer(item, action) {
     setBusy(true);
     setFeedback('');
     try {
-      const response = await send('/offers/' + offer.id, 'POST', { action });
+      const { offer } = item;
+      const response = item.kind === 'queue-turn'
+        ? await fetch('/api/laundry-machines/' + item.machineId + '/queue/offers/' + offer.id, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }),
+        })
+        : await send('/offers/' + offer.id, 'POST', { action });
       if (response.status === 401) {
         window.location.replace('/autentificare' + (target ? '?notificare=' + target : ''));
         return;
@@ -210,6 +215,7 @@ export default function Notifications({ onUnreadCount }) {
     {!!snapshot?.items.length && <ul className="grid gap-3">
       {snapshot.items.map(item => {
         const { offer } = item;
+        const queue = item.kind === 'queue-turn';
         const remaining = offer ? Math.max(0, Math.ceil((Date.parse(offer.expiresAt) - now) / 1000)) : 0;
         const status = offer?.status === 'pending' && !remaining ? 'expired' : offer?.status;
         return <li key={item.id} id={'notificare-' + item.id}
@@ -217,16 +223,22 @@ export default function Notifications({ onUnreadCount }) {
             + (item.readAt ? '' : ' bg-slate-50')}>
           <time dateTime={item.createdAt} className="text-sm text-slate-600">{dateTime.format(new Date(item.createdAt))}</time>
           <p className="whitespace-pre-line break-words">{item.message}</p>
-          {offer && <p>{upcomingInterval(offer)}</p>}
+          {offer && !offer.immediate && <p>{upcomingInterval(offer)}</p>}
           {status === 'pending' && <>
             <p>Oferta expiră în <span role="timer">{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')}</span>.</p>
             <div className="flex flex-wrap gap-2">
-              <button type="button" className={button} disabled={busy} onClick={() => answer(offer, 'accept')}>Continuă rezervarea</button>
-              <button type="button" className={button} disabled={busy} onClick={() => answer(offer, 'decline')}>Încheie rezervarea</button>
+              <button type="button" className={button} disabled={busy} onClick={() => answer(item, 'accept')}>
+                {queue ? (offer.immediate ? 'Începe' : 'Rezervă intervalul') : 'Continuă rezervarea'}
+              </button>
+              <button type="button" className={button} disabled={busy} onClick={() => answer(item, 'decline')}>
+                {queue ? 'Refuză oferta' : 'Încheie rezervarea'}
+              </button>
             </div>
           </>}
           {status && status !== 'pending' && <p className="font-medium">{offerLabels[status]}</p>}
           {!offer && item.kind === 'restored' && <a className="underline"
+            href={'/spalatorie/' + encodeURIComponent(item.room) + '?echipament=' + item.machineId}>Deschide calendarul</a>}
+          {queue && <a className="underline"
             href={'/spalatorie/' + encodeURIComponent(item.room) + '?echipament=' + item.machineId}>Deschide calendarul</a>}
           {item.kind === 'access-request' && <a className="underline" href="/admin/cereri-acces">Vezi cererile de acces</a>}
           {item.reportId && <a className="underline"

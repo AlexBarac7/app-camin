@@ -1,6 +1,7 @@
 import { json, Router } from 'express';
 import { requireSession, localOrigins } from '../auth/auth.routes.js';
 import { notifyInspection, notifyRestoration, notifyShutdown, withdrawOffers } from '../notifications/laundry-notifications.js';
+import { advanceQueue, closeBrokenQueue, withdrawQueueOffers } from './live-queue.js';
 
 export async function lockEquipment(client, id) {
   const { rows: [machine] } = await client.query(
@@ -16,6 +17,7 @@ export async function applyEquipmentCondition(client, machine, action, body, now
     if (machine.technical_status !== 'inspection' ||
         machine.inspection_started_at.toISOString() !== body.inspectionStartedAt) return 409;
     if (machine.inspection_notified) return 204;
+    await advanceQueue(client, machine, now);
     if (!(await notifyInspection(client, machine, body.message.trim(), now))) return 422;
     await client.query('UPDATE laundry_machines SET inspection_notified = true WHERE id = $1', [id]);
     return 204;
@@ -31,6 +33,8 @@ export async function applyEquipmentCondition(client, machine, action, body, now
     if (!current) return 409;
     reservation = current.id;
     status = 'inspection';
+    await advanceQueue(client, { ...machine, technical_status: status }, now);
+    await withdrawQueueOffers(client, id);
   } else if (action === 'stop') {
     if (machine.technical_status === 'broken') return 204;
     status = 'broken';
@@ -38,7 +42,9 @@ export async function applyEquipmentCondition(client, machine, action, body, now
       `UPDATE laundry_reservations SET cancelled_at = $2, cancellation_reason = 'Echipament defect'
        WHERE machine_id = $1 AND cancelled_at IS NULL AND ends_at > $2
        RETURNING id, user_id, starts_at, use_ends_at`, [id, now]);
-    await notifyShutdown(client, machine, cancelled, now);
+    await advanceQueue(client, { ...machine, technical_status: status }, now);
+    const queueUsers = await closeBrokenQueue(client, id, now);
+    await notifyShutdown(client, machine, cancelled, now, queueUsers);
     await withdrawOffers(client, machine.id, now);
   } else {
     if (machine.technical_status === 'unspecified' && action !== 'restore-reported') return 409;
@@ -51,6 +57,7 @@ export async function applyEquipmentCondition(client, machine, action, body, now
        current_fault_at = $4, inspection_started_at = $5, inspection_notified = false,
        report_revision = report_revision + 1, repair_verified_until = NULL WHERE id = $1`,
     [id, status, reservation, status === 'broken' ? now : null, status === 'inspection' ? now : null]);
+  if (status === 'working') await advanceQueue(client, { ...machine, technical_status: status }, now);
   return 204;
 }
 

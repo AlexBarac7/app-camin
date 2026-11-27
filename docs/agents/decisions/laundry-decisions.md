@@ -142,3 +142,34 @@
 - **Evidence:** The project owner approved the full issue #16 implementation
   plan, including the categories, priority, access and photo retention.
 - **Confirmed:** 2026-11-25
+
+## D-024 · Offer same-day laundry openings through Live-queue
+- **Status:** approved
+- **Rule:** Each washer and dryer has a Live-queue for the current operating day.
+  A resident may have one active entry and chooses the cycle duration on joining.
+  The residence administrator specified no minimum duration. Existing operating
+  hours, handover, the three-hour washer and four-hour dryer limits, and the
+  D-013 closing exception apply. Entries still waiting at 20:00 expire.
+- **Priority:** Confirmed Reservations and pending D-016 restoration offers
+  keep their intervals. When an opening appears, select the earliest entrant
+  whose cycle and applicable handover fit. Keep the positions of entrants who
+  do not fit. Protect the offered interval for at most five minutes. Shorten
+  the claim window when needed for the cycle to fit. Decline or expiry ends the
+  entry without a strike. Other free intervals remain bookable through the calendar.
+- **Actions:** Start an immediate cycle from the offer, or book an offered
+  future opening today. The owner may end any ongoing Reservation early,
+  including a standard calendar Reservation. Respect handover and the original
+  block end, then offer the released time to Live-queue. The resident takes
+  the key from reception and may record actual use in the notebook.
+- **Faults:** Pause the queue and keep positions during inspection. Include
+  entrants in the editable optional inspection notice. Resume the queue for
+  eligible openings when the equipment is declared functional. On confirmed
+  defect, close active entries with “Echipament defect” and notify the affected
+  residents once. D-016 continues to protect future cancelled Reservations
+  shorter than 60 minutes and governs recovery after their start.
+- **Why:** Residents can use same-day openings caused by cancellations or early
+  finishes while people with existing Reservations can keep their schedule.
+- **Evidence:** The owner approved the final Issue #10 plan, including duration
+  at entry, one offer at a time per resident, and early finish for ordinary
+  Reservations. See [Q-009](../OPEN-QUESTIONS.md#q-009--how-do-reservations-and-live-queue-interact-with-the-notebook).
+- **Confirmed:** 2026-11-27

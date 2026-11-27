@@ -4,6 +4,12 @@ const localClock = new Intl.DateTimeFormat('sv-SE', {
   hour: '2-digit', minute: '2-digit', second: '2-digit',
 });
 const minute = 60_000;
+export const handoverTime = 10 * minute;
+export const closingExtensionMinutes = 15;
+
+export function maximumCycleMinutes(type) {
+  return type === 'dryer' ? 240 : 180;
+}
 
 export function validDay(day) {
   if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day) || day.startsWith('0000')) return false;
@@ -36,8 +42,8 @@ export function reservationWindow(startValue, endValue, type, now) {
   if (day + 'T' + starts > horizon.toISOString().slice(0, 19)) return null;
 
   const atClosing = ends === '20:00:00';
-  const useEnd = new Date(+end - (atClosing ? 0 : 10 * minute));
-  const maxMinutes = (type === 'washer' ? 180 : 240) + (atClosing ? 15 : 0);
+  const useEnd = new Date(+end - (atClosing ? 0 : handoverTime));
+  const maxMinutes = maximumCycleMinutes(type) + (atClosing ? closingExtensionMinutes : 0);
   return useEnd > start && useEnd - start <= maxMinutes * minute ? useEnd : null;
 }
 

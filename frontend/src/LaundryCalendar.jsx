@@ -7,6 +7,7 @@ const dayFormat = new Intl.DateTimeFormat('ro-RO', { timeZone: 'UTC', dateStyle:
 const weekdayFormat = new Intl.DateTimeFormat('ro-RO', { timeZone: 'UTC', weekday: 'short' });
 const monthFormat = new Intl.DateTimeFormat('ro-RO', { timeZone: 'UTC', month: 'long', year: 'numeric' });
 const timeFormat = new Intl.DateTimeFormat('ro-RO', { timeZone, hour: '2-digit', minute: '2-digit' });
+const deadlineFormat = new Intl.DateTimeFormat('ro-RO', { timeZone, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const minute = 60_000;
 const step = 5 * minute;
 const handover = 10 * minute;
@@ -77,13 +78,15 @@ async function request(path, options) {
   return response;
 }
 
-function CalendarDay({ machine, day, onChange, children }) {
+function CalendarDay({ machine, day, today, queue, onChange, onNextDay, children }) {
   const [data, setData] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const [revision, setRevision] = useState(0);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [showJoin, setShowJoin] = useState(false);
+  const [duration, setDuration] = useState('');
   const feedbackRegion = useRef(null);
   const endpoint = '/api/laundry-machines/' + machine.id;
 
@@ -100,7 +103,7 @@ function CalendarDay({ machine, day, onChange, children }) {
         if (!controller.signal.aborted) setFeedback({ error: true, text: error.message });
       });
     return () => controller.abort();
-  }, [endpoint, day, revision, machine.observedAt]);
+  }, [endpoint, day, revision, machine.observedAt, queue?.calendarVersion, queue?.technicalStatus]);
 
   useEffect(() => {
     if (!data) return;
@@ -118,17 +121,19 @@ function CalendarDay({ machine, day, onChange, children }) {
     if (feedback?.afterAction) feedbackRegion.current.focus();
   }, [feedback]);
 
-  async function mutate(event, id) {
+  async function mutate(event, id, finish = false) {
     event.preventDefault();
     setPending(true);
     setFeedback(null);
     try {
-      await request(endpoint + '/reservations' + (id ? '/' + id : ''), id ? { method: 'DELETE' } : {
+      await request(endpoint + '/reservations' + (id ? '/' + id : '') + (finish ? '/finish' : ''),
+        id ? { method: finish ? 'POST' : 'DELETE' } : {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString() }),
       });
-      setFeedback({ afterAction: true, text: id ? 'Rezervarea a fost anulată.' : 'Rezervarea a fost confirmată.' });
+      const text = finish ? 'Utilizarea s-a încheiat.' : id ? 'Rezervarea a fost anulată.' : 'Rezervarea a fost confirmată.';
+      setFeedback({ afterAction: true, text });
       setSelection({ start: 0, end: 0 });
     } catch (error) {
       setFeedback({ afterAction: true, error: true, text: error.message });
@@ -136,6 +141,48 @@ function CalendarDay({ machine, day, onChange, children }) {
       setData(null);
       setRevision(value => value + 1);
       onChange();
+      setPending(false);
+    }
+  }
+
+  async function actOnQueue(path, method, body) {
+    setPending(true);
+    setFeedback(null);
+    try {
+      await request(endpoint + '/queue' + path, {
+        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      setShowJoin(false);
+      setFeedback({ afterAction: true, text: body?.action === 'accept' ? 'Intervalul tău a fost confirmat.'
+        : body?.action === 'decline' ? 'Ai refuzat oferta.' : method === 'DELETE'
+          ? 'Ai ieșit din Live-queue.' : 'Te-ai înscris în Live-queue.' });
+    } catch (error) {
+      setFeedback({ afterAction: true, error: true, text: error.message });
+    } finally {
+      setRevision(value => value + 1);
+      onChange();
+      setPending(false);
+    }
+  }
+
+  async function nextAvailableDay() {
+    setPending(true);
+    setFeedback(null);
+    try {
+      for (let offset = 1; offset <= 7; offset += 1) {
+        const candidate = moveDay(today, offset);
+        const response = await request(endpoint + '/calendar?day=' + candidate);
+        const next = await response.json();
+        const now = Date.parse(next.now);
+        if (next.open && next.bookable && bookingOptions(next, calendarBlocks(next, now), now, maxUse).size) {
+          onNextDay(candidate);
+          return;
+        }
+      }
+      setFeedback({ afterAction: true, text: 'Nu sunt intervale disponibile în următoarele 7 zile.' });
+    } catch (error) {
+      setFeedback({ afterAction: true, error: true, text: error.message });
+    } finally {
       setPending(false);
     }
   }
@@ -150,9 +197,13 @@ function CalendarDay({ machine, day, onChange, children }) {
     return () => clearTimeout(timer);
   }, [data, nextHoldExpiration]);
   const blocks = calendar?.open ? calendarBlocks(calendar, currentTime) : [];
+  const maxUse = (machine.type === 'dryer' ? 240 : 180) * minute;
   const options = calendar?.open && calendar.bookable
-    ? bookingOptions(calendar, blocks, currentTime, (machine.type === 'dryer' ? 240 : 180) * minute)
+    ? bookingOptions(calendar, blocks, currentTime, maxUse)
     : new Map();
+  const fullToday = day === today && calendar?.bookable && !options.size;
+  const offer = queue?.offer;
+  const canJoin = queue?.open && queue.day === day && queue.technicalStatus === 'working' && !queue.joinedElsewhere;
   const start = options.has(selection.start) ? selection.start : 0;
   const endings = options.get(start) ?? [];
   const end = endings.includes(selection.end) ? selection.end : 0;
@@ -178,7 +229,44 @@ function CalendarDay({ machine, day, onChange, children }) {
         </p>)}
         {calendar && !calendar.bookable && <p>Rezervare indisponibilă pentru acest echipament.</p>}
         {calendar && !calendar.open && <p><LaundryStatus status="unavailable">Închis</LaundryStatus></p>}
-        {calendar?.open && !blocks.length && <p>Nu mai sunt intervale pentru această zi.</p>}
+        {fullToday && <p className="camin-notice" data-tone="info">Nu mai sunt intervale disponibile azi pentru {machine.name}.</p>}
+        {day === today && (queue?.entry || queue?.joinedElsewhere || canJoin || fullToday) && (
+          <div className="grid gap-2 my-3">
+            {queue?.entry ? <>
+              <p role="status">Live-queue · Poziția {queue.entry.position} · Ciclu de {queue.entry.durationMinutes} min</p>
+              {queue.technicalStatus === 'inspection' && <p>Coada este pe pauză cât timp echipamentul este verificat.</p>}
+              {offer && <div className="camin-notice grid gap-2" data-tone="success">
+                <p>{offer.immediate ? 'E rândul tău. Poți începe acum.' : 'S-a eliberat intervalul ' + interval(offer.startsAt, offer.endsAt) + '.'}</p>
+                <p>Poți răspunde până la {deadlineFormat.format(new Date(offer.expiresAt))}.</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className={primary} disabled={pending}
+                    onClick={() => actOnQueue('/offers/' + offer.id, 'POST', { action: 'accept' })}>
+                    {offer.immediate ? 'Începe' : 'Rezervă intervalul'}
+                  </button>
+                  <button type="button" className={control} disabled={pending}
+                    onClick={() => actOnQueue('/offers/' + offer.id, 'POST', { action: 'decline' })}>Refuză oferta</button>
+                </div>
+              </div>}
+              <button type="button" className={control + ' justify-self-start'} disabled={pending}
+                onClick={() => actOnQueue('', 'DELETE')}>Ieși din Live-queue</button>
+            </> : queue?.joinedElsewhere
+              ? <p>Ai deja o înscriere în Live-queue la alt echipament.</p>
+              : canJoin && (showJoin ? (
+                <form className="grid gap-2 justify-items-start" onSubmit={event => {
+                  event.preventDefault();
+                  actOnQueue('', 'POST', { durationMinutes: Number(duration) });
+                }}>
+                  <label htmlFor={'duration-' + machine.id}>Durata ciclului (minute)</label>
+                  <input id={'duration-' + machine.id} className={control} type="number" inputMode="numeric"
+                    required min="1" max={maxUse / minute + 15} value={duration} onChange={event => setDuration(event.target.value)} />
+                  <button className={primary} disabled={pending}>Confirmă înscrierea</button>
+                </form>
+              ) : <button type="button" className={primary + ' justify-self-start'}
+                onClick={() => setShowJoin(true)}>Intră în Live-queue</button>)}
+            {fullToday && <button type="button" className={control + ' justify-self-start'} disabled={pending}
+              onClick={nextAvailableDay}>Vezi următoarea zi disponibilă</button>}
+          </div>
+        )}
         {!!blocks.length && (
           <ul aria-label="Intervalele zilei" className="booking-intervals">
             {blocks.map(({ start, end, reservation }) => (
@@ -202,6 +290,10 @@ function CalendarDay({ machine, day, onChange, children }) {
                   {+new Date(reservation.useEndsAt) < end && <span><LaundryStatus status="handover">Predare</LaundryStatus> {interval(reservation.useEndsAt, end)}</span>}
                   {start > currentTime && <button type="button" className={control + ' justify-self-start'}
                     disabled={pending} onClick={event => mutate(event, reservation.id)}>Anulează rezervarea</button>}
+                  {start <= currentTime && currentTime < Date.parse(reservation.useEndsAt) &&
+                    (calendar.bookable || (machine.status === 'occupied' && machine.technicalStatus === 'inspection')) &&
+                    <button type="button" className={control + ' justify-self-start'} disabled={pending}
+                      onClick={event => mutate(event, reservation.id, true)}>Încheie</button>}
                 </>}
               </li>
             ))}
@@ -240,7 +332,7 @@ function CalendarDay({ machine, day, onChange, children }) {
               <button className={primary} disabled={!end}>Confirmă rezervarea</button>
             </fieldset>
           </form>
-        ) : <p>Nu poți face o rezervare pentru această zi. Rezervările se pot face cu până la 7 zile în avans.</p>)}
+        ) : !fullToday && <p>Nu poți face o rezervare pentru această zi. Rezervările se pot face cu până la 7 zile în avans.</p>)}
         {(!calendar?.open || !calendar.bookable) && <p className="camin-muted">Alege o zi cu intervale libere pentru a continua.</p>}
       </div>
     </div>
@@ -250,12 +342,19 @@ function CalendarDay({ machine, day, onChange, children }) {
 export default function LaundryCalendar({ machine, onChange }) {
   const [today] = useState(() => dateFormat.format(new Date()));
   const [day, setDay] = useState(today);
+  const [queue, setQueue] = useState(null);
   const calendarRegion = useRef(null);
   const restoreFocus = useRef(null);
   const weekStart = moveDay(today, 7 * Math.floor((Date.parse(day) - Date.parse(today)) / (7 * 24 * 60 * minute)));
   const week = Array.from({ length: 7 }, (_, index) => moveDay(weekStart, index));
   const startMonth = monthFormat.format(new Date(week[0]));
   const endMonth = monthFormat.format(new Date(week.at(-1)));
+
+  useEffect(() => {
+    const events = new EventSource('/api/laundry-machines/' + machine.id + '/queue/events');
+    events.onmessage = event => setQueue(JSON.parse(event.data));
+    return () => events.close();
+  }, [machine.id]);
 
   useEffect(() => {
     if (!restoreFocus.current) return;
@@ -272,7 +371,8 @@ export default function LaundryCalendar({ machine, onChange }) {
   return (
     <section ref={calendarRegion} aria-label={'Calendar · ' + machine.name} className="booking-calendar">
       <header><h2>Rezervă un interval</h2><p className="camin-muted">{machine.name} · {machine.location}</p></header>
-      <CalendarDay machine={machine} day={day} onChange={onChange} key={day}>
+      <CalendarDay machine={machine} day={day} today={today} queue={queue}
+        onChange={onChange} onNextDay={setDay} key={day}>
         <div className="booking-day-header">
           <div><h3>Alege ziua</h3><p className="camin-muted booking-month">{startMonth === endMonth ? startMonth : startMonth + ' – ' + endMonth}</p></div>
           <div className="booking-day-arrows">

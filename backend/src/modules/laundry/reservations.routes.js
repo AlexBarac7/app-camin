@@ -1,6 +1,10 @@
 import express from 'express';
+import { transaction } from '../../db.js';
 import { localOrigins, requireSession } from '../auth/auth.routes.js';
-import { calendarEntry, equipmentStatus, occupiedBlock, reservationWindow, residenceZone, validDay } from './reservation-rules.js';
+import { calendarEntry, equipmentStatus, handoverTime, occupiedBlock, reservationWindow, residenceZone, validDay } from './reservation-rules.js';
+import { advanceQueue } from './live-queue.js';
+import { liveQueueRoutes } from './live-queue.routes.js';
+import { lockEquipment } from './condition.routes.js';
 
 const overlapMessage = 'Intervalul tocmai a fost rezervat. Alege altul.';
 const notFound = { message: 'Echipamentul sau rezervarea nu a fost găsită.' };
@@ -63,7 +67,7 @@ async function book(database, machineId, userId, { startsAt, endsAt }) {
 
 async function saveReservation(client, machineId, userId, startsAt, endsAt) {
   const { rows: [machine] } = await client.query(
-    'SELECT type, technical_status FROM laundry_machines WHERE id = $1 FOR UPDATE', [machineId]);
+    'SELECT id, type, label, location, technical_status FROM laundry_machines WHERE id = $1 FOR UPDATE', [machineId]);
   if (!machine) return [404, notFound];
   if (machine.technical_status !== 'working') {
     return [409, { message: 'Echipamentul nu poate fi rezervat momentan.' }];
@@ -73,11 +77,15 @@ async function saveReservation(client, machineId, userId, startsAt, endsAt) {
   if (!useEnd) return [400, { message: 'Alege un interval valid în programul spălătoriei.' }];
   const start = new Date(startsAt);
   const end = new Date(endsAt);
+  await advanceQueue(client, machine, now);
   const { rows } = await client.query(`
     SELECT 1 FROM laundry_reservations
     WHERE machine_id = $1 AND cancelled_at IS NULL AND starts_at < $3 AND ends_at > $2
     UNION ALL
     SELECT 1 FROM laundry_restoration_offers
+    WHERE machine_id = $1 AND status = 'pending' AND expires_at > $4 AND starts_at < $3 AND ends_at > $2
+    UNION ALL
+    SELECT 1 FROM laundry_queue_offers
     WHERE machine_id = $1 AND status = 'pending' AND expires_at > $4 AND starts_at < $3 AND ends_at > $2
     LIMIT 1`, [machineId, start, end, now]);
   if (rows.length) return [409, { message: overlapMessage }];
@@ -86,6 +94,36 @@ async function saveReservation(client, machineId, userId, startsAt, endsAt) {
     VALUES ($1, $2, $3, $4, $5)
     RETURNING id, user_id, starts_at, use_ends_at, ends_at`, [machineId, userId, start, useEnd, end]);
   return [201, calendarEntry(reservation, userId)];
+}
+
+async function changeReservation(database, machineId, id, userId, finish) {
+  return transaction(database, async client => {
+    const machine = await lockEquipment(client, machineId);
+    if (!machine) return [404, notFound];
+    const { rows: [reservation] } = await client.query(`
+      SELECT *, clock_timestamp() AS now FROM laundry_reservations
+      WHERE id = $1 AND machine_id = $2 AND user_id = $3`, [id, machineId, userId]);
+    if (!reservation) return [404, notFound];
+    const { now } = reservation;
+    if (finish) {
+      if (reservation.finished_at && !reservation.cancelled_at) return [204];
+      if (reservation.cancelled_at || now <= reservation.starts_at || now >= reservation.use_ends_at ||
+        (machine.technical_status !== 'working' && machine.inspection_reservation_id !== reservation.id)) {
+        return [409, { message: 'Poți încheia doar o rezervare aflată în utilizare.' }];
+      }
+      const endsAt = new Date(Math.min(+reservation.ends_at, +now + handoverTime));
+      await client.query(`
+        UPDATE laundry_reservations
+        SET original_ends_at = ends_at, finished_at = $2, use_ends_at = $2, ends_at = $3 WHERE id = $1`,
+      [id, now, endsAt]);
+    } else {
+      if (reservation.cancelled_at) return [204];
+      if (reservation.starts_at <= now) return [409, { message: 'Rezervarea a început și nu mai poate fi anulată.' }];
+      await client.query('UPDATE laundry_reservations SET cancelled_at = $2 WHERE id = $1', [id, now]);
+    }
+    await advanceQueue(client, machine, now);
+    return [204];
+  });
 }
 
 export function reservationRoutes(database, origins = localOrigins) {
@@ -97,6 +135,7 @@ export function reservationRoutes(database, origins = localOrigins) {
     }
     next();
   });
+  router.use(liveQueueRoutes(database));
 
   router.get('/:machineId/calendar', async (req, res) => {
     const { day } = req.query;
@@ -113,7 +152,11 @@ export function reservationRoutes(database, origins = localOrigins) {
       LEFT JOIN LATERAL (
         SELECT json_agg(json_build_object('startsAt', offer.starts_at, 'endsAt', offer.ends_at) ORDER BY offer.starts_at) AS intervals,
           min(offer.expires_at) AS next_expiration
-        FROM laundry_restoration_offers offer
+        FROM (
+          SELECT machine_id, starts_at, ends_at, expires_at, status FROM laundry_restoration_offers
+          UNION ALL
+          SELECT machine_id, starts_at, ends_at, expires_at, status FROM laundry_queue_offers
+        ) offer
         WHERE offer.machine_id = machine.id AND offer.status = 'pending' AND offer.expires_at > statement_timestamp()
           AND offer.starts_at < (($2::date + 1)::timestamp AT TIME ZONE $3)
           AND offer.ends_at > ($2::date::timestamp AT TIME ZONE $3)
@@ -143,21 +186,15 @@ export function reservationRoutes(database, origins = localOrigins) {
     res.status(status).json(result);
   });
 
-  router.delete('/:machineId/reservations/:id', async (req, res) => {
+  const change = finish => async (req, res) => {
     const { id, machineId } = req.params;
     if (!validId(id, 9223372036854775807n)) return res.status(404).json(notFound);
-    const { rows: [row] } = await database.query(`
-      UPDATE laundry_reservations SET cancelled_at = coalesce(cancelled_at, clock_timestamp())
-      WHERE id = $1 AND machine_id = $2 AND user_id = $3
-        AND (cancelled_at IS NOT NULL OR starts_at > clock_timestamp())
-      RETURNING id`, [id, machineId, res.locals.account.id]);
-    if (row) return res.status(204).end();
-    const { rowCount } = await database.query(
-      'SELECT 1 FROM laundry_reservations WHERE id = $1 AND machine_id = $2 AND user_id = $3',
-      [id, machineId, res.locals.account.id]);
-    if (!rowCount) return res.status(404).json(notFound);
-    res.status(409).json({ message: 'Rezervarea a început și nu mai poate fi anulată.' });
-  });
+    const [status, body] = await changeReservation(database, machineId, id, res.locals.account.id, finish);
+    if (body) return res.status(status).json(body);
+    res.status(status).end();
+  };
+  router.delete('/:machineId/reservations/:id', change(false));
+  router.post('/:machineId/reservations/:id/finish', change(true));
   router.use((error, _req, res, next) => {
     if (error.type === 'entity.parse.failed' || error.type === 'entity.too.large') {
       return res.status(error.status).json({ message: 'Cererea de rezervare nu este validă.' });

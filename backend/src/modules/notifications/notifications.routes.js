@@ -56,13 +56,19 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
     const { rows } = await database.query(`
       SELECT notice.id, notice.kind, notice.message, notice.created_at, notice.read_at, notice.machine_id, machine.room,
         notice.report_id,
-        offer.id AS offer_id, offer.starts_at, offer.ends_at, offer.expires_at,
-        CASE WHEN offer.status = 'pending' AND offer.expires_at <= statement_timestamp()
-          THEN 'expired' ELSE offer.status END AS offer_status,
+        COALESCE(offer.id, queue.id) AS offer_id,
+        COALESCE(offer.starts_at, queue.starts_at) AS starts_at,
+        COALESCE(offer.ends_at, queue.ends_at) AS ends_at,
+        COALESCE(offer.expires_at, queue.expires_at) AS expires_at,
+        queue.immediate,
+        CASE WHEN COALESCE(offer.status, queue.status) = 'pending'
+          AND COALESCE(offer.expires_at, queue.expires_at) <= statement_timestamp()
+          THEN 'expired' ELSE COALESCE(offer.status, queue.status) END AS offer_status,
         statement_timestamp() AS now
       FROM laundry_notifications notice
       LEFT JOIN laundry_machines machine ON machine.id = notice.machine_id
       LEFT JOIN laundry_restoration_offers offer ON offer.notification_id = notice.id
+      LEFT JOIN laundry_queue_offers queue ON queue.notification_id = notice.id
       WHERE notice.user_id = $1 ORDER BY notice.id DESC`, [res.locals.account.id]);
     res.json({
       pushPublicKey: publicKey,
@@ -74,6 +80,7 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
         ...(row.offer_id && { offer: {
           id: row.offer_id, status: row.offer_status,
           startsAt: row.starts_at, endsAt: row.ends_at, expiresAt: row.expires_at,
+          ...(row.kind === 'queue-turn' && { immediate: row.immediate }),
         } }),
       })),
     });

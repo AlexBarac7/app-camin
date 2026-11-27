@@ -8,6 +8,7 @@ import { startPushDelivery } from './modules/notifications/push.js';
 import { createReportPhotoStore } from './modules/laundry/report-photos.js';
 import { localTestAccounts } from './modules/auth/account-roles.js';
 import { createAuthMailer } from './modules/auth/auth-mail.js';
+import { startQueueWorker } from './modules/laundry/live-queue.js';
 
 try {
   const config = loadConfig();
@@ -33,6 +34,7 @@ try {
     console.log(`Backend listening on port ${config.port}.`);
   });
   const stopPushDelivery = startPushDelivery(database, config.push);
+  const stopQueue = startQueueWorker(database);
   const listeners = [server];
   if (config.internalReadinessPort) {
     const internal = express();
@@ -48,7 +50,7 @@ try {
     process.once(signal, async () => {
       const deadline = setTimeout(() => process.exit(1), 5000);
       deadline.unref();
-      await Promise.all([stopPushDelivery(), ...listeners.map(listener => new Promise(resolve => listener.close(resolve)))]);
+      await Promise.all([stopPushDelivery(), stopQueue(), ...listeners.map(listener => new Promise(resolve => listener.close(resolve)))]);
       await database.close();
       clearTimeout(deadline);
       process.exit(0);

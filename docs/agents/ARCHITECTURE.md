@@ -62,7 +62,7 @@ See README.md for verified local commands. Compose uses development servers;
 frontend npm run build produces static assets. Railway is a future target only.
 
 ## Boundaries
-Live-queue, quotas, no-show policies and the email fallback remain
+Quotas, no-show policies and the email fallback remain
 outside the current implementation. No Railway deployment configuration or
 authorization exists yet.
 
@@ -90,3 +90,10 @@ location, priority and a private photo reference. The backend re-encodes
 uploaded images and reads them from S3-compatible storage after checking the
 current account's permission. Compose runs SeaweedFS on the internal network
 and keeps photo objects in the `report_photos` volume.
+
+Migration 016 adds same-day Live-queue entries and offers, plus the actual and
+original end of Reservations finished early. Queue transitions, booking writes
+and equipment operations serialize on the equipment row. The server advances
+queues without a connected browser. The calendar subscribes to authenticated
+SSE snapshots and reloads when the underlying availability changes. Queue offers
+use the existing notification inbox and Web Push delivery.
