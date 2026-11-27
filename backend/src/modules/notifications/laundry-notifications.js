@@ -98,7 +98,9 @@ export function restorationEligibility(reservation, now) {
 export async function notifyRestoration(client, machine, now) {
   if (!machine.current_fault_at) return;
   const { rows } = await client.query(`
-    SELECT r.id, r.user_id, r.starts_at, r.use_ends_at, r.ends_at
+    SELECT r.id, r.user_id, r.starts_at, r.use_ends_at, r.ends_at,
+      EXISTS (SELECT 1 FROM laundry_suspensions WHERE user_id = r.user_id
+        AND lifted_at IS NULL AND ends_at > $2) AS suspended
     FROM laundry_reservations r JOIN laundry_machines m ON m.id = r.machine_id
     WHERE r.machine_id = $1 AND r.use_ends_at > $2
       AND ((r.cancelled_at = m.current_fault_at AND r.cancellation_reason = 'Echipament defect')
@@ -108,10 +110,10 @@ export async function notifyRestoration(client, machine, now) {
     ORDER BY r.starts_at, r.id`, [machine.id, now]);
 
   for (const reservation of rows) {
-    const eligible = restorationEligibility(reservation, now) === 'offer';
+    const eligible = !reservation.suspended && restorationEligibility(reservation, now) === 'offer';
     const message = equipment(machine) + ' funcționează din nou. ' + (eligible
       ? 'Îți păstrăm intervalul timp de cinci minute. Dacă vrei să-l folosești, apasă „Continuă rezervarea”.'
-      : 'Alege un alt interval din calendar.');
+      : reservation.suspended ? 'Rezervările tale sunt suspendate temporar.' : 'Alege un alt interval din calendar.');
     const notification = await notify(client, machine, [reservation.user_id], 'restored', message, now);
     if (eligible) await client.query(`
       INSERT INTO laundry_restoration_offers

@@ -4,6 +4,31 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-27 · PR #26 review fixes
+
+**Model:** GPT-6.2-Sol (Codex).
+
+The owner requested the fixes identified in review. The attendance worker
+skips locked machines and continues when processing one machine fails.
+Migration 021 validates the stored attendance policy and bounds existing
+values that exceed the supported range. Reservation and strike operations
+use an account lock compatible with notification foreign-key checks.
+
+Suspended accounts are skipped when assigning offers, and their pending
+holds are hidden and withdrawn. Acceptance checks the offer deadline again
+after acquiring the account lock. A reservation link from the Web Push alert
+returns to the same machine, day and Reservation after sign-in and accepts
+only an internal reservation path.
+
+The first integration run skipped a machine locked by the concurrent test
+request. The test now runs the next worker tick after that request releases
+its lock. Existing assertions were preserved. All 20 backend tests, the
+three PostgreSQL suites, the frontend build and ledger lint passed. Two
+parallel calendar bookings returned HTTP 201 on a disposable PostgreSQL
+database. Chromium with a simulated expired session opened the exact
+Reservation after sign-in. Applied migration 021 locally and verified HTTP
+200 on readiness.
+
 ## 2026-11-27 · Attendance and strike correction in the usage guide
 
 **Model:** GPT-6.2-Sol (Codex).

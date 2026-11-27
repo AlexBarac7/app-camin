@@ -1,4 +1,5 @@
 import LaundryStatus from './LaundryStatus.jsx';
+import { portalSignInPath } from './sign-in-return.js';
 import GuideLink from './GuideLink.jsx';
 import { useEffect, useRef, useState } from 'react';
 
@@ -79,7 +80,7 @@ function bookingOptions(calendar, blocks, now, maxUse) {
 
 async function request(path, options) {
   const response = await fetch(path, options);
-  if (response.status === 401) window.location.replace('/autentificare');
+  if (response.status === 401) window.location.replace(portalSignInPath(window.location));
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.message || 'Momentan nu putem finaliza cererea. Încearcă din nou.');

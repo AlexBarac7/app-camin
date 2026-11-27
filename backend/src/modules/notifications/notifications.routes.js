@@ -39,12 +39,14 @@ async function saveAnswer(client, offerId, userId, action) {
   }
   const suspension = await activeSuspension(client, userId, { lock: true });
   if (suspension) return suspendedBooking(suspension);
+  const { rows: [{ now: acceptedAt }] } = await client.query('SELECT clock_timestamp() AS now');
+  if (offer.expires_at <= acceptedAt || offer.use_ends_at <= acceptedAt) return [409];
   const { rows: [reservation] } = await client.query(`
     INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at, attendance_tracked, confirmed_at)
     VALUES ($1, $2, greatest($3::timestamptz, $4::timestamptz), $5, $6,
       $3::timestamptz > $4::timestamptz, CASE WHEN $3::timestamptz <= $4::timestamptz THEN $4::timestamptz END)
     RETURNING id`,
-  [machine.id, userId, offer.starts_at, offer.now, offer.use_ends_at, offer.ends_at]);
+  [machine.id, userId, offer.starts_at, acceptedAt, offer.use_ends_at, offer.ends_at]);
   await client.query(`
     UPDATE laundry_restoration_offers SET status = 'accepted', new_reservation_id = $2 WHERE id = $1`,
   [offerId, reservation.id]);

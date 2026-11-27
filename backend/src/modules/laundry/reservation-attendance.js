@@ -1,5 +1,7 @@
 const minute = 60_000;
 export const attendanceMinutes = 10;
+export const maxStrikeWindowDays = 365_000;
+export const maxSuspensionHours = maxStrikeWindowDays * 24;
 export const confirmationDeadline = reservation => new Date(+reservation.starts_at + attendanceMinutes * minute);
 
 export function attendanceState(reservation, now) {
@@ -11,7 +13,7 @@ export function attendanceState(reservation, now) {
 }
 
 export async function activeSuspension(client, userId, { lock = false } = {}) {
-  if (lock) await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [userId]);
+  if (lock) await client.query('SELECT id FROM users WHERE id = $1 FOR NO KEY UPDATE', [userId]);
   const { rows: [row] } = await client.query(`
     SELECT ends_at FROM laundry_suspensions
     WHERE user_id = $1 AND lifted_at IS NULL AND ends_at > statement_timestamp()
@@ -88,7 +90,7 @@ export async function issueStrike(client, reservation, deadline) {
 export async function correctStrike(client, reservationId, operatorId, reason) {
   const { rows: [strike] } = await client.query(`
     SELECT strike.user_id FROM laundry_strikes strike JOIN users resident ON resident.id = strike.user_id
-    WHERE strike.reservation_id = $1 FOR UPDATE OF resident`, [reservationId]);
+    WHERE strike.reservation_id = $1 FOR NO KEY UPDATE OF resident`, [reservationId]);
   if (!strike) return false;
   const { rows: [corrected] } = await client.query(`
     UPDATE laundry_strikes SET corrected_at = statement_timestamp(), corrected_by = $2, correction_reason = $3

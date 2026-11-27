@@ -85,11 +85,17 @@ async function saveReservation(client, machineId, userId, startsAt, endsAt) {
     SELECT 1 FROM laundry_reservations
     WHERE machine_id = $1 AND cancelled_at IS NULL AND starts_at < $3 AND ends_at > $2
     UNION ALL
-    SELECT 1 FROM laundry_restoration_offers
-    WHERE machine_id = $1 AND status = 'pending' AND expires_at > $4 AND starts_at < $3 AND ends_at > $2
+    SELECT 1 FROM laundry_restoration_offers offer
+    JOIN laundry_notifications notice ON notice.id = offer.notification_id
+    WHERE offer.machine_id = $1 AND offer.status = 'pending' AND offer.expires_at > $4 AND offer.starts_at < $3 AND offer.ends_at > $2
+      AND NOT EXISTS (SELECT 1 FROM laundry_suspensions WHERE user_id = notice.user_id
+        AND lifted_at IS NULL AND ends_at > $4)
     UNION ALL
-    SELECT 1 FROM laundry_queue_offers
-    WHERE machine_id = $1 AND status = 'pending' AND expires_at > $4 AND starts_at < $3 AND ends_at > $2
+    SELECT 1 FROM laundry_queue_offers offer
+    JOIN laundry_queue_entries entry ON entry.id = offer.entry_id
+    WHERE offer.machine_id = $1 AND offer.status = 'pending' AND offer.expires_at > $4 AND offer.starts_at < $3 AND offer.ends_at > $2
+      AND NOT EXISTS (SELECT 1 FROM laundry_suspensions WHERE user_id = entry.user_id
+        AND lifted_at IS NULL AND ends_at > $4)
     LIMIT 1`, [machineId, start, end, now]);
   if (rows.length) return [409, { message: overlapMessage }];
   const { rows: [reservation] } = await client.query(`
@@ -160,11 +166,15 @@ export function reservationRoutes(database, origins = localOrigins) {
         SELECT json_agg(json_build_object('startsAt', offer.starts_at, 'endsAt', offer.ends_at) ORDER BY offer.starts_at) AS intervals,
           min(offer.expires_at) AS next_expiration
         FROM (
-          SELECT machine_id, starts_at, ends_at, expires_at, status FROM laundry_restoration_offers
+          SELECT offer.machine_id, offer.starts_at, offer.ends_at, offer.expires_at, offer.status, notice.user_id
+          FROM laundry_restoration_offers offer JOIN laundry_notifications notice ON notice.id = offer.notification_id
           UNION ALL
-          SELECT machine_id, starts_at, ends_at, expires_at, status FROM laundry_queue_offers
+          SELECT offer.machine_id, offer.starts_at, offer.ends_at, offer.expires_at, offer.status, entry.user_id
+          FROM laundry_queue_offers offer JOIN laundry_queue_entries entry ON entry.id = offer.entry_id
         ) offer
         WHERE offer.machine_id = machine.id AND offer.status = 'pending' AND offer.expires_at > statement_timestamp()
+          AND NOT EXISTS (SELECT 1 FROM laundry_suspensions WHERE user_id = offer.user_id
+            AND lifted_at IS NULL AND ends_at > statement_timestamp())
           AND offer.starts_at < (($2::date + 1)::timestamp AT TIME ZONE $3)
           AND offer.ends_at > ($2::date::timestamp AT TIME ZONE $3)
       ) holds ON true

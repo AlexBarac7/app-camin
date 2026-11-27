@@ -6,7 +6,7 @@ import {
   finishAccessRejection, finishInvitationDelivery, listAccessRequests, startAccessRejection, startInvitationDelivery,
 } from '../auth/invitations.js';
 import { transaction } from '../../db.js';
-import { correctStrike } from '../laundry/reservation-attendance.js';
+import { correctStrike, maxStrikeWindowDays, maxSuspensionHours } from '../laundry/reservation-attendance.js';
 import { residenceZone, validDay } from '../laundry/reservation-rules.js';
 
 const pageSize = 25;
@@ -115,9 +115,11 @@ export function adminRoutes(database, origins = localOrigins, appOrigin, { sendI
 
   router.put('/reservation-attendance-policy', operator, write, json({ limit: '1kb' }), async (req, res) => {
     const { strikeWindowDays, suspensionHours } = req.body ?? {};
-    if (![strikeWindowDays, suspensionHours].every(value =>
-      Number.isInteger(value) && value > 0 && value <= 2147483647)) {
-      return res.status(400).json({ message: 'Introdu perioade pozitive, în numere întregi.' });
+    if (!Number.isInteger(strikeWindowDays) || strikeWindowDays < 1 || strikeWindowDays > maxStrikeWindowDays ||
+        !Number.isInteger(suspensionHours) || suspensionHours < 1 || suspensionHours > maxSuspensionHours) {
+      return res.status(400).json({
+        message: `Introdu perioadele în numere întregi, până la ${maxStrikeWindowDays} de zile și ${maxSuspensionHours} de ore.`,
+      });
     }
     await database.query(`
       UPDATE laundry_attendance_policy SET strike_window_days = $1, suspension_hours = $2`,

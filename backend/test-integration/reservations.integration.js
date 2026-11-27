@@ -727,6 +727,7 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
   await t.test('reservations remind, confirm, expire once and suspend until corrected', async t => {
     const { advanceWaitingQueues } = await import('../src/modules/laundry/live-queue.js');
     let clock = at(240);
+    let clockAfterAccountLock;
     const timed = (sql, args = []) => {
       if (!/clock_timestamp\(\) AS now|statement_timestamp\(\)/.test(sql)) return [sql, args];
       const value = '$' + (args.length + 1) + '::timestamptz';
@@ -738,7 +739,17 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
       query: (sql, args) => db.query(...timed(sql, args)),
       async connect() {
         const client = await db.connect();
-        return { query: (sql, args) => client.query(...timed(sql, args)), release: discard => client.release(discard) };
+        return {
+          async query(sql, args) {
+            const result = await client.query(...timed(sql, args));
+            if (clockAfterAccountLock && /SELECT id FROM users WHERE id = \$1 FOR (?:NO KEY )?UPDATE/.test(sql)) {
+              clock = clockAfterAccountLock;
+              clockAfterAccountLock = undefined;
+            }
+            return result;
+          },
+          release: discard => client.release(discard),
+        };
       },
     };
     const attendanceServer = createApp(database).listen(0, '127.0.0.1');
@@ -826,6 +837,8 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
       clock = at(offset);
       const [, , confirmation] = await Promise.all([tick(), tick(), confirm(missed[index])]);
       assert.equal(confirmation.status, 409);
+      // A tick may skip the equipment while the confirmation request holds its lock.
+      await tick();
     }
     const residentView = await calendar(1);
     assert.equal(residentView.suspension.until, new Date(Date.parse(at(390)) + 48 * 3_600_000).toISOString());
@@ -861,6 +874,17 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     const restorationAnswer = await send('/api/notifications/offers/' + restorationOffer.id, 'POST', 1, { action: 'accept' });
     assert.equal(restorationAnswer.status, 403);
     assert.equal((await restorationAnswer.json()).suspension.until, residentView.suspension.until);
+    assert.deepEqual((await calendar(0)).holds, []);
+    await tick();
+    const { rows: holds } = await db.query(`
+      SELECT status FROM laundry_queue_offers WHERE id = $1
+      UNION ALL
+      SELECT status FROM laundry_restoration_offers WHERE id = $2`, [queueOffer.id, restorationOffer.id]);
+    assert.deepEqual(holds.map(row => row.status), ['withdrawn', 'withdrawn']);
+
+    const rules = '/api/admin/reservation-attendance-policy';
+    assert.equal((await send(rules, 'PUT', 0, { strikeWindowDays: 2147483647, suspensionHours: 48 })).status, 400);
+    assert.deepEqual(await (await send(rules, 'GET', 0)).json(), { strikeWindowDays: 7, suspensionHours: 48 });
 
     const strikeAlerts = async account => (await (await send('/api/notifications', 'GET', account)).json()).items
       .filter(item => item.kind === 'strike-issued' && missed.includes(item.reservation?.id));
@@ -901,6 +925,25 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     assert.equal((await send(correction, 'POST', 0, { reason: '' })).status, 400);
     assert.equal((await send(correction, 'POST', 0, { reason: 'Corecție de test' })).status, 204);
     assert.equal((await calendar(1)).suspension, null);
+
+    const { rows: [newQueueOffer] } = await db.query(`
+      INSERT INTO laundry_queue_offers (entry_id, machine_id, notification_id, starts_at, ends_at, expires_at, immediate)
+      VALUES ($1, $2, $3, $4, $5, $6, false) RETURNING id`,
+    [entry.id, equipment.id, await notice('queue-turn'), at(450), at(480), at(435)]);
+    const { rows: [newRestorationOffer] } = await db.query(`
+      INSERT INTO laundry_restoration_offers
+        (notification_id, original_reservation_id, machine_id, starts_at, use_ends_at, ends_at, expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    [await notice('restored'), missed[0], equipment.id, at(480), at(500), at(510), at(435)]);
+    for (const offerPath of [
+      endpoint + '/queue/offers/' + newQueueOffer.id, '/api/notifications/offers/' + newRestorationOffer.id,
+    ]) {
+      clock = at(434);
+      clockAfterAccountLock = at(435);
+      assert.equal((await send(offerPath, 'POST', 1, { action: 'accept' })).status, 409);
+      assert.equal(clockAfterAccountLock, undefined);
+    }
+
     assert.equal((await send(endpoint + '/reservations', 'POST', 1, { startsAt: at(510), endsAt: at(540) })).status, 201);
 
     const changeCondition = action => send(endpoint + '/condition', 'POST', 0, { action });

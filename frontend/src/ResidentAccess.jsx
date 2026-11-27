@@ -6,6 +6,7 @@ import LaundryReports, { ReportEquipment } from './LaundryReports.jsx';
 import UsageGuide from './UsageGuide.jsx';
 import GuideLink, { guidePath } from './GuideLink.jsx';
 import PortalIcon from './PortalIcon.jsx';
+import { portalAfterSignIn, portalSignInPath } from './sign-in-return.js';
 import logo from './camin-3-logo.png';
 
 const invalidLink = 'Invitația nu mai este valabilă. Cere o invitație nouă.';
@@ -115,8 +116,7 @@ export function AccessForm({ activation = false, reset = false, embedded = false
         onFirstLogin();
         return;
       }
-      const notice = new URLSearchParams(window.location.search).get('notificare');
-      window.location.replace(notice && /^\d+$/.test(notice) ? '/notificari#notificare-' + notice : '/resurse');
+      window.location.replace(portalAfterSignIn(window.location.search));
     } catch (failure) {
       if (failure.code === 'invalid_invitation' || failure.code === 'invalid_password_reset') setInvalid(true);
       else setError(failure.status ? failure.message : unavailable);
@@ -386,7 +386,7 @@ function Resources({ room, canManage }) {
           signal: controller.signal,
         });
         if (response.status === 401) {
-          window.location.replace('/autentificare');
+          window.location.replace(portalSignInPath(window.location));
           return;
         }
         if (!response.ok) throw new Error(unavailable);
@@ -494,8 +494,7 @@ export default function ResidentAccess() {
         const response = await fetch('/api/auth/session', { signal: controller.signal, cache: 'no-store' });
         if (controller.signal.aborted) return;
         if (response.status === 401) {
-          const notice = route === '/notificari' && /^#notificare-(\d+)$/.exec(window.location.hash)?.[1];
-          window.location.replace('/autentificare' + (notice ? '?notificare=' + notice : ''));
+          window.location.replace(portalSignInPath(window.location));
           return;
         }
         if (!response.ok) throw new Error(unavailable);
