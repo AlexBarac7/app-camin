@@ -30,7 +30,7 @@ self.addEventListener('push', event => {
   const { id, unreadCount } = event.data?.json() ?? {};
   if (!/^\d+$/.test(id)) return;
   event.waitUntil(Promise.all([
-    self.registration.showNotification('Cămin', {
+    self.registration.showNotification('Căminul Meu', {
       body: 'Ai un mesaj nou. Deschide aplicația pentru detalii.',
       tag: 'laundry-notice-' + id,
       data: { path: '/notificari#notificare-' + id },

@@ -35,33 +35,55 @@ async function saveInvitation(client, email) {
 const deliveryStatus = `CASE
   WHEN delivery_state = 'sending' AND invited_at <= clock_timestamp() - interval '2 minutes' THEN 'failed'
   ELSE coalesce(delivery_state, 'pending') END`;
+const rejectionDeliveryStatus = `CASE
+  WHEN rejection_delivery_state = 'sending' AND rejection_attempted_at <= clock_timestamp() - interval '2 minutes'
+    THEN 'failed'
+  ELSE rejection_delivery_state END`;
 
 export async function listAccessRequests(database) {
   const { rows } = await database.query(`
-    SELECT id, email, requested_at AS "requestedAt", ${deliveryStatus} AS delivery
+    SELECT id, email, requested_at AS "requestedAt", rejected_at IS NOT NULL AS rejected,
+      CASE WHEN rejected_at IS NULL THEN (${deliveryStatus}) ELSE (${rejectionDeliveryStatus}) END AS delivery
     FROM access_requests
-    WHERE (invited_at IS NULL OR delivery_state IN ('sending', 'failed'))
+    WHERE ((rejected_at IS NULL AND (invited_at IS NULL OR delivery_state IN ('sending', 'failed')))
+      OR rejection_delivery_state IN ('sending', 'failed'))
       AND NOT EXISTS (SELECT 1 FROM users WHERE email = access_requests.email)
     ORDER BY requested_at, id`);
-  return rows;
+  return rows.map(({ rejected, ...request }) => rejected ? { ...request, rejected } : request);
 }
 
-export function requestAccess(database, email, testAccounts) {
+export function requestAccess(database, email, testAccounts, replacement) {
   return transaction(database, async client => {
     await lockEmail(client, email);
+    const { rows: [status] } = await client.query(`
+      SELECT EXISTS (SELECT 1 FROM users WHERE email = $1) AS account_exists,
+        (SELECT CASE
+          WHEN rejected_at IS NOT NULL THEN 'rejected'
+          WHEN invited_at IS NULL THEN 'pending'
+          WHEN delivery_state IN ('sending', 'failed') THEN 'delivery_pending'
+        END FROM access_requests WHERE email = $1) AS request_status,
+        (SELECT CASE
+          WHEN revoked_at IS NOT NULL OR used_at IS NOT NULL THEN 'invite_unavailable'
+          WHEN expires_at <= clock_timestamp() THEN 'invite_expired'
+          ELSE 'invite_sent'
+        END FROM invitations WHERE email = $1
+          ORDER BY (revoked_at IS NULL AND used_at IS NULL) DESC, expires_at DESC LIMIT 1) AS invitation_status`, [email]);
+    if (status.account_exists) return 'account_exists';
+    if (status.request_status) return status.request_status;
+    if (!replacement && status.invitation_status) return status.invitation_status;
+    if (replacement && !status.invitation_status) return 'no_invitation';
+
     const { rowCount } = await client.query(`
       INSERT INTO access_requests (email)
       SELECT $1 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = $1)
-        AND NOT EXISTS (SELECT 1 FROM invitations WHERE email = $1 AND revoked_at IS NULL
-          AND used_at IS NULL AND expires_at > clock_timestamp())
       ON CONFLICT (email) DO UPDATE SET requested_at = clock_timestamp(), invited_at = NULL,
-        delivery_state = NULL, delivery_hash = NULL
-      WHERE access_requests.invited_at IS NOT NULL`, [email]);
-    if (!rowCount) return;
+        delivery_state = NULL, delivery_hash = NULL`, [email]);
+    if (!rowCount) return 'account_exists';
     await client.query(`
       INSERT INTO laundry_notifications (user_id, kind, message, created_at)
       SELECT id, 'access-request', 'Cerere nouă de acces.', clock_timestamp()
       FROM users WHERE ${adminAccountsSql}`, [testAccounts, testAdminEmail]);
+    return replacement ? 'replacement_received' : 'received';
   });
 }
 
@@ -72,7 +94,8 @@ export function startInvitationDelivery(database, id, retry) {
     await lockEmail(client, request.email);
     const { rowCount } = await client.query(`
       SELECT 1 FROM access_requests
-      WHERE id = $1 AND (CASE WHEN $2::boolean THEN (${deliveryStatus}) = 'failed' ELSE invited_at IS NULL END)
+      WHERE id = $1 AND rejected_at IS NULL
+        AND (CASE WHEN $2::boolean THEN (${deliveryStatus}) = 'failed' ELSE invited_at IS NULL END)
         AND NOT EXISTS (SELECT 1 FROM users WHERE email = access_requests.email)`, [id, retry]);
     if (!rowCount) return null;
     const email = invitationEmail(request.email);
@@ -90,6 +113,34 @@ export async function finishInvitationDelivery(database, id, hash, state) {
   const { rowCount } = await database.query(`
     UPDATE access_requests SET delivery_state = $3
     WHERE id = $1 AND delivery_hash = $2 AND delivery_state = 'sending'`, [id, hash, state]);
+  return rowCount === 1;
+}
+
+export function startAccessRejection(database, id, retry) {
+  return transaction(database, async client => {
+    const { rows: [request] } = await client.query('SELECT email FROM access_requests WHERE id = $1', [id]);
+    if (!request) return null;
+    await lockEmail(client, request.email);
+    const email = invitationEmail(request.email);
+    if (!email) return null;
+    const { rows: [updated] } = await client.query(`
+      UPDATE access_requests
+      SET rejected_at = coalesce(rejected_at, clock_timestamp()), rejection_attempted_at = clock_timestamp(),
+        rejection_delivery_state = 'sending', rejection_attempt = rejection_attempt + 1
+      WHERE id = $1 AND invited_at IS NULL
+        AND (CASE WHEN $2::boolean THEN (${rejectionDeliveryStatus}) = 'failed' ELSE rejected_at IS NULL END)
+        AND NOT EXISTS (SELECT 1 FROM users WHERE email = access_requests.email)
+      RETURNING rejection_attempt AS attempt`, [id, retry]);
+    if (!updated) return null;
+    if (!retry) await revokeOpen(client, email);
+    return { email, attempt: updated.attempt };
+  });
+}
+
+export async function finishAccessRejection(database, id, attempt, state) {
+  const { rowCount } = await database.query(`
+    UPDATE access_requests SET rejection_delivery_state = $3
+    WHERE id = $1 AND rejection_attempt = $2 AND rejection_delivery_state = 'sending'`, [id, attempt, state]);
   return rowCount === 1;
 }
 
@@ -120,7 +171,10 @@ export async function activateInvitation(database, token, password) {
       [digest],
     );
     if (!consumed.rowCount) return false;
-    await client.query('INSERT INTO users (email, password_hash) VALUES ($1, $2)', [invitation.email, passwordHash]);
+    await client.query(
+      'INSERT INTO users (email, password_hash, welcome_pending) VALUES ($1, $2, true)',
+      [invitation.email, passwordHash],
+    );
     return true;
   });
 }

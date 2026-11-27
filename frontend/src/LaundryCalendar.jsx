@@ -1,4 +1,5 @@
 import LaundryStatus from './LaundryStatus.jsx';
+import GuideLink from './GuideLink.jsx';
 import { useEffect, useRef, useState } from 'react';
 
 const timeZone = 'Europe/Bucharest';
@@ -25,6 +26,13 @@ function moveDay(day, offset) {
   const date = new Date(day);
   date.setUTCDate(date.getUTCDate() + offset);
   return date.toISOString().slice(0, 10);
+}
+
+function calendarReturnPath(machine, day, target) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('echipament', machine.id);
+  url.searchParams.set('zi', day);
+  return url.pathname + url.search + '#' + target;
 }
 
 function calendarBlocks(calendar, now) {
@@ -208,6 +216,7 @@ function CalendarDay({ machine, day, today, queue, onChange, onNextDay, children
   const endings = options.get(start) ?? [];
   const end = endings.includes(selection.end) ? selection.end : 0;
   const useEnd = end && (end === +new Date(calendar.closesAt) ? end : end - handover);
+  const queueHelp = 'ajutor-coada-' + machine.id;
 
   return (
     <div className="booking-layout">
@@ -232,6 +241,11 @@ function CalendarDay({ machine, day, today, queue, onChange, onNextDay, children
         {fullToday && <p className="camin-notice" data-tone="info">Nu mai sunt intervale disponibile azi pentru {machine.name}.</p>}
         {day === today && (queue?.entry || queue?.joinedElsewhere || canJoin || fullToday) && (
           <div className="grid gap-2 my-3">
+            <div className="portal-heading-row">
+              <h3>Live-queue</h3>
+              <GuideLink id={queueHelp} section="coada-de-asteptare" label="Ajutor pentru Live-queue"
+                returnPath={calendarReturnPath(machine, day, queueHelp)} />
+            </div>
             {queue?.entry ? <>
               <p role="status">Live-queue · Poziția {queue.entry.position} · Ciclu de {queue.entry.durationMinutes} min</p>
               {queue.technicalStatus === 'inspection' && <p>Coada este pe pauză cât timp echipamentul este verificat.</p>}
@@ -341,7 +355,13 @@ function CalendarDay({ machine, day, today, queue, onChange, onNextDay, children
 
 export default function LaundryCalendar({ machine, onChange }) {
   const [today] = useState(() => dateFormat.format(new Date()));
-  const [day, setDay] = useState(today);
+  const [day, setDay] = useState(() => {
+    const query = new URLSearchParams(window.location.search);
+    const requested = query.get('zi');
+    if (query.get('echipament') === String(machine.id) && /^\d{4}-\d{2}-\d{2}$/.test(requested)
+      && Number.isFinite(Date.parse(requested)) && moveDay(requested, 0) === requested) return requested;
+    return today;
+  });
   const [queue, setQueue] = useState(null);
   const calendarRegion = useRef(null);
   const restoreFocus = useRef(null);
@@ -349,6 +369,7 @@ export default function LaundryCalendar({ machine, onChange }) {
   const week = Array.from({ length: 7 }, (_, index) => moveDay(weekStart, index));
   const startMonth = monthFormat.format(new Date(week[0]));
   const endMonth = monthFormat.format(new Date(week.at(-1)));
+  const calendarHelp = 'ajutor-rezervari-' + machine.id;
 
   useEffect(() => {
     const events = new EventSource('/api/laundry-machines/' + machine.id + '/queue/events');
@@ -370,7 +391,11 @@ export default function LaundryCalendar({ machine, onChange }) {
 
   return (
     <section ref={calendarRegion} aria-label={'Calendar · ' + machine.name} className="booking-calendar">
-      <header><h2>Rezervă un interval</h2><p className="camin-muted">{machine.name} · {machine.location}</p></header>
+      <header className="portal-heading-row">
+        <div><h2>Rezervă un interval</h2><p className="camin-muted">{machine.name} · {machine.location}</p></div>
+        <GuideLink id={calendarHelp} section="rezervari" label="Ajutor pentru rezervări"
+          returnPath={calendarReturnPath(machine, day, calendarHelp)} />
+      </header>
       <CalendarDay machine={machine} day={day} today={today} queue={queue}
         onChange={onChange} onNextDay={setDay} key={day}>
         <div className="booking-day-header">

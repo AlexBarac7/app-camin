@@ -125,3 +125,15 @@ screens:
     area: admin
     kind: page
     routes: [/admin/stare-servicii]
+
+  - id: DS-021
+    title: Ghid de utilizare
+    area: resident
+    kind: page
+    routes: [/ghid-de-utilizare]
+
+  - id: DS-022
+    title: Bun venit la prima autentificare după activarea contului
+    area: access
+    kind: panel
+    parents: [DS-001]

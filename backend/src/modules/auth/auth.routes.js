@@ -1,4 +1,5 @@
 import express from 'express';
+import { transaction } from '../../db.js';
 import { invitationEmail, newToken, normalizeEmail, passwordLength, tokenHash, validToken, verifyPassword } from './credentials.js';
 import { activateInvitation, requestAccess } from './invitations.js';
 import { accountRole, isTestAccount, testResidentEmail } from './account-roles.js';
@@ -101,13 +102,14 @@ export function authRoutes(database, origins = localOrigins, { appOrigin, sendPa
   });
 
   router.post('/request-access', json, async (req, res) => {
-    const email = invitationEmail(req.body?.email);
+    const { email: value, replacement = false } = req.body ?? {};
+    const email = invitationEmail(value);
     if (!email) return res.status(400).json({ message: 'Introdu o adresă de e-mail validă.' });
+    if (typeof replacement !== 'boolean') return res.status(400).json({ message: 'Cererea nu este validă.' });
     if (!allowRequest(req, res)) return;
-    if (!isTestAccount(email) || (req.app.locals.testAccounts && email === testResidentEmail)) {
-      await requestAccess(database, email, req.app.locals.testAccounts);
-    }
-    res.status(202).end();
+    const allowed = !isTestAccount(email) || (req.app.locals.testAccounts && email === testResidentEmail);
+    const status = allowed ? await requestAccess(database, email, req.app.locals.testAccounts, replacement) : 'unavailable';
+    res.status(202).set('X-Camin-Access-Status', status).end();
   });
 
   router.post('/request-password-reset', json, async (req, res) => {
@@ -156,14 +158,21 @@ export function authRoutes(database, origins = localOrigins, { appOrigin, sendPa
     }
 
     const token = newToken();
-    const session = await database.query(
-      `INSERT INTO sessions (token_hash, user_id)
-       SELECT $1, id FROM users WHERE id = $2 AND password_hash = $3 FOR UPDATE`,
-      [tokenHash(token), user.id, storedHash],
-    );
-    if (!session.rowCount) return invalidCredentials();
+    const showWelcome = await transaction(database, async client => {
+      const { rows: [current] } = await client.query(
+        'SELECT welcome_pending FROM users WHERE id = $1 AND password_hash = $2 FOR UPDATE',
+        [user.id, storedHash],
+      );
+      if (!current) return null;
+      await client.query('INSERT INTO sessions (token_hash, user_id) VALUES ($1, $2)', [tokenHash(token), user.id]);
+      if (current.welcome_pending) {
+        await client.query('UPDATE users SET welcome_pending = false WHERE id = $1', [user.id]);
+      }
+      return current.welcome_pending;
+    });
+    if (showWelcome === null) return invalidCredentials();
     res.cookie(sessionCookie, token, { ...cookieOptions(req), maxAge: sessionLifetime });
-    res.status(200).end();
+    res.json({ showWelcome });
   });
 
   router.get('/session', requireSession(database), (_req, res) => {

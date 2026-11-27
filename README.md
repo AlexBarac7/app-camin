@@ -1,4 +1,4 @@
-# app-camin
+# Căminul Meu
 
 A shared resource management application for a student residence, co-working hub,
 or residential building. The pilot covers the two laundry rooms and the drying
@@ -236,9 +236,29 @@ sends the activation link to the address from the request. If the email
 server rejects the message, **Reîncearcă trimiterea** issues a new link and
 invalidates the previous one. The one-time link expires in 48 hours.
 
+The form shows whether the address already has an account, a pending request,
+or an invitation. For a lost or expired link, choose **Nu ai activat contul?
+Solicită o altă invitație** and enter the same address. Admin approves the
+replacement before the old link is invalidated and a new link is sent.
+
+Use **Respinge cererea** in **Cereri de acces** to close a pending request and
+send a rejection email. If the request was for a replacement, the previous link
+is revoked immediately. If the email fails, retry it from the rejected request.
+The public form shows that a rejected request is closed.
+
 The resident opens the link, chooses a password of 8–128 characters and signs
-in from the welcome page or `/autentificare`. The app opens
-**Resurse** at `/resurse`, with links to both laundry rooms and the drying room.
+in from the welcome page or `/autentificare`. On the first successful sign-in
+after a new invitation activation, the app offers **Consultă ghidul** and
+**Mergi la resurse**. Later sign-ins open **Resurse** or the notification
+from a direct link. Apply migration 017 before running the updated backend.
+
+The phone navigation uses icons and labels across the bottom. On desktop it
+appears on the left. Open **Ghid de utilizare** at `/ghid-de-utilizare` with
+the **?** control in the portal. Contextual help opens the relevant guide
+section. **Înapoi** restores the source page, including the selected equipment
+and day when coming from a calendar.
+
+Choose **Resurse** for links to both laundry rooms and the drying room.
 Select an equipment card to see its technical condition, operating hours and
 Reservation calendar. The washers and dryers follow the same weekday schedule,
 08:00–20:00.
@@ -351,8 +371,10 @@ read -r VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY < <(
 export VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY
 ```
 
-Open **Notificări** and enable alerts on the device. For a phone test, use a
-private test origin accessible over HTTPS and set the backend's `APP_ORIGIN`
+**Notificări** groups messages by day and shows the available equipment,
+interval, and offer status in each card. Select **OK** to mark a notice as read.
+Open **Setări pentru alertele pe dispozitiv** in the inbox to enable alerts.
+For a phone test, use a private test origin accessible over HTTPS and set the backend's `APP_ORIGIN`
 to that exact origin. In the same shell, set
 `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS` to the test origin's hostname before
 starting Compose. On iPhone, add the web app to the home screen and open it

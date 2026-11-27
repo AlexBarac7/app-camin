@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import EquipmentManagement from './EquipmentManagement.jsx';
 import AdminData, { AdminNav } from './AdminData.jsx';
 import AdminAccessRequests from './AdminAccessRequests.jsx';
-import { AccessForm, authRequest, CaminBrand } from './ResidentAccess.jsx';
+import { AccessForm, authRequest, CaminBrand, FirstLoginWelcome, InvitationReplacementLink } from './ResidentAccess.jsx';
 
 const initial = { state: 'checking', message: 'Checking service…' };
 
@@ -136,15 +136,21 @@ function HomeLink() {
 
 function Welcome() {
   const [unavailable, setUnavailable] = useState(false);
-  const [requestAccess, setRequestAccess] = useState(false);
+  const [accessMode, setAccessMode] = useState(() =>
+    new URLSearchParams(window.location.search).get('invitatie') === 'noua' ? 'replacement' : 'sign-in');
+  const requestAccess = accessMode !== 'sign-in';
+  const replacement = accessMode === 'replacement';
+  const [firstLogin, setFirstLogin] = useState(false);
+  const sessionCheck = useRef(null);
   useEffect(() => {
     const controller = new AbortController();
+    sessionCheck.current = controller;
     const timeout = setTimeout(() => controller.abort(), 6000);
     let active = true;
     async function checkSession() {
       try {
         const response = await fetch('/api/auth/session', { signal: controller.signal, cache: 'no-store' });
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         if (response.ok) window.location.replace('/resurse');
         else if (response.status !== 401) setUnavailable(true);
       } catch {
@@ -161,13 +167,17 @@ function Welcome() {
     };
   }, []);
 
+  if (firstLogin) return <main lang="ro" className="camin-design standalone-access access-background">
+    <div className="camin-panel"><CaminBrand /><FirstLoginWelcome /></div>
+  </main>;
+
   return (
     <main lang="ro" className="camin-design welcome-page access-background">
       <div className="welcome-shell">
         <section className="welcome-intro">
           <CaminBrand />
           <h1>
-            Bun venit la căminul tău
+            Bun venit în Căminul Meu
           </h1>
           <p className="camin-muted">
             Rezervările la spălătorie și sesizările din cămin, într-un singur loc.
@@ -175,15 +185,20 @@ function Welcome() {
         </section>
         <section aria-labelledby="welcome-form-title" className="welcome-form">
           <h2 id="welcome-form-title">
-            {requestAccess ? 'Solicită acces' : 'Intră în cont'}
+            {replacement ? 'Solicită o altă invitație' : requestAccess ? 'Solicită acces' : 'Intră în cont'}
           </h2>
-          {requestAccess ? <AccessRequestForm /> : <AccessForm embedded />}
+          {requestAccess ? <AccessRequestForm key={accessMode} replacement={replacement}
+            onRequestAccess={() => setAccessMode('request')} /> : <AccessForm embedded onFirstLogin={() => {
+            sessionCheck.current?.abort();
+            setFirstLogin(true);
+          }} />}
           <div className="welcome-footer">
             <span className="camin-muted">{requestAccess ? 'Ai deja cont?' : 'Ești nou aici?'}</span>
-            <button type="button" className="camin-link" onClick={() => setRequestAccess(value => !value)}>
+            <button type="button" className="camin-link" onClick={() => setAccessMode(requestAccess ? 'sign-in' : 'request')}>
               {requestAccess ? 'Înapoi la autentificare' : 'Solicită acces'}
             </button>
           </div>
+          {!replacement && <div className="mt-3 text-sm"><InvitationReplacementLink /></div>}
           {unavailable && <p role="status" className="mt-4 text-sm text-slate-600">Sesiunea nu poate fi verificată momentan.</p>}
         </section>
       </div>
@@ -191,7 +206,21 @@ function Welcome() {
   );
 }
 
-function AccessRequestForm() {
+const accessFeedback = {
+  received: 'Cererea a fost primită. Dacă este aprobată, vei primi un link de activare prin e-mail.',
+  replacement_received: 'Am primit cererea pentru o altă invitație. Dacă este aprobată, vei primi noul link prin e-mail.',
+  account_exists: 'Ai deja un cont. Autentifică-te sau folosește „Am uitat parola”.',
+  rejected: 'Cererea ta de acces a fost respinsă.',
+  pending: 'Ai deja o cerere în așteptarea aprobării.',
+  invite_sent: 'A fost emisă deja o invitație pentru această adresă. Verifică e-mailul și folderul Spam.',
+  invite_expired: 'Invitația ta a expirat. Poți solicita o altă invitație.',
+  invite_unavailable: 'Linkul de activare nu mai este valabil. Poți solicita o altă invitație.',
+  delivery_pending: 'Admin are deja cererea ta și poate continua trimiterea invitației.',
+  no_invitation: 'Pentru această adresă nu a fost emisă o invitație. Trimite întâi o cerere de acces.',
+  unavailable: 'Nu poți solicita o invitație pentru această adresă.',
+};
+
+function AccessRequestForm({ replacement, onRequestAccess }) {
   const [state, setState] = useState('ready');
   const [error, setError] = useState('');
 
@@ -201,22 +230,29 @@ function AccessRequestForm() {
     setError('');
     setState('pending');
     try {
-      await authRequest('request-access', { email });
-      setState('sent');
+      const response = await authRequest('request-access', { email, replacement });
+      const result = response.headers.get('x-camin-access-status');
+      if (!Object.hasOwn(accessFeedback, result)) throw new Error('Missing access request result');
+      setState(result);
     } catch (failure) {
       setState('ready');
       setError(failure.status ? failure.message : 'Cererea nu a putut fi trimisă. Încearcă din nou.');
     }
   }
 
-  if (state === 'sent') {
-    return <p role="status" className="mt-5 camin-notice" data-tone="success">
-      Cererea a fost primită. Dacă este aprobată, vei primi un link de activare prin e-mail.
-    </p>;
+  if (Object.hasOwn(accessFeedback, state)) {
+    const tone = state === 'received' || state === 'replacement_received' ? 'success' : 'info';
+    return <div className="mt-5 grid gap-3">
+      <p role="status" className="camin-notice" data-tone={tone}>{accessFeedback[state]}</p>
+      {state === 'account_exists' && <a className="camin-link" href="/am-uitat-parola">Am uitat parola</a>}
+      {state === 'no_invitation' && <button type="button" className="camin-link" onClick={onRequestAccess}>Solicită acces</button>}
+    </div>;
   }
   return (
     <form onSubmit={submit} className="mt-4 grid gap-4">
-      <p className="text-sm leading-6 text-slate-600">Trimite adresa ta de e-mail pentru a cere o invitație.</p>
+      <p className="text-sm leading-6 text-slate-600">{replacement
+        ? 'Introdu adresa de e-mail folosită pentru invitația inițială.'
+        : 'Trimite adresa ta de e-mail pentru a cere o invitație.'}</p>
       <label className="grid gap-2 font-medium">
         E-mail
         <input name="email" type="email" autoComplete="email" maxLength={254} required

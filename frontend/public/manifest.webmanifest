@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Resurse cămin",
-  "short_name": "Cămin",
+  "name": "Căminul Meu",
+  "short_name": "Căminul Meu",
   "lang": "ro",
   "start_url": "/",
   "scope": "/",
