@@ -29,8 +29,8 @@ inspect paginated equipment, reservation and migration data. The admin module
 checks permission on every request and selects explicit columns from fixed queries.
 
 Migration 013 adds access requests and their in-app notices. Request creation
-and approval serialize per normalized email with account activation. Admin
-receives the activation URL at approval, and PostgreSQL keeps its token hash.
+and approval serialize per normalized email with account activation. The applicant
+receives the activation URL by email, and PostgreSQL keeps its token hash.
 Each authenticated request resolves the account role from the current user
 record and local test configuration. Migration 014 tracks SMTP delivery on
 the access request. The server commits the invitation hash before sending.
