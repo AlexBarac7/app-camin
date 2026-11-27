@@ -432,12 +432,28 @@ photo storage while preserving their volumes, run `docker compose --profile phot
 Maintenance scope and acceptance are tracked in
 [issue #16](https://github.com/AlexBarac7/app-camin/issues/16).
 
-## Roadmap
+### Live-queue and early finish
 
-- Define Live-queue priority alongside Reservations and the reception notebook,
-  then implement live updates, turn notifications, concurrency tests and
-  integration with equipment faults.
-  [Issue #10](https://github.com/AlexBarac7/app-camin/issues/10)
+Apply migration 016, then open the calendar of a washer or dryer. Available
+intervals can be booked directly. When today's schedule is full, choose
+**Intră în Live-queue** or **Vezi următoarea zi disponibilă**. To join, enter the
+duration you need. The calendar shows your position and updates while it is open.
+
+When an interval opens, the first entrant whose cycle and handover fit gets
+an in-app offer and, if enabled, Web Push. Accept within the displayed time
+using **Începe** or **Rezervă intervalul**, depending on when it starts.
+During any ongoing Reservation the holder can select **Încheie**, which releases
+the remaining time after handover. A resident can leave the queue at any time.
+Entries expire at closing. During an inspection, entries keep their positions.
+A confirmed fault closes affected entries with the recorded reason.
+
+For acceptance, sign in with two resident sessions and subscribe a phone under
+**Notificări**. Join the same equipment with different durations and cancel a
+future Reservation or end an active one early. Check the position changes in
+both calendars and confirm that the first eligible resident receives the offer
+with the app closed. [Issue #10](https://github.com/AlexBarac7/app-camin/issues/10)
+
+## Roadmap
 - Confirm the residence's no-show rules, including confirmation, strike
   correction and suspension. Implement the approved policy and idempotent jobs.
   [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13)

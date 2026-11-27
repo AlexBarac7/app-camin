@@ -17,7 +17,7 @@
 - Q-006 · Who manages the laundry catalog and with what permissions?
 - Q-007 · What are the drying room's operating hours? · _answered_
 - Q-008 · What establishes whether equipment is occupied? · _answered_
-- Q-009 · How do reservations and Live-queue interact with the notebook? · _investigating_
+- Q-009 · How do reservations and Live-queue interact with the notebook? · _answered_
 - Q-010 · How are no-shows confirmed and handled?
 - Q-011 · What happens to reservations when equipment is marked defective? · _answered_
 - Q-012 · When is equipment restored in time to notify a resident? · _answered_
@@ -65,13 +65,16 @@
 
 ## Q-005 · Which business rules and users should the product support?
 - **Status:** open
-- **Blocks:** Roles, reservation availability and duration, live queue ordering and
-  transport, fair-use quotas, no-show definitions and consequences, maintenance
-  workflow and photo storage, notification events and recipients.
+- **Blocks:** Rules for other resources, fair-use quotas, no-show definitions and
+  consequences, and the remaining notification events and recipients.
 - **Who answers:** Project owner, after interviews
 - **Evidence:** [INTERVIEW.md](../../INTERVIEW.md) documents residence practices. [Q-013 and Q-014](questions/laundry-reports.md) cover the confirmed maintenance workflow.
 - **Confirmed scope:** [D-022](decisions/admin-data.md#d-022--send-approved-invitations-by-email-and-let-residents-choose-an-eight-character-password)
-  defines access requests and the three roles for the current pilot.
+  defines access requests and the three roles for the current pilot. The owner
+  confirmed same-day Live-queue for washers and dryers, the duration and
+  eligibility rules, and early finish for all ongoing Reservations in
+  [D-024](decisions/laundry-decisions.md#d-024--offer-same-day-laundry-openings-through-live-queue).
+  SSE is the transport approved in the Issue #10 implementation plan.
 
 ## Q-006 · Who manages the laundry catalog and with what permissions?
 - **Status:** open
@@ -111,13 +114,18 @@
 - **Tracking:** [Reservation calendar](https://github.com/AlexBarac7/app-camin/issues/8).
 
 ## Q-009 · How do reservations and Live-queue interact with the notebook?
-- **Status:** investigating
+- **Status:** answered
 - **Blocks:** Determining Live-queue priority and how the queue interacts with the notebook.
 - **Who answers:** Project owner, after consulting the residence administrator.
-- **Answer (calendar and notebook):** During the pilot, the application calendar
-  has priority for reservations. The notebook may still record actual use.
-- **Evidence:** The owner approved the issue #8 implementation plan.
-  [INTERVIEW.md](../../INTERVIEW.md) describes the previous notebook workflow.
+- **Answer:** During the pilot, the application calendar has priority for
+  confirmed Reservations and outstanding restoration offers. A free interval
+  can be booked directly. The first eligible Live-queue entrant can take a
+  new opening through an offer of up to five minutes. The chosen cycle and
+  handover must fit, and a skipped entrant keeps their position. The key still
+  comes from reception and the notebook can record actual use.
+- **Evidence:** The owner approved the issue #8 and #10 implementation plans.
+  [INTERVIEW.md](../../INTERVIEW.md) describes the physical workflow.
+- **Confirmed:** 2026-11-27
 - **Tracking:** [Reservation calendar](https://github.com/AlexBarac7/app-camin/issues/8)
   and [Live-queue priority](https://github.com/AlexBarac7/app-camin/issues/10).
 

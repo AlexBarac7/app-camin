@@ -22,6 +22,9 @@
 - PATTERN-014 · Record an invitation attempt before handing it to SMTP · candidate
 - PATTERN-015 · Serialize credential changes and session creation on the account row · candidate
 
+### [Laundry patterns](patterns/laundry-patterns.md)
+- PATTERN-016 · Rebuild the live queue view from committed state · candidate
+
 ---
 
 ## PATTERN-001 · Separate app composition from process startup

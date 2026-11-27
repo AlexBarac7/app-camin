@@ -41,14 +41,17 @@ export async function notifyReport(client, machine, report, kind, now, testAccou
 
 export async function notifyInspection(client, machine, message, now) {
   const { rows } = await client.query(`
-    SELECT DISTINCT user_id FROM laundry_reservations
-    WHERE machine_id = $1 AND cancelled_at IS NULL AND use_ends_at > $2`, [machine.id, now]);
+    SELECT user_id FROM laundry_reservations
+    WHERE machine_id = $1 AND cancelled_at IS NULL AND use_ends_at > $2
+    UNION
+    SELECT user_id FROM laundry_queue_entries
+    WHERE machine_id = $1 AND ended_at IS NULL`, [machine.id, now]);
   if (!rows.length) return false;
   await notify(client, machine, rows.map(row => row.user_id), 'inspection', message, now);
   return true;
 }
 
-export async function notifyShutdown(client, machine, reservations, now) {
+export async function notifyShutdown(client, machine, reservations, now, queueUsers) {
   const affected = reservations.filter(reservation => reservation.use_ends_at > now);
   const interrupted = new Set(affected.filter(reservation =>
     machine.technical_status === 'inspection'
@@ -59,6 +62,14 @@ export async function notifyShutdown(client, machine, reservations, now) {
     equipment(machine) + ' are o defecțiune. Rezervarea ta s-a încheiat mai devreme. Pentru a-ți recupera hainele, contactează administratorul.', now);
   await notify(client, machine, standard.map(reservation => reservation.user_id), 'shutdown',
     equipment(machine) + ' are o defecțiune. Rezervarea ta a fost anulată. Te rugăm să alegi alt echipament.', now);
+  const booked = new Set(affected.map(reservation => reservation.user_id));
+  await notify(client, machine, queueUsers.filter(userId => !booked.has(userId)), 'shutdown',
+    equipment(machine) + ' are o defecțiune. Înscrierea ta în Live-queue s-a încheiat. Te rugăm să alegi alt echipament.', now);
+}
+
+export function notifyQueueTurn(client, machine, userId, immediate, now) {
+  const message = immediate ? 'E rândul tău.' : 'S-a eliberat un interval azi.';
+  return notify(client, machine, [userId], 'queue-turn', message + ' ' + equipment(machine) + '.', now);
 }
 
 export async function withdrawOffers(client, machineId, now) {

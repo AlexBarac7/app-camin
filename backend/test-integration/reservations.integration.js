@@ -491,6 +491,169 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     assert.deepEqual(equipment, { technical_status: 'working', repair_verified_until: null });
   });
 
+  await t.test('Live-queue releases cancelled and shortened blocks without displacing bookings', async t => {
+    const { advanceWaitingQueues } = await import('../src/modules/laundry/live-queue.js');
+    let clock = at(240);
+    const fixedTime = (query, args = []) => {
+      if (!/clock_timestamp\(\) AS now|statement_timestamp\(\)/.test(query)) return [query, args];
+      const parameter = '$' + (args.length + 1) + '::timestamptz';
+      return [query.replaceAll('clock_timestamp() AS now', parameter + ' AS now')
+        .replaceAll('statement_timestamp()', parameter), [...args, clock]];
+    };
+    const database = {
+      ...db,
+      query: (query, args) => db.query(...fixedTime(query, args)),
+      async connect() {
+        const client = await db.connect();
+        return { query: (query, args) => client.query(...fixedTime(query, args)),
+          release: discard => client.release(discard) };
+      },
+    };
+    const liveServer = createApp(database, undefined, 'fixture-public-key').listen(0, '127.0.0.1');
+    await once(liveServer, 'listening');
+    t.after(() => { liveServer.closeAllConnections(); liveServer.close(); });
+    const { rows: [machine] } = await db.query(`
+      INSERT INTO laundry_machines (name, location, room, type, label, technical_status)
+      VALUES ('Queue washer', 'Test location', '1', 'washer', 'QUEUE', 'working') RETURNING id`);
+    const endpoint = '/api/laundry-machines/' + machine.id;
+    const queueCookies = [...cookies];
+    const send = (resident, url, method = 'GET', body, signal) =>
+      fetch('http://127.0.0.1:' + liveServer.address().port + url, {
+        signal, method, headers: { origin: 'http://localhost:5173', 'content-type': 'application/json',
+          ...(queueCookies[resident] && { cookie: queueCookies[resident] }) }, body: JSON.stringify(body),
+      });
+    const { rows: [resident] } = await db.query(`
+      INSERT INTO users (email, password_hash) VALUES ('queue@example.test', 'fixture') RETURNING id`);
+    const token = newToken();
+    await db.query('INSERT INTO sessions (user_id, token_hash) VALUES ($1, $2)', [resident.id, tokenHash(token)]);
+    await db.query(`
+      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES ($1, $2, $3, $4)`,
+    [resident.id, 'https://fcm.googleapis.com/fcm/send/queue-fixture', subscription.keys.p256dh, subscription.keys.auth]);
+    const short = 3;
+    queueCookies[short] = 'camin_session=' + token;
+    const add = async (who, starts, useEnds, ends) => (await db.query(`
+      INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at)
+      VALUES ($1, $2, $3, $4, $5) RETURNING id`, [machine.id, users[who].id, at(starts), at(useEnds), at(ends)])).rows[0].id;
+    const inbox = async who => (await (await send(who, '/api/notifications')).json()).items
+      .filter(notice => notice.machineId === machine.id);
+    const join = (who, durationMinutes) => send(who, endpoint + '/queue', 'POST', { durationMinutes });
+    const answer = (who, offer, action = 'accept') => send(who, endpoint + '/queue/offers/' + offer.id, 'POST', { action });
+    const ongoing = await add(0, 210, 290, 300);
+    const cancelled = await add(0, 300, 350, 360);
+    await add(0, 360, 390, 400);
+    await add(0, 400, 590, 600);
+    assert.equal((await join(2, 45)).status, 401);
+    assert.equal((await join(1, 90)).status, 201);
+    assert.equal((await join(short, 45)).status, 201);
+    assert.equal((await join(short, 45)).status, 409);
+
+    const watch = async who => {
+      const abort = new AbortController();
+      const response = await send(who, endpoint + '/queue/events', 'GET', undefined,
+        AbortSignal.any([abort.signal, AbortSignal.timeout(8000)]));
+      t.after(() => abort.abort());
+      assert.match(response.headers.get('content-type'), /^text\/event-stream/);
+      const reader = response.body.getReader();
+      let buffer = '';
+      return async () => {
+        while (!buffer.includes('\n\n')) {
+          const packet = await reader.read();
+          assert.equal(packet.done, false);
+          buffer += new TextDecoder().decode(packet.value);
+        }
+        const end = buffer.indexOf('\n\n');
+        const event = buffer.slice('data: '.length, end);
+        buffer = buffer.slice(end + 2);
+        return JSON.parse(event);
+      };
+    };
+    const first = await watch(1);
+    const second = await watch(short);
+    assert.deepEqual((await first()).entry, { position: 1, durationMinutes: 90 });
+    assert.deepEqual((await second()).entry, { position: 2, durationMinutes: 45 });
+
+    assert.equal((await send(0, endpoint + '/reservations/' + cancelled, 'DELETE')).status, 204);
+    const offer = (await second()).offer;
+    assert.equal(offer.immediate, false);
+    assert.equal(offer.startsAt, at(300));
+    assert.equal(offer.endsAt, at(355));
+    assert.equal((await first()).offer, null);
+    assert.equal((await answer(1, offer)).status, 404);
+    assert.equal((await send(1, endpoint + '/reservations', 'POST', { startsAt: at(300), endsAt: at(355) })).status, 409);
+    const accepted = await Promise.all([answer(short, offer), answer(short, offer)]);
+    assert.deepEqual(accepted.map(response => response.status).sort(), [200, 201]);
+    const acceptedReservation = (await accepted[0].json()).id;
+    assert.equal((await accepted[1].json()).id, acceptedReservation);
+    const turns = (await inbox(short)).filter(notice => notice.kind === 'queue-turn');
+    assert.equal(turns.length, 1);
+    assert.equal((await db.query('SELECT 1 FROM push_deliveries WHERE notification_id = $1', [turns[0].id])).rowCount, 1);
+
+    assert.equal((await join(short, 30)).status, 201);
+    assert.equal((await send(0, endpoint + '/reservations/' + ongoing + '/finish', 'POST')).status, 204);
+    const [shortened] = (await db.query(`
+      SELECT use_ends_at, ends_at, original_ends_at FROM laundry_reservations WHERE id = $1`, [ongoing])).rows;
+    assert.equal(shortened.use_ends_at.toISOString(), at(240));
+    assert.equal(shortened.ends_at.toISOString(), at(250));
+    assert.equal(shortened.original_ends_at.toISOString(), at(300));
+    const earlyOffer = (await inbox(short)).find(notice => notice.offer?.status === 'pending').offer;
+    assert.equal(earlyOffer.startsAt, at(250));
+    assert.equal(earlyOffer.endsAt, at(290));
+    assert.equal((await send(1, endpoint + '/reservations/' + ongoing + '/finish', 'POST')).status, 404);
+    clock = at(245);
+    await Promise.all([advanceWaitingQueues(database), advanceWaitingQueues(database)]);
+    assert.equal((await answer(short, earlyOffer)).status, 409);
+    assert.equal((await inbox(short)).find(notice => notice.offer?.id === earlyOffer.id).offer.status, 'expired');
+    assert.equal((await inbox(1)).filter(notice => notice.kind === 'queue-turn').length, 0);
+
+    const { rows: [operator] } = await db.query('SELECT can_manage_equipment FROM users WHERE id = $1', [users[0].id]);
+    await db.query('UPDATE users SET can_manage_equipment = true WHERE id = $1', [users[0].id]);
+    t.after(() => db.query('UPDATE users SET can_manage_equipment = $2 WHERE id = $1',
+      [users[0].id, operator.can_manage_equipment]));
+    clock = at(310);
+    const condition = body => send(0, endpoint + '/condition', 'POST', body);
+    assert.equal((await condition({ action: 'inspect' })).status, 204);
+    const { rows: [state] } = await db.query('SELECT inspection_started_at FROM laundry_machines WHERE id = $1', [machine.id]);
+    assert.equal((await condition({ action: 'notify-inspection', message: 'Verificare după ciclu.',
+      inspectionStartedAt: state.inspection_started_at.toISOString() })).status, 204);
+    assert.equal((await inbox(1)).filter(notice => notice.kind === 'inspection').length, 1);
+    assert.equal((await join(short, 15)).status, 409);
+    assert.equal((await condition({ action: 'restore' })).status, 204);
+    assert.equal((await condition({ action: 'inspect' })).status, 204);
+    assert.equal((await condition({ action: 'stop' })).status, 204);
+    assert.equal((await inbox(1)).filter(notice => notice.kind === 'shutdown').length, 1);
+    const { rows: [ended] } = await db.query(`
+      SELECT end_reason FROM laundry_queue_entries WHERE machine_id = $1 AND user_id = $2`, [machine.id, users[1].id]);
+    assert.equal(ended.end_reason, 'Echipament defect');
+    assert.equal((await condition({ action: 'restore' })).status, 204);
+    const shortRestoration = (await inbox(0)).find(notice =>
+      notice.kind === 'restored' && notice.offer?.startsAt === at(360));
+    assert.equal(shortRestoration.offer.endsAt, at(400));
+    assert.equal((await send(0, '/api/notifications/offers/' + shortRestoration.offer.id,
+      'POST', { action: 'accept' })).status, 201);
+    assert.equal((await join(1, 180)).status, 201);
+
+    const dryer = '/api/laundry-machines/' + fixture.dryer;
+    assert.equal((await send(1, dryer + '/queue', 'POST', { durationMinutes: 10 })).status, 409);
+    assert.equal((await send(short, dryer + '/queue', 'POST', { durationMinutes: 10 })).status, 201);
+    const dryerNotice = (await (await send(short, '/api/notifications')).json()).items
+      .find(notice => notice.machineId === fixture.dryer && notice.kind === 'queue-turn');
+    assert.equal(dryerNotice.offer.immediate, true);
+    const start = await send(short, dryer + '/queue/offers/' + dryerNotice.offer.id, 'POST', { action: 'accept' });
+    assert.equal(start.status, 201);
+    const { rows: [cycle] } = await db.query('SELECT starts_at, use_ends_at FROM laundry_reservations WHERE id = $1',
+      [(await start.json()).id]);
+    assert.equal(cycle.starts_at.toISOString(), at(310));
+    assert.equal(cycle.use_ends_at.toISOString(), at(320));
+
+    clock = at(600);
+    await advanceWaitingQueues(database);
+    assert.equal((await join(short, 10)).status, 409);
+    const result = await db.query(`
+      SELECT end_reason FROM laundry_queue_entries WHERE machine_id = $1 AND user_id = $2 ORDER BY id DESC LIMIT 1`,
+    [machine.id, users[1].id]);
+    assert.equal(result.rows[0].end_reason, 'Închis');
+  });
+
   await t.test('room and common-space reports with priority and protected photos', async () => {
     const reports = '/api/laundry-reports';
     const room = { category: 'plumbing', locationType: 'room', location: 'Test room', floor: '2', description: 'Test leak.' };
