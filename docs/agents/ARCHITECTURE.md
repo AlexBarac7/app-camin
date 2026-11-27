@@ -120,3 +120,7 @@ start alerts and expirations even when a machine has no Live-queue entries.
 Confirmation and expiration serialize on the machine row. Strike issuance,
 corrections and booking eligibility serialize on the resident account. Reminder
 and start notifications are unique per Reservation and kind.
+
+Migration 020 adds operator strike notices to the inbox. Each new strike and
+its recipient notices are committed together. The admin history accepts an
+exact Reservation ID and applies the same role checks as the history list.

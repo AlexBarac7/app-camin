@@ -38,6 +38,17 @@ export function equipmentAllowsAttendance(machine, reservation) {
     (machine.technical_status === 'inspection' && machine.inspection_reservation_id === reservation.id);
 }
 
+export async function excuseExpiredInspectionAttendance(client, machine, now) {
+  await client.query(`
+    UPDATE laundry_reservations SET attendance_excused_at = $3
+    WHERE machine_id = $1 AND id <> $2 AND attendance_tracked
+      AND cancelled_at IS NULL AND confirmed_at IS NULL AND attendance_excused_at IS NULL
+      AND use_ends_at >= starts_at + $5::integer * interval '1 minute'
+      AND starts_at > $4::timestamptz - $5::integer * interval '1 minute'
+      AND starts_at <= $3::timestamptz - $5::integer * interval '1 minute'`,
+  [machine.id, machine.inspection_reservation_id, now, machine.inspection_started_at, attendanceMinutes]);
+}
+
 export async function confirmAttendance(client, machine, reservation, now) {
   const state = attendanceState(reservation, now);
   if (state === 'confirmed') return [204];
@@ -54,7 +65,8 @@ export async function issueStrike(client, reservation, deadline) {
   const { rowCount } = await client.query(`
     INSERT INTO laundry_strikes (reservation_id, user_id, issued_at) VALUES ($1, $2, $3)
     ON CONFLICT (reservation_id) DO NOTHING`, [reservation.id, userId, deadline]);
-  if (!rowCount || alreadySuspended) return;
+  if (!rowCount) return false;
+  if (alreadySuspended) return true;
   const { rows: [{ now }] } = await client.query('SELECT clock_timestamp() AS now');
   const { rows: [policy] } = await client.query('SELECT * FROM laundry_attendance_policy');
   const { rows: strikes } = await client.query(`
@@ -62,7 +74,7 @@ export async function issueStrike(client, reservation, deadline) {
     WHERE user_id = $1 AND corrected_at IS NULL AND suspension_id IS NULL
       AND issued_at > $2::timestamptz - $3::integer * interval '24 hours'
     ORDER BY issued_at, reservation_id LIMIT 3`, [userId, now, policy.strike_window_days]);
-  if (strikes.length < 3) return;
+  if (strikes.length < 3) return true;
 
   const { rows: [suspension] } = await client.query(`
     INSERT INTO laundry_suspensions (user_id, starts_at, ends_at)
@@ -70,6 +82,7 @@ export async function issueStrike(client, reservation, deadline) {
   [userId, now, policy.suspension_hours]);
   await client.query('UPDATE laundry_strikes SET suspension_id = $1 WHERE reservation_id = ANY($2::bigint[])',
     [suspension.id, strikes.map(strike => strike.reservation_id)]);
+  return true;
 }
 
 export async function correctStrike(client, reservationId, operatorId, reason) {

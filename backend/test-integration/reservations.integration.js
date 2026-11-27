@@ -749,7 +749,17 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
       "INSERT INTO users (email, password_hash) VALUES ('attendance@example.test', 'fixture') RETURNING id");
     const token = newToken();
     await db.query('INSERT INTO sessions (user_id, token_hash) VALUES ($1, $2)', [resident.id, tokenHash(token)]);
-    const attendanceCookies = [cookies[0], 'camin_session=' + token];
+    const { rows: [noticeAdmin] } = await db.query(`
+      INSERT INTO users (email, password_hash, can_view_service_status)
+      VALUES ('strike-admin@example.test', 'fixture', true) RETURNING id`);
+    const adminToken = newToken();
+    await db.query('INSERT INTO sessions (user_id, token_hash) VALUES ($1, $2)', [noticeAdmin.id, tokenHash(adminToken)]);
+    await db.query(`
+      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+      VALUES ($1, 'https://fcm.googleapis.com/fcm/send/strike-admin', 'fixture', 'fixture'),
+             ($2, 'https://fcm.googleapis.com/fcm/send/strike-operator', 'fixture', 'fixture')`,
+    [noticeAdmin.id, users[0].id]);
+    const attendanceCookies = [cookies[0], 'camin_session=' + token, 'camin_session=' + adminToken];
     const { rows: [equipment] } = await db.query(`
       INSERT INTO laundry_machines (name, location, room, type, label, technical_status)
       VALUES ('Attendance washer', 'Test location', '1', 'washer', 'ATTENDANCE', 'working') RETURNING id`);
@@ -852,11 +862,85 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     assert.equal(restorationAnswer.status, 403);
     assert.equal((await restorationAnswer.json()).suspension.until, residentView.suspension.until);
 
+    const strikeAlerts = async account => (await (await send('/api/notifications', 'GET', account)).json()).items
+      .filter(item => item.kind === 'strike-issued' && missed.includes(item.reservation?.id));
+    for (const account of [0, 2]) {
+      const alerts = await strikeAlerts(account);
+      assert.deepEqual(alerts.map(item => item.reservation.id).sort(), [...missed].sort());
+      assert.ok(alerts.every(item => item.message === 'S-a acordat un strike.'));
+    }
+    assert.deepEqual(await strikeAlerts(1), []);
+    const { rows: [deliveryCount] } = await db.query(`
+      SELECT count(*)::integer AS count FROM push_deliveries delivery
+      JOIN laundry_notifications notice ON notice.id = delivery.notification_id
+      WHERE notice.kind = 'strike-issued'`);
+    assert.equal(deliveryCount.count, 0);
+
+    // Put the target beyond the first page of the unfiltered history.
+    await db.query(`
+      INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at)
+      SELECT $1, $2, $3::timestamptz + n * interval '1 day',
+        $3::timestamptz + n * interval '1 day' + interval '20 minutes',
+        $3::timestamptz + n * interval '1 day' + interval '30 minutes'
+      FROM generate_series(1, 26) AS offsets(n)`, [equipment.id, resident.id, at(450)]);
+    const history = '/api/admin/reservations';
+    const firstPage = await (await send(history, 'GET', 0)).json();
+    assert.ok(!firstPage.items.some(item => item.id === missed[0]));
+    const target = history + '?reservationId=' + missed[0];
+    assert.equal((await send(target)).status, 403);
+    assert.equal((await send(history + '?reservationId=invalid', 'GET', 0)).status, 400);
+    for (const account of [0, 2]) {
+      const result = await (await send(target, 'GET', account)).json();
+      assert.deepEqual(result.items.map(item => item.id), [missed[0]]);
+      assert.ok(result.items[0].strike_at);
+      assert.equal(result.hasNext, false);
+    }
+
     const correction = '/api/admin/reservations/' + missed[0] + '/strike-correction';
     assert.equal((await send(correction, 'POST', 1, { reason: 'Test' })).status, 403);
     assert.equal((await send(correction, 'POST', 0, { reason: '' })).status, 400);
     assert.equal((await send(correction, 'POST', 0, { reason: 'Corecție de test' })).status, 204);
     assert.equal((await calendar(1)).suspension, null);
     assert.equal((await send(endpoint + '/reservations', 'POST', 1, { startsAt: at(510), endsAt: at(540) })).status, 201);
+
+    const changeCondition = action => send(endpoint + '/condition', 'POST', 0, { action });
+    const inspectionOutcome = async id => (await db.query(`
+      SELECT reservation.attendance_excused_at, reservation.cancelled_at, strike.issued_at AS strike_at
+      FROM laundry_reservations reservation
+      LEFT JOIN laundry_strikes strike ON strike.reservation_id = reservation.id
+      WHERE reservation.id = $1`, [id])).rows[0];
+
+    const firstCycle = await create(450, 10);
+    const blocked = await create(470);
+    clock = at(450);
+    assert.equal((await confirm(firstCycle)).status, 204);
+    assert.equal((await changeCondition('inspect')).status, 204);
+    clock = at(475);
+    assert.equal((await confirm(blocked)).status, 409);
+    await tick();
+    clock = new Date(Date.parse(at(480)) + 1).toISOString();
+    assert.equal((await changeCondition('restore')).status, 204);
+    await Promise.all([tick(), tick()]);
+    const excused = await inspectionOutcome(blocked);
+    assert.equal(excused.strike_at, null, 'inspection prevented confirmation until the deadline');
+    assert.equal(excused.cancelled_at, null);
+    assert.ok(excused.attendance_excused_at);
+    const operatorInbox = await (await send('/api/notifications', 'GET', 0)).json();
+    assert.ok(!operatorInbox.items.some(item => item.kind === 'strike-issued' && item.reservation?.id === blocked));
+
+    const secondCycle = await create(540, 10);
+    const restoredInTime = await create(560);
+    clock = at(540);
+    assert.equal((await confirm(secondCycle)).status, 204);
+    assert.equal((await changeCondition('inspect')).status, 204);
+    clock = at(565);
+    assert.equal((await confirm(restoredInTime)).status, 409);
+    assert.equal((await changeCondition('restore')).status, 204);
+    assert.equal((await confirm(restoredInTime)).status, 204);
+    clock = at(570);
+    await tick();
+    assert.deepEqual(await inspectionOutcome(restoredInTime), {
+      attendance_excused_at: null, cancelled_at: null, strike_at: null,
+    });
   });
 });

@@ -21,6 +21,10 @@ const tables = new Map([
     FROM public.schema_migrations ORDER BY version LIMIT $1 OFFSET $2`],
 ]);
 
+function validReservationId(value) {
+  return typeof value === 'string' && /^[1-9]\d{0,18}$/.test(value) && BigInt(value) <= 9223372036854775807n;
+}
+
 function readPage(value = '1') {
   return typeof value === 'string' && /^[1-9]\d{0,5}$/.test(value) ? Number(value) : null;
 }
@@ -123,7 +127,7 @@ export function adminRoutes(database, origins = localOrigins, appOrigin, { sendI
 
   router.post('/reservations/:id/strike-correction', operator, write, json({ limit: '4kb' }), async (req, res) => {
     const { id } = req.params;
-    if (!/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) return res.sendStatus(404);
+    if (!validReservationId(id)) return res.sendStatus(404);
     const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
     if (!reason || reason.length > 500) return res.status(400).json({ message: 'Introdu un motiv de cel mult 500 de caractere.' });
     const corrected = await transaction(database, client => correctStrike(client, id, res.locals.account.id, reason));
@@ -131,9 +135,10 @@ export function adminRoutes(database, origins = localOrigins, appOrigin, { sendI
   });
 
   router.get('/reservations', operator, async (req, res) => {
-    const { machineId, day, status } = req.query;
+    const { machineId, day, status, reservationId } = req.query;
     const page = readPage(req.query.page);
     if (!page ||
+        (reservationId !== undefined && !validReservationId(reservationId)) ||
         (machineId !== undefined && (typeof machineId !== 'string' ||
           !/^[1-9]\d{0,9}$/.test(machineId) || Number(machineId) > 2147483647)) ||
         (day !== undefined && !validDay(day)) ||
@@ -153,8 +158,9 @@ export function adminRoutes(database, origins = localOrigins, appOrigin, { sendI
           AND reservation.starts_at < (($2::date + 1)::timestamp AT TIME ZONE $4)
         ))
         AND ($3::text IS NULL OR (reservation.cancelled_at IS NOT NULL) = ($3 = 'cancelled'))
+        AND ($7::bigint IS NULL OR reservation.id = $7)
       ORDER BY reservation.starts_at DESC, reservation.id DESC
-      LIMIT $5 OFFSET $6`, [machineId, day, status, residenceZone, pageSize + 1, (page - 1) * pageSize]);
+      LIMIT $5 OFFSET $6`, [machineId, day, status, residenceZone, pageSize + 1, (page - 1) * pageSize, reservationId]);
     res.json({ ...pageResult(rows, page), items: rows.slice(0, pageSize) });
   });
 

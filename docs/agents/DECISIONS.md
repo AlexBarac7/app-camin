@@ -30,6 +30,7 @@
 - D-026 · Distinguish duplicate access requests and allow invitation replacement · [Admin data](decisions/admin-data.md)
 - D-027 · Reject pending access requests and notify the applicant · [Admin data](decisions/admin-data.md)
 - D-028 · Confirm laundry attendance and apply temporary booking suspensions · [Laundry decisions](decisions/laundry-decisions.md)
+- D-029 · Notify operators when a laundry strike is issued · [Laundry decisions](decisions/laundry-decisions.md)
 
 ---
 

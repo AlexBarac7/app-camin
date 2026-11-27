@@ -1,12 +1,15 @@
 import { transaction } from '../../db.js';
-import { notifyQueueTurn, notifyReservation } from '../notifications/laundry-notifications.js';
+import { notifyQueueTurn, notifyReservation, notifyStrike } from '../notifications/laundry-notifications.js';
 import { fitQueueOffer, queueDay, queueOpenings } from './live-queue-rules.js';
 import { handoverTime } from './reservation-rules.js';
 import {
-  activeSuspension, attendanceState, confirmationDeadline, equipmentAllowsAttendance, issueStrike, suspendedBooking,
+  activeSuspension, attendanceState, confirmationDeadline, equipmentAllowsAttendance,
+  excuseExpiredInspectionAttendance, issueStrike, suspendedBooking,
 } from './reservation-attendance.js';
 
-async function advanceAttendance(client, machine, now) {
+async function advanceAttendance(client, machine, now, testAccounts) {
+  const underInspection = machine.technical_status === 'inspection';
+  if (underInspection) await excuseExpiredInspectionAttendance(client, machine, now);
   const { rows } = await client.query(`
     SELECT reservation.*,
       EXISTS (SELECT 1 FROM laundry_notifications
@@ -24,11 +27,14 @@ async function advanceAttendance(client, machine, now) {
     const usable = equipmentAllowsAttendance(machine, reservation);
     if (state === 'expired') {
       const deadline = confirmationDeadline(reservation);
-      if (usable) {
+      // Under inspection, the update above already excused the blocked reservations.
+      if (usable || underInspection) {
         await client.query(`
           UPDATE laundry_reservations SET cancelled_at = $2, cancellation_reason = 'Neprezentare' WHERE id = $1`,
         [reservation.id, deadline]);
-        await issueStrike(client, reservation, deadline);
+        if (await issueStrike(client, reservation, deadline)) {
+          await notifyStrike(client, machine, reservation, now, testAccounts);
+        }
       } else {
         await client.query('UPDATE laundry_reservations SET attendance_excused_at = $2 WHERE id = $1',
           [reservation.id, now]);
@@ -155,7 +161,7 @@ export async function answerQueueOffer(client, machine, offerId, userId, action,
   return [201, reservation];
 }
 
-export async function advanceWaitingQueues(database) {
+export async function advanceWaitingQueues(database, testAccounts = false) {
   const { rows } = await database.query(`
     SELECT machine_id FROM laundry_queue_entries WHERE ended_at IS NULL
     UNION
@@ -175,17 +181,17 @@ export async function advanceWaitingQueues(database) {
       const { rows: [machine] } = await client.query(
         'SELECT * FROM laundry_machines WHERE id = $1 FOR UPDATE', [machineId]);
       const { rows: [{ now }] } = await client.query('SELECT clock_timestamp() AS now');
-      await advanceAttendance(client, machine, now);
+      await advanceAttendance(client, machine, now, testAccounts);
       await advanceQueue(client, machine, now);
     });
   }
 }
 
-export function startQueueWorker(database) {
+export function startQueueWorker(database, testAccounts) {
   let current;
   const run = () => {
     if (current) return;
-    current = advanceWaitingQueues(database).catch(() => {
+    current = advanceWaitingQueues(database, testAccounts).catch(() => {
       console.error('Could not process laundry reservations and queues.');
     }).finally(() => { current = null; });
   };

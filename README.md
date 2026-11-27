@@ -318,9 +318,11 @@ Use a disposable or dedicated local database for tests involving these accounts.
 
 ### Inspect reservations and database tables
 
-Admin and Administrator can filter reservation history at `/admin/rezervari`.
-Admin can browse equipment, reservations and migrations at `/admin/baza-de-date`.
-Both pages are read-only.
+Admin and Administrator can filter reservation history at `/admin/rezervari`
+and correct strikes. Each new strike adds an in-app notice for both roles.
+Select **Mergi la rezervare** from the notice to open the exact Reservation.
+Admin can browse the read-only equipment, reservations and migrations tables
+at `/admin/baza-de-date`.
 
 ### Clean up expired sessions
 
@@ -482,7 +484,10 @@ and a start alert at the reserved time. Devices subscribed under **Notificări**
 also receive Web Push. Confirm in the calendar within ten minutes of the
 reserved start. **Începe** already confirms an immediate Live-queue cycle.
 A missed confirmation releases the block and records a strike. Usage shorter
-than ten minutes is exempt. Three strikes in seven days suspend new
+than ten minutes is exempt. If an inspection prevents confirmation through
+the deadline, the Reservation is kept and no strike is recorded. If service
+resumes before the deadline, the resident can confirm in the time remaining.
+Three strikes in seven days suspend new
 Reservations for 48 hours by default. Admin and Administrator can change the
 two periods or correct a strike with a reason under **Rezervări**.
 [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13)

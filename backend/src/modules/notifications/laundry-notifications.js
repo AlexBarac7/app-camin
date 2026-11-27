@@ -76,6 +76,13 @@ export function notifyReservation(client, machine, reservation, kind, message, n
   return notify(client, machine, [reservation.user_id], kind, message, now, null, true, reservation.id);
 }
 
+export async function notifyStrike(client, machine, reservation, now, testAccounts) {
+  const { rows } = await client.query('SELECT id FROM users WHERE ' + operatorAccountsSql,
+    roleQueryValues(testAccounts));
+  await notify(client, machine, rows.map(row => row.id), 'strike-issued', 'S-a acordat un strike.',
+    now, null, false, reservation.id);
+}
+
 export async function withdrawOffers(client, machineId, now) {
   await client.query(`
     UPDATE laundry_restoration_offers SET status = 'withdrawn', withdrawn_by_fault_at = $2

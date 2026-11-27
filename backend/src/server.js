@@ -28,13 +28,14 @@ try {
     : undefined;
   const photos = config.photos && createReportPhotoStore(config.photos);
   const authMail = config.authMail && createAuthMailer(config.authMail);
+  const testAccounts = localTestAccounts();
   const server = createApp(database, origins, config.push?.publicKey, photos, {
-    appOrigin, testAccounts: localTestAccounts(), ...authMail,
+    appOrigin, testAccounts, ...authMail,
   }).listen(config.port, '0.0.0.0', () => {
     console.log(`Backend listening on port ${config.port}.`);
   });
   const stopPushDelivery = startPushDelivery(database, config.push);
-  const stopQueue = startQueueWorker(database);
+  const stopQueue = startQueueWorker(database, testAccounts);
   const listeners = [server];
   if (config.internalReadinessPort) {
     const internal = express();

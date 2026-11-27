@@ -2,6 +2,7 @@ import { json, Router } from 'express';
 import { requireSession, localOrigins } from '../auth/auth.routes.js';
 import { notifyInspection, notifyRestoration, notifyShutdown, withdrawOffers } from '../notifications/laundry-notifications.js';
 import { advanceQueue, closeBrokenQueue, withdrawQueueOffers } from './live-queue.js';
+import { excuseExpiredInspectionAttendance } from './reservation-attendance.js';
 
 export async function lockEquipment(client, id) {
   const { rows: [machine] } = await client.query(
@@ -51,6 +52,10 @@ export async function applyEquipmentCondition(client, machine, action, body, now
     if (machine.technical_status === 'working') return 204;
     status = 'working';
     if (machine.technical_status === 'broken') await notifyRestoration(client, machine, now);
+  }
+  if (machine.technical_status === 'inspection') {
+    // Preserve blocked confirmation windows before clearing the inspection timestamps.
+    await excuseExpiredInspectionAttendance(client, machine, now);
   }
   await client.query(
     `UPDATE laundry_machines SET technical_status = $2, inspection_reservation_id = $3,

@@ -4,6 +4,75 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-27 · Excuse attendance blocked by equipment inspection
+
+**Model:** GPT-6.2-Sol (Codex).
+
+The owner confirmed that a resident who cannot confirm because equipment
+is under inspection must be excused. The backend now records expired
+confirmation windows during inspection and before clearing its timestamps
+on a condition change. An excused Reservation stays in the calendar and
+creates no strike or operator notice. Restoring service before the deadline
+allows confirmation during the remaining time.
+
+The regression test initially found a strike after service returned just
+past the deadline. It passed after the correction, together with the
+early-restoration case, the PostgreSQL Reservation suite, all 19 backend
+tests, the frontend build, Compose configuration validation and ledger lint.
+The change uses the existing schema.
+
+## 2026-11-27 · Issue #13 verification after laundry closing
+
+**Model:** GPT-6.2-Sol (Codex).
+
+The owner asked to verify the completed attendance flow after the laundry
+closed and audit the outstanding project requirements. All 19 backend tests,
+the three PostgreSQL 17 integration suites, the frontend build, Compose
+configuration validation and ledger lint passed. The databases were temporary.
+With a controlled clock, a 19:55–20:00 Reservation generated no strike, the
+exact seven-day and 48-hour boundaries worked, and a released no-show block
+went to Live-queue. Chromium at 390 px verified the strike notice, direct
+Reservation link, correction form and saving a policy change without a deploy.
+
+An additional inspection test failed with `1 !== 0`. Equipment stayed under
+inspection throughout the ten-minute confirmation window and returned to
+service before the next worker run. The worker saw it working and issued a
+strike to the resident who could not confirm. The audit left product code
+untouched. The two new resident Web Push alerts were tested with a simulated
+sender. Physical phone delivery remains to be verified for these alerts.
+
+## 2026-11-27 · Laundry attendance and strike notifications
+
+**Model:** GPT-6.2-Sol (Codex).
+
+The owner approved the laundry attendance pilot for
+[Issue #13](https://github.com/AlexBarac7/app-camin/issues/13). Residents receive
+a reminder ten minutes before start and an alert at the booked time. They can
+confirm in the calendar during the first ten minutes. **Începe** confirms an
+immediate Live-queue cycle. If an eligible Reservation expires unconfirmed,
+the interval is released and one strike is recorded. Usage shorter than ten
+minutes is exempt from strikes. Three strikes in seven days suspend new
+Reservations for 48 hours by default. Admin and Administrator can correct a
+strike with a reason, and correcting a strike that triggered an active
+suspension lifts it. The baseline is in commit `42d1e6d`.
+
+An error on the local **Notificări** page exposed that the running database
+was still at migration 018. Applied migration 019 and verified HTTP 200 for
+the authenticated notification list and unread count. The owner then approved
+one in-app notice per Admin and Administrator for each new strike. Migration
+020 adds the notice **S-a acordat un strike** with **Mergi la rezervare**, which
+opens the exact Reservation and its correction action. The worker writes
+these notices with the strike and creates no Web Push deliveries for them.
+Applied migration 020 to the local database.
+
+The first operator-notice test found zero notices for three strikes. With
+the change in place, all 19 backend tests, all three PostgreSQL integration
+suites, the frontend build, Compose configuration validation and the ledger
+check passed. Chromium at 390 px verified the link, the correction form and
+return to the history. Resident Web Push was tested with a simulated sender.
+Issue #14 still covers the reminder before use ends. Issue #15 awaits a
+confirmed quota policy.
+
 ## 2026-11-27 · Portal navigation, usage guide and access email
 
 **Model:** GPT-6.2-Sol (Codex).

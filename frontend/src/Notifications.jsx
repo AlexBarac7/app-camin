@@ -19,6 +19,7 @@ const noticeLabels = {
   'report-resolved': ['Sesizare rezolvată', 'check', 'success'],
   'access-request': ['Cerere de acces nouă', 'account', 'info'],
   'reservation-reminder': ['Rezervarea ta se apropie', 'clock', 'info'],
+  'strike-issued': ['Strike pentru neprezentare', 'warning', 'warning'],
   'reservation-start': ['Rezervarea ta a început', 'calendar', 'info'],
   'queue-turn': ['Interval disponibil astăzi', 'queue', 'info'],
 };
@@ -136,6 +137,7 @@ function groupNotices(items, now) {
 function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRead }) {
   const { offer } = item;
   const queue = item.kind === 'queue-turn';
+  const strike = item.kind === 'strike-issued';
   const remaining = offer ? Math.max(0, Math.ceil((Date.parse(offer.expiresAt) - now) / 1000)) : 0;
   const status = offer?.status === 'pending' && !remaining ? 'expired' : offer?.status;
   const [defaultTitle, defaultIcon, defaultTone] = noticeLabels[item.kind] ?? ['Notificare', 'bell', 'info'];
@@ -144,7 +146,7 @@ function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRe
   const tone = status === 'accepted' ? 'success' : status === 'expired' ? 'warning' : defaultTone;
   const equipment = [item.machineName, item.machineLocation].filter(Boolean).join(' · ');
   const calendar = item.room && item.machineId ? '/spalatorie/' + encodeURIComponent(item.room) + '?echipament=' + item.machineId : null;
-  const reservation = calendar && item.reservation && calendar +
+  const reservation = !strike && calendar && item.reservation && calendar +
     '&zi=' + dayKey.format(new Date(item.reservation.startsAt)) + '#rezervare-' + item.reservation.id;
   const stamp = new Date(item.createdAt);
 
@@ -173,6 +175,12 @@ function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRe
             {queue ? 'Refuză oferta' : 'Încheie rezervarea'}
           </button>
         </div>
+      </>}
+      {strike && item.reservation && <>
+        <p>Rezervare din {dateTime.format(new Date(item.reservation.startsAt))}</p>
+        <a className="camin-link" href={'/admin/rezervari?rezervare=' + encodeURIComponent(item.reservation.id)}>
+          Mergi la rezervare <span aria-hidden="true">→</span>
+        </a>
       </>}
       {reservation && <a className="camin-link" href={reservation}>Deschide rezervarea <span aria-hidden="true">→</span></a>}
       {calendar && (queue || (!offer && item.kind === 'restored')) &&

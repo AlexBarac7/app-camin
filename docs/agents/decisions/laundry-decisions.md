@@ -204,3 +204,16 @@
   suspension and short-use exception, then approved the revised plan for
   [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13).
 - **Confirmed:** 2026-11-27
+
+## D-029 · Notify operators when a laundry strike is issued
+- **Status:** approved
+- **Rule:** For each new laundry strike, add one in-app notice per authorized
+  Admin and Administrator. Write the notices in the transaction that records
+  the strike. Send no Web Push for these notices. The notice links to the
+  specific Reservation in the protected history so the recipient can review
+  and correct the strike there.
+- **Why:** Operators can find the relevant Reservation even after it leaves
+  the first page of the history.
+- **Evidence:** The owner requested this notification and approved the proposed
+  [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13) follow-up.
+- **Confirmed:** 2026-11-27
