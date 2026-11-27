@@ -4,7 +4,42 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-27 · Portal navigation, usage guide and access email
+
+**Model:** GPT-6.2-Sol (Codex).
+
+The owner chose bottom navigation with icons and labels on phones and a left
+sidebar on desktop. The separate **Ghid de utilizare** opens from **?**. Its
+expandable sections provide contextual help for Reservations, Live-queue,
+reports and notifications. **Înapoi** restores the source screen, including
+the selected equipment and day in the calendar. The inbox now groups
+notification cards by date.
+
+The approved access changes are recorded in D-025 through D-027. Migration 017
+tracks whether a new account has signed in after invitation activation. On that
+first sign-in, the app offers **Consultă ghidul** and **Mergi la resurse**. The
+access form distinguishes existing accounts, pending requests, and issued or expired
+invitations. An applicant can request a replacement for a lost or expired
+link. Admin can reject a pending request, revoke any outstanding activation
+link, and retry the rejection email if delivery fails. Migration 018 stores the
+rejection and the latest delivery attempt.
+
+**Căminul Meu** is the application and email display name. **Cămin 3** identifies
+the current residence in the upper-left header. The owner configured the local
+backend to use Gmail SMTP from the Admin account. Gmail accepted SMTP
+authentication during setup. The approval, rejection and password-reset
+templates were verified separately in isolated Mailpit.
+
+A local sign-in failed because the database still lacked migration 017.
+Applying it resolved the schema mismatch. The local backend also applied
+migration 018 with its Gmail configuration intact. Backend unit tests, the three
+disposable PostgreSQL suites, the frontend build, ledger lint and phone and
+desktop Chromium checks passed. [PR #25](https://github.com/AlexBarac7/app-camin/pull/25)
+was merged into `main` after GitHub Actions passed.
+
 ## 2026-11-27 · Live-queue and early finish
+
+**Model:** GPT-6.2-Sol (Codex).
 
 The owner approved D-024 for washers and dryers. Residents enter a same-day
 Live-queue with their cycle duration. The first entrant whose cycle and
