@@ -2,7 +2,9 @@ import { json, Router } from 'express';
 import { localOrigins, requireSession } from '../auth/auth.routes.js';
 import { isTestAccount, testAdminEmail } from '../auth/account-roles.js';
 import { normalizeEmail } from '../auth/credentials.js';
-import { finishInvitationDelivery, listAccessRequests, startInvitationDelivery } from '../auth/invitations.js';
+import {
+  finishAccessRejection, finishInvitationDelivery, listAccessRequests, startAccessRejection, startInvitationDelivery,
+} from '../auth/invitations.js';
 import { residenceZone, validDay } from '../laundry/reservation-rules.js';
 
 const pageSize = 25;
@@ -25,7 +27,7 @@ function pageResult(rows, page) {
   return { page, hasNext: rows.length > pageSize };
 }
 
-export function adminRoutes(database, origins = localOrigins, appOrigin, sendInvitation) {
+export function adminRoutes(database, origins = localOrigins, appOrigin, { sendInvitation, sendAccessRejection }) {
   const router = Router();
   const authorize = requireSession(database, { admin: true });
   const operator = requireSession(database, { manageEquipment: true });
@@ -55,6 +57,31 @@ export function adminRoutes(database, origins = localOrigins, appOrigin, sendInv
       if (!current) return res.status(409).json({ message: 'Starea cererii s-a schimbat. Lista a fost actualizată.' });
       if (state === 'failed') return res.status(502).json({ message: 'E-mailul nu a putut fi trimis. Poți reîncerca.' });
       res.status(201).json({ delivery: 'sent' });
+    });
+  }
+
+  for (const action of ['reject', 'retry-rejection']) {
+    router.post('/access-requests/:id/' + action, authorize, write, async (req, res) => {
+      const { id } = req.params;
+      if (!/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) return res.sendStatus(404);
+      const rejection = await startAccessRejection(database, id, action === 'retry-rejection');
+      const conflict = () => res.status(409).json({ message: 'Starea cererii s-a schimbat. Lista a fost actualizată.' });
+      if (!rejection) return conflict();
+
+      let state = 'failed';
+      if (sendAccessRejection) {
+        try {
+          await sendAccessRejection(rejection.email);
+          state = 'sent';
+        } catch {
+          state = 'failed';
+        }
+      }
+      if (!await finishAccessRejection(database, id, rejection.attempt, state)) return conflict();
+      if (state === 'failed') {
+        return res.status(502).json({ message: 'Cererea este respinsă. Trimiterea e-mailului a eșuat. Poți reîncerca.' });
+      }
+      res.json({ delivery: 'sent' });
     });
   }
 

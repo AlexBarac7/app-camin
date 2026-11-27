@@ -37,12 +37,28 @@ the access request. The server commits the invitation hash before sending.
 The approving request reports SMTP acceptance or the option to retry. A
 retry invalidates the previous invitation and creates a new one.
 
+The public access form can request an invitation replacement explicitly.
+The backend checks the current state under the same email lock, queues at most
+one request for Admin approval, and keeps the previous link while the request
+is pending.
+
+Migration 018 records access request rejection and the latest email delivery
+attempt on the request. Admin approval and rejection serialize on the same email
+lock. Rejection closes the request and revokes any previous invitation before
+sending mail. A delivery retry only updates the rejection notice attempt.
+
 Migration 015 stores the digest and expiry of the current password reset link
 per account. The public request uses the invitation SMTP transport and returns
 before delivery completes. Reset completion locks the account, consumes the
 link, changes the password and deletes the account's sessions in one transaction.
 Login locks the same row when creating a session and checks the verified hash
 again before inserting it.
+
+Migration 017 adds a per-account welcome marker. Invitation activation sets it
+when creating the account. Login consumes the marker in the same transaction
+that creates the session and returns the welcome flag to the sign-in form.
+Accounts present before the migration and directly provisioned accounts start
+with the marker cleared.
 
 ## State and storage
 PostgreSQL 17 stores data in the named postgres_data volume, mounted at

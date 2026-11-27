@@ -9,19 +9,24 @@ Do not show invented residents, resources, usage statistics or interview evidenc
 
 Place the welcome text beside the sign-in card on desktop and above it on
 phone widths. Keep email, password and the sign-in action visible in the
-initial state. **Solicită acces** switches the card to an email-only form with
-an inline confirmation. Keep form labels visible and announce errors and
-completion to assistive technology.
+initial state. **Solicită acces** switches the card to an email-only form and
+reports the outcome for that address. **Nu ai activat contul? Solicită o altă
+invitație** opens a separate form of the same card for replacing a lost or
+expired invitation. The replacement link also appears when activation fails.
+Keep form labels visible and announce errors and completion to assistive technology.
 
-## Identitatea vizuală Cămin 3
+## Identitatea vizuală Căminul Meu
 
 **Status:** tokenuri și direcție vizuală aprobate. Machetele individuale au propriul status în registru.
 
 ### Identitate și ton
 
-- În portalul rezidentului, afișăm **Cămin 3** și simbolul clădirii cu arbore din referința furnizată, sus în stânga. Tratăm desenul ca propunere de logo. Verificăm lizibilitatea lui la dimensiune mică pe fundalul deschis înainte să fixăm varianta finală.
+- Numele aplicației este **Căminul Meu**. Sus în stânga afișăm căminul curent, **Cămin 3**, și simbolul clădirii cu arbore din referința furnizată. Tratăm desenul ca propunere de logo. Verificăm lizibilitatea lui la dimensiune mică pe fundalul deschis înainte să fixăm varianta finală.
 - Păstrăm desenele recognoscibile din referințe, cu pictograme de mașină de spălat și uscător pentru echipamente. În cardurile încăperilor, pictogramele disting spălătoriile de uscătorie. Numele și starea rămân vizibile în text.
-- Pe laptop, navigarea stă în stânga, profilul jos în aceeași bară, iar conținutul folosește lățimea disponibilă. Pe telefon, aceleași destinații apar în bara de jos. În **Bun venit**, textul rămâne lângă formular pe laptop și deasupra pe telefon.
+- Pe calculator, navigarea stă în stânga, cu **Contul meu** la baza barei. Sub 1024 px, navigarea stă jos, cu o pictogramă deasupra fiecărei etichete și cu numărul de notificări necitite lângă pictogramă. În **Bun venit**, textul rămâne lângă formular pe laptop și deasupra pe telefon.
+- Butonul **?** din dreapta sus deschide pagina separată **Ghid de utilizare**. Secțiunile se extind individual sau toate odată. Ajutorul contextual deschide secțiunea relevantă, iar **Înapoi** revine la ecranul de plecare.
+- La prima autentificare după activarea prin invitație, afișăm **Consultă ghidul** și **Mergi la resurse**. La autentificările următoare, deschidem **Resurse** sau notificarea din linkul direct.
+- Notificările sunt grupate după zi. Fiecare card folosește o pictogramă, un titlu, ora și detaliile disponibile. Setările de alertă rămân accesibile din antet, iar **OK** confirmă citirea unei notificări.
 - Între **Resurse** și **Notificări**, Rezident vede **Sesizările mele**, iar Admin și Administrator văd **Sesizări**, cu acces la **Sesizări de întreținere**. Scurtătura spre profil se numește **Contul meu**.
 - Ton prietenos, direct, în română cu diacritice. Verbe scurte pentru acțiuni, ca **Alege un interval**, **Vezi echipamentele** și **Confirmă rezervarea**. Stările explică ce s-a întâmplat și ce poate face utilizatorul.
 

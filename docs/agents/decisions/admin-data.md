@@ -86,3 +86,46 @@
   local Mailpit verification. The owner also confirmed that a login started
   with the old password must be rejected if the reset completes first.
 - **Confirmed:** 2026-11-26
+
+## D-025 · Welcome newly activated accounts at first sign-in
+- **Status:** approved
+- **Rule:** A new account activated through an invitation sees a welcome message
+  on its first successful sign-in, with **Consultă ghidul** and **Mergi la resurse**.
+  Later sign-ins go directly to the portal. A direct notification link keeps
+  its destination on later sign-ins. Existing and directly provisioned accounts
+  enter the portal without the welcome message.
+- **Why:** Give new residents a choice between orientation and immediate access.
+- **Evidence:** The owner approved the navigation, guide and notifications
+  implementation plan and its onboarding decision on 2026-11-27.
+- **Confirmed:** 2026-11-27
+
+## D-026 · Distinguish duplicate access requests and allow invitation replacement
+- **Status:** approved
+- **Rule:** A regular access request creates at most one pending request for the
+  normalized email address. The public form distinguishes a registered account,
+  a pending request, an issued invitation and an expired invitation. Registered
+  users can sign in or reset their password.
+- **Replacement:** Alongside the regular request, any applicant with an issued
+  invitation and no account can explicitly request another invitation for that
+  email. Reuse any existing request and notify Admin when it returns to the
+  approval queue. An existing pending request or incomplete mail delivery keeps
+  its current handling. Admin approval invalidates the previous link and issues
+  a new single-use link valid for 48 hours under D-022.
+- **Why:** The confirmation should tell applicants which action is available
+  and give them a way to recover lost or expired links without duplicate work.
+- **Evidence:** The owner reported a misleading acceptance message for an
+  existing administrator account and approved the replacement workflow.
+- **Confirmed:** 2026-11-27
+
+## D-027 · Reject pending access requests and notify the applicant
+- **Status:** approved
+- **Rule:** Admin can reject a pending access request and the application sends
+  a rejection email to the address on the request. Rejection closes the request
+  immediately and revokes any outstanding invitation for that address. The public
+  form shows that the request is rejected if the address is submitted again.
+- **Delivery:** If sending fails, the request stays closed and Admin can retry
+  the rejection email. A request with an already approved invitation and no
+  pending replacement cannot be rejected through the pending request list.
+- **Why:** Admin can record a decision and inform the applicant immediately.
+- **Evidence:** The owner requested and approved the immediate rejection workflow.
+- **Confirmed:** 2026-11-27

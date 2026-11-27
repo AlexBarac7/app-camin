@@ -26,6 +26,9 @@
 - D-022 · Send approved invitations by email and let residents choose an eight-character password · [Admin data](decisions/admin-data.md)
 - D-023 · Let account holders reset their password by email · [Admin data](decisions/admin-data.md)
 - D-024 · Offer same-day laundry openings through Live-queue · [Laundry decisions](decisions/laundry-decisions.md)
+- D-025 · Welcome newly activated accounts at first sign-in · [Admin data](decisions/admin-data.md)
+- D-026 · Distinguish duplicate access requests and allow invitation replacement · [Admin data](decisions/admin-data.md)
+- D-027 · Reject pending access requests and notify the applicant · [Admin data](decisions/admin-data.md)
 
 ---
 
@@ -43,6 +46,7 @@
 - **Evidence:** [Q-002](OPEN-QUESTIONS.md#q-002--which-stack-and-runtime-should-the-application-use),
   [frontend/package.json](../../frontend/package.json).
 - **Source:** user · confidence medium
+- **Confirmed:** 2026-11-27
 
 ## D-002 · Node.js, Express, REST, and PostgreSQL for the backend
 - **Status:** approved
@@ -96,6 +100,7 @@
   to apply in order without rebuilding the database.
 - **Evidence:** The project owner approved the migration plan after selecting
   manual Compose execution and forward corrections.
+- **Confirmed:** 2026-11-27
 
 ## D-007 · Require resident authentication to read the laundry catalog
 - **Status:** approved

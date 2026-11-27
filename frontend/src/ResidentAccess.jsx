@@ -1,8 +1,11 @@
 import LaundryStatus from './LaundryStatus.jsx';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import LaundryCalendar, { upcomingInterval } from './LaundryCalendar.jsx';
 import Notifications, { disableDevicePush, syncDeviceBadge } from './Notifications.jsx';
 import LaundryReports, { ReportEquipment } from './LaundryReports.jsx';
+import UsageGuide from './UsageGuide.jsx';
+import GuideLink, { guidePath } from './GuideLink.jsx';
+import PortalIcon from './PortalIcon.jsx';
 import logo from './camin-3-logo.png';
 
 const invalidLink = 'Invitația nu mai este valabilă. Cere o invitație nouă.';
@@ -12,6 +15,11 @@ const buttonStyle = 'camin-primary';
 const authLinkStyle = 'camin-link';
 const personalReportsPath = '/sesizari';
 const operatorReportsPath = '/admin/sesizari';
+const invitationReplacementPath = '/?invitatie=noua';
+
+export function InvitationReplacementLink() {
+  return <a className="camin-link" href={invitationReplacementPath}>Nu ai activat contul? Solicită o altă invitație</a>;
+}
 
 const route = window.location.pathname.replace(/\/+$/, '') || '/';
 const tokenRoute = route === '/activeaza' || route === '/reseteaza-parola';
@@ -49,7 +57,20 @@ function Field({ name, label, type, autoComplete, error }) {
   );
 }
 
-export function AccessForm({ activation = false, reset = false, embedded = false }) {
+export function FirstLoginWelcome() {
+  const heading = useRef(null);
+  useEffect(() => { heading.current.focus(); }, []);
+  return <div className="first-login-welcome">
+    <h1 ref={heading} tabIndex={-1}>Bun venit în Căminul Meu!</h1>
+    <p className="camin-muted">Contul tău este activ. Vezi cum folosești aplicația sau mergi direct la resurse.</p>
+    <div className="first-login-actions">
+      <a className="camin-primary" href={guidePath}>Consultă ghidul</a>
+      <a className="camin-control" href="/resurse">Mergi la resurse</a>
+    </div>
+  </div>;
+}
+
+export function AccessForm({ activation = false, reset = false, embedded = false, onFirstLogin }) {
   const choosePassword = activation || reset;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
@@ -79,16 +100,23 @@ export function AccessForm({ activation = false, reset = false, embedded = false
 
     setPending(true);
     try {
-      await authRequest(reset ? 'reset-password' : activation ? 'activate' : 'login', choosePassword
+      const response = await authRequest(reset ? 'reset-password' : activation ? 'activate' : 'login', choosePassword
         ? { token: linkToken, password }
         : { email: data.get('email'), password });
       if (reset) {
         setChanged(true);
         return;
       }
+      if (activation) {
+        window.location.replace('/autentificare');
+        return;
+      }
+      if ((await response.json().catch(() => null))?.showWelcome === true) {
+        onFirstLogin();
+        return;
+      }
       const notice = new URLSearchParams(window.location.search).get('notificare');
-      const destination = notice && /^\d+$/.test(notice) ? '/notificari#notificare-' + notice : '/resurse';
-      window.location.replace(activation ? '/autentificare' : destination);
+      window.location.replace(notice && /^\d+$/.test(notice) ? '/notificari#notificare-' + notice : '/resurse');
     } catch (failure) {
       if (failure.code === 'invalid_invitation' || failure.code === 'invalid_password_reset') setInvalid(true);
       else setError(failure.status ? failure.message : unavailable);
@@ -102,7 +130,7 @@ export function AccessForm({ activation = false, reset = false, embedded = false
   </div>;
   if (invalid) return <div className="mt-5 grid gap-4">
     <p role="alert" className="text-red-800">{reset ? invalidResetLink : invalidLink}</p>
-    {reset && <a className={authLinkStyle} href="/am-uitat-parola">Cere un link nou</a>}
+    {reset ? <a className={authLinkStyle} href="/am-uitat-parola">Cere un link nou</a> : <InvitationReplacementLink />}
   </div>;
 
   return (
@@ -113,6 +141,7 @@ export function AccessForm({ activation = false, reset = false, embedded = false
       {choosePassword && <Field name="confirmation" label={reset ? 'Confirmă parola nouă' : 'Confirmă parola'} type="password"
         error={fieldErrors.confirmation} autoComplete="new-password" />}
       {!choosePassword && <a className={authLinkStyle} href="/am-uitat-parola">Am uitat parola</a>}
+      {!choosePassword && !embedded && <InvitationReplacementLink />}
       {error && <p role="alert" className="text-sm text-red-800">{error}</p>}
       <button className={buttonStyle} disabled={pending}>
         {pending ? 'Se trimite…' : reset ? 'Schimbă parola' : activation ? 'Activează contul' : 'Autentifică-te'}
@@ -242,13 +271,18 @@ function ResidentNav({ inboxUnreadCount, canManage }) {
   const count = route === '/notificari' ? inboxUnreadCount : unreadCount;
   useEffect(() => { void syncDeviceBadge(count); }, [count]);
   return (
-    <nav aria-label="Navigare principală" className="resident-navigation">
-      {[['/resurse', 'Resurse'], canManage ? [operatorReportsPath, 'Sesizări'] : [personalReportsPath, 'Sesizările mele'], ['/notificari', 'Notificări'],
-        ['/cont', 'Contul meu']].map(([path, label]) => {
+    <nav id="resident-navigation" aria-label="Navigare principală" className="resident-navigation">
+      {[['/resurse', 'Resurse', 'resources'],
+        [canManage ? operatorReportsPath : personalReportsPath, canManage ? 'Sesizări' : 'Sesizările mele', 'reports', 'Sesizări'],
+        ['/notificari', 'Notificări', 'bell'], ['/cont', 'Contul meu', 'account', 'Cont']].map(([path, label, icon, mobileLabel]) => {
         const showCount = path === '/notificari' && count > 0;
+        const profile = path === '/cont';
         const current = route === path ? 'page' : path === '/resurse' && currentRoom ? 'location' : undefined;
-        return <a key={path} href={path} aria-current={current}>
-          {label}
+        return <a key={path} href={path} aria-current={current} className={profile ? 'resident-profile' : undefined}>
+          {profile && <span className="resident-avatar" aria-hidden="true">C</span>}
+          <span className="resident-nav-icon"><PortalIcon name={icon} /></span>
+          <span className={mobileLabel ? 'resident-nav-full-label' : undefined}>{label}</span>
+          {mobileLabel && <span className="resident-nav-short-label">{mobileLabel}</span>}
           {showCount && <>
             <span aria-hidden="true" className="resident-unread">
               {count}
@@ -420,6 +454,7 @@ const headings = {
   '/am-uitat-parola': 'Am uitat parola',
   '/autentificare': 'Autentificare',
   '/cont': 'Contul meu',
+  [guidePath]: 'Ghid de utilizare',
   '/notificari': 'Notificări',
   '/reseteaza-parola': 'Resetează parola',
   '/resurse': 'Resurse',
@@ -432,16 +467,21 @@ const headings = {
 export const isResidentRoute = Object.hasOwn(headings, route);
 if (isResidentRoute) {
   document.documentElement.lang = 'ro';
-  document.title = headings[route] + ' · app-camin';
+  document.title = headings[route] + ' · Căminul Meu';
 }
 
 export default function ResidentAccess() {
   const legacyRoute = route === '/spalatorie';
   const reportsRoute = route === personalReportsPath || route === operatorReportsPath;
-  const showNav = Boolean(route === '/cont' || route === '/notificari' || route === '/resurse' || reportsRoute || currentRoom);
+  const guide = route === guidePath;
+  const inbox = route === '/notificari';
+  const helpTopic = reportsRoute ? 'sesizari' : inbox ? 'notificari' : route === '/resurse' || currentRoom ? 'rezervari' : undefined;
+  const showNav = Boolean(guide || route === '/cont' || inbox
+    || route === '/resurse' || reportsRoute || currentRoom);
   const [account, setAccount] = useState(null);
   const [sessionError, setSessionError] = useState(false);
   const [inboxUnreadCount, setInboxUnreadCount] = useState(null);
+  const [firstLogin, setFirstLogin] = useState(false);
   useEffect(() => {
     if (legacyRoute) window.location.replace('/resurse');
   }, [legacyRoute]);
@@ -477,27 +517,32 @@ export default function ResidentAccess() {
   const canManage = account?.role === 'admin' || account?.role === 'administrator';
   let content;
   if (showNav && !account) content = sessionError ? <p role="alert">{unavailable}</p> : <p role="status">Se verifică sesiunea…</p>;
+  else if (guide) content = <UsageGuide reportsPath={canManage ? operatorReportsPath : personalReportsPath} canManage={canManage} />;
   else if (route === '/cont') content = <Account account={account} />;
   else if (route === '/am-uitat-parola') content = <PasswordResetRequest />;
-  else if (route === '/notificari') content = <Notifications onUnreadCount={setInboxUnreadCount} />;
+  else if (inbox) content = <Notifications onUnreadCount={setInboxUnreadCount} />;
   else if (route === operatorReportsPath) content = canManage
     ? <LaundryReports operator heading={headings[route]} />
     : <div className="grid gap-3"><h1>Acces interzis</h1><a className={authLinkStyle} href={personalReportsPath}>Sesizările mele</a></div>;
   else if (route === personalReportsPath) content = <LaundryReports heading={headings[route]} />;
   else if (route === '/resurse' || currentRoom) content = <Resources room={currentRoom} canManage={canManage} />;
   else if (legacyRoute) content = <a href="/resurse">Deschide Resurse</a>;
-  else content = <AccessForm activation={route === '/activeaza'} reset={route === '/reseteaza-parola'} />;
+  else content = <AccessForm activation={route === '/activeaza'} reset={route === '/reseteaza-parola'}
+    onFirstLogin={() => setFirstLogin(true)} />;
 
   if (showNav) return (
     <div className="camin-design resident-shell">
       <aside className="resident-sidebar">
         <CaminBrand />
         {account && <ResidentNav inboxUnreadCount={inboxUnreadCount} canManage={canManage} />}
-        <a className="resident-profile" href="/cont"><span aria-hidden="true">C</span><strong>Contul meu</strong></a>
       </aside>
       <main className="resident-page">
+        <div className="resident-toolbar">
+          <div className="resident-mobile-brand"><CaminBrand /></div>
+          {account && !guide && <GuideLink section={helpTopic} />}
+        </div>
         {currentRoom && <p className="resident-breadcrumb"><a href="/resurse">Resurse</a> / {currentRoom.name}</p>}
-        {!reportsRoute && <h1>{route === '/resurse' ? 'Resursele căminului' : headings[route]}</h1>}
+        {!reportsRoute && !guide && !inbox && <h1>{route === '/resurse' ? 'Resursele căminului' : headings[route]}</h1>}
         {route === '/resurse' && <p className="camin-muted">Alege spațiul pe care dorești să îl utilizezi.</p>}
         <div className={route === '/cont' ? 'camin-panel resident-account' : undefined}>{content}</div>
       </main>
@@ -505,6 +550,8 @@ export default function ResidentAccess() {
   );
 
   return <main className={'camin-design standalone-access' + (route === '/autentificare' ? ' access-background' : '')}>
-    <div className="camin-panel"><CaminBrand /><h1>{headings[route]}</h1>{content}</div>
+    <div className="camin-panel"><CaminBrand />
+      {firstLogin ? <FirstLoginWelcome /> : <><h1>{headings[route]}</h1>{content}</>}
+    </div>
   </main>;
 }

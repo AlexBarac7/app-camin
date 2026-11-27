@@ -55,7 +55,7 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
   router.get('/', async (_req, res) => {
     const { rows } = await database.query(`
       SELECT notice.id, notice.kind, notice.message, notice.created_at, notice.read_at, notice.machine_id, machine.room,
-        notice.report_id,
+        notice.report_id, machine.name AS machine_name, machine.location AS machine_location,
         COALESCE(offer.id, queue.id) AS offer_id,
         COALESCE(offer.starts_at, queue.starts_at) AS starts_at,
         COALESCE(offer.ends_at, queue.ends_at) AS ends_at,
@@ -76,6 +76,7 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
       items: rows.map(row => ({
         id: row.id, kind: row.kind, message: row.message, createdAt: row.created_at, readAt: row.read_at,
         machineId: row.machine_id, room: row.room,
+        ...(row.machine_name && { machineName: row.machine_name, machineLocation: row.machine_location }),
         ...(row.report_id && { reportId: row.report_id }),
         ...(row.offer_id && { offer: {
           id: row.offer_id, status: row.offer_status,

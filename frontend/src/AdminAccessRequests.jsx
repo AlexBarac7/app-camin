@@ -3,6 +3,7 @@ import { AdminNav } from './AdminData.jsx';
 
 const field = 'min-w-0 rounded-lg border border-slate-400 bg-white px-3 py-2.5 focus-visible:outline-2 focus-visible:outline-offset-2';
 const button = 'w-fit rounded-lg bg-teal-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60';
+const rejectButton = 'w-fit rounded-lg border border-red-700 px-4 py-2.5 text-sm font-semibold text-red-800 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60';
 const dateTime = new Intl.DateTimeFormat('ro-RO', {
   timeZone: 'Europe/Bucharest', dateStyle: 'short', timeStyle: 'short',
 });
@@ -66,12 +67,12 @@ function AccountRoleForm() {
 
 export default function AdminAccessRequests() {
   const [requests, setRequests] = useState(null);
-  const [sentTo, setSentTo] = useState(null);
+  const [sent, setSent] = useState(null);
   const [problem, setProblem] = useState(null);
   const [pending, setPending] = useState(null);
   const [reload, setReload] = useState(0);
 
-  useEffect(() => { document.title = 'Cereri de acces · app-camin'; }, []);
+  useEffect(() => { document.title = 'Cereri de acces · Căminul Meu'; }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -81,18 +82,19 @@ export default function AdminAccessRequests() {
     return () => controller.abort();
   }, [reload]);
 
-  async function send(request) {
+  async function send(request, action) {
+    const rejection = action === 'reject' || action === 'retry-rejection';
     setPending(request.id);
     setProblem(null);
-    setSentTo(null);
+    setSent(null);
     try {
-      const action = request.delivery === 'failed' ? 'retry' : 'approve';
       await adminRequest('access-requests/' + request.id + '/' + action, {});
-      setSentTo(request.email);
+      setSent({ email: request.email, rejection });
       setRequests(current => current.filter(item => item.id !== request.id));
     } catch (error) {
       if (error.status === 502) {
-        setRequests(current => current.map(item => item.id === request.id ? { ...item, delivery: 'failed' } : item));
+        setRequests(current => current.map(item => item.id === request.id
+          ? { ...item, delivery: 'failed', ...(rejection && { rejected: true }) } : item));
       } else if (!error.status || error.status === 409 || error.status === 500) {
         setReload(attempt => attempt + 1);
       }
@@ -105,8 +107,9 @@ export default function AdminAccessRequests() {
   return <main lang="ro" className="mx-auto grid max-w-3xl gap-6 px-5 py-9 sm:py-14">
     {requests && !problem?.denied && <AdminNav current="/admin/cereri-acces" role="admin" />}
     <h1 className="text-3xl font-bold tracking-tight">Cereri de acces</h1>
-    {sentTo && <p role="status" className="break-all rounded-xl bg-teal-50 p-4 text-sm text-teal-950">
-      Invitația a fost trimisă la <strong>{sentTo}</strong>.
+    {sent && <p role="status" className="break-all rounded-xl bg-teal-50 p-4 text-sm text-teal-950">
+      {sent.rejection ? 'Cererea a fost respinsă. E-mailul a fost trimis la ' : 'Invitația a fost trimisă la '}
+      <strong>{sent.email}</strong>.
     </p>}
     {problem && <p role="alert" className="text-red-800">
       {problem.denied ? 'Ai nevoie de rolul Admin pentru această pagină.' : problem.message}
@@ -124,14 +127,23 @@ export default function AdminAccessRequests() {
           <div className="min-w-0">
             <p className="break-all font-semibold">{request.email}</p>
             <time className="text-sm text-slate-600" dateTime={request.requestedAt}>{dateTime.format(new Date(request.requestedAt))}</time>
+            {request.rejected && <p className="text-sm font-medium">Cerere respinsă</p>}
             {request.delivery === 'failed' && <p className="text-sm text-red-800">Trimiterea necesită o nouă încercare.</p>}
           </div>
           {request.delivery === 'sending' ? <button type="button" className={button} disabled={pending !== null}
             onClick={() => setReload(attempt => attempt + 1)}>Verifică starea trimiterii</button>
-            : <button type="button" className={button} disabled={pending !== null} onClick={() => send(request)}>
-              {pending === request.id ? 'Se trimite…'
-                : request.delivery === 'failed' ? 'Reîncearcă trimiterea' : 'Aprobă și trimite invitația'}
-            </button>}
+            : <div className="flex flex-wrap gap-2">
+              <button type="button" className={button} disabled={pending !== null}
+                onClick={() => send(request, request.rejected ? 'retry-rejection' : request.delivery === 'failed' ? 'retry' : 'approve')}>
+                {pending === request.id ? 'Se procesează…' : request.rejected ? 'Reîncearcă e-mailul de respingere'
+                  : request.delivery === 'failed' ? 'Reîncearcă trimiterea' : 'Aprobă și trimite invitația'}
+              </button>
+              {request.delivery === 'pending' && <button type="button" className={rejectButton} disabled={pending !== null} onClick={() => {
+                if (window.confirm('Respingi cererea de acces? Aplicația va trimite un e-mail de informare.')) {
+                  void send(request, 'reject');
+                }
+              }}>Respinge cererea</button>}
+            </div>}
         </li>)}
       </ul> : <p className="text-sm text-slate-600">Nu sunt cereri în așteptare.</p>}
       <AccountRoleForm />

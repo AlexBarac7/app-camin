@@ -27,6 +27,8 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
     { filename: '001_resident_access.sql', state: 'newly applied' },
     { filename: '002_laundry_machines.sql', state: 'newly applied' },
   ]);
+  // The current auth handlers also run during the historical catalog checks.
+  await db.query('ALTER TABLE users ADD COLUMN welcome_pending boolean NOT NULL DEFAULT false');
   const outbound = [];
   const attempts = [];
   let rejectMail = false;
@@ -41,11 +43,12 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   const base = 'http://127.0.0.1:' + server.address().port;
   const email = 'demo@example.test';
   const password = 'A demonstrative passphrase';
-  const request = (path, body, cookie) => fetch(base + '/api/auth/' + path, {
+  const requestAt = origin => (path, body, cookie) => fetch(origin + '/api/auth/' + path, {
     method: body === undefined ? 'GET' : 'POST',
     headers: { origin: 'http://localhost:5173', 'content-type': 'application/json', ...(cookie && { cookie }) },
     body: JSON.stringify(body),
   });
+  const request = requestAt(base);
   const activate = token => request('activate', { token, password });
 
   const expired = await issueInvitation(db, email);
@@ -188,7 +191,9 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   assert.equal(permission('grant', otherEmail).status, 0);
   assert.deepEqual(await statuses(otherCookie), [204, 200, 200]);
 
+  await db.query('ALTER TABLE users DROP COLUMN welcome_pending');
   await runMigrations(db, migrations, 'apply');
+  assert.deepEqual(await (await request('login', { email, password })).json(), { showWelcome: false });
   const admin = (path, body, actor) => fetch(base + '/api/admin/' + path, {
     method: body === undefined ? 'GET' : 'POST',
     headers: { origin: 'http://localhost:5173', 'content-type': 'application/json', ...(actor && { cookie: actor }) },
@@ -206,6 +211,9 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
     request('request-access', { email }),
   ]);
   assert.deepEqual(submissions.map(response => response.status), [202, 202, 202]);
+  assert.deepEqual(submissions.slice(0, 2).map(response =>
+    response.headers.get('x-camin-access-status')).sort(), ['pending', 'received']);
+  assert.equal(submissions[2].headers.get('x-camin-access-status'), 'account_exists');
   assert.deepEqual(await Promise.all(submissions.map(response => response.text())), ['', '', '']);
   const requests = await (await admin('access-requests', undefined, otherCookie)).json();
   assert.equal(requests.length, 1);
@@ -259,6 +267,101 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   assert.equal(validInvitations.rows[0].count, 1);
   assert.notEqual(attemptTokens[0], attemptTokens[1]);
 
+  await t.test('a replacement invitation requires one new approval and replaces the previous link', async renewal => {
+    const renewalServer = createApp(db, undefined, undefined, undefined, { sendInvitation }).listen(0, '127.0.0.1');
+    await once(renewalServer, 'listening');
+    renewal.after(() => renewalServer.close());
+    const renewalRequest = requestAt('http://127.0.0.1:' + renewalServer.address().port);
+    const address = 'replacement@example.test';
+    const submit = async (replacement = false) => {
+      const response = await renewalRequest('request-access', { email: address, replacement });
+      assert.equal(response.status, 202);
+      return response.headers.get('x-camin-access-status');
+    };
+    assert.equal(await submit(true), 'no_invitation');
+    assert.equal(await submit(), 'received');
+    const [firstRequest] = await (await admin('access-requests', undefined, otherCookie)).json();
+    const approvalPath = 'access-requests/' + firstRequest.id + '/approve';
+    assert.equal((await admin(approvalPath, {}, otherCookie)).status, 201);
+    const token = new URL(outbound.at(-1).link).hash.slice(1);
+    assert.equal(await submit(), 'invite_sent');
+
+    const digest = tokenHash(token);
+    await db.query("UPDATE invitations SET expires_at = clock_timestamp() - interval '1 second' WHERE token_hash = $1", [digest]);
+    assert.equal(await submit(), 'invite_expired');
+    await db.query("UPDATE invitations SET expires_at = clock_timestamp() + interval '1 hour' WHERE token_hash = $1", [digest]);
+    assert.deepEqual((await Promise.all([submit(true), submit(true)])).sort(), ['pending', 'replacement_received']);
+    const [reopened] = await (await admin('access-requests', undefined, otherCookie)).json();
+    assert.equal(reopened.id, firstRequest.id);
+    assert.equal(reopened.delivery, 'pending');
+    const { rows: [previousInvitation] } = await db.query(
+      'SELECT revoked_at FROM invitations WHERE token_hash = $1', [digest]);
+    assert.equal(previousInvitation.revoked_at, null);
+    assert.equal(outbound.filter(item => item.email === address).length, 1);
+    assert.equal((await admin(approvalPath, {}, otherCookie)).status, 201);
+    assert.equal(outbound.filter(item => item.email === address).length, 2);
+    assert.equal((await renewalRequest('activate', { token, password })).status, 400);
+    const newToken = new URL(outbound.at(-1).link).hash.slice(1);
+    assert.equal((await renewalRequest('activate', { token: newToken, password })).status, 201);
+  });
+
+  await t.test('only Admin can reject, revoke the previous link and retry the rejection notice', async rejection => {
+    const rejectedRecipients = [];
+    let failDelivery = true;
+    const rejectionServer = createApp(db, undefined, undefined, undefined, {
+      sendInvitation,
+      async sendAccessRejection(address) {
+        if (failDelivery) throw new Error('simulated rejection notice failure');
+        rejectedRecipients.push(address);
+      },
+    }).listen(0, '127.0.0.1');
+    await once(rejectionServer, 'listening');
+    rejection.after(() => rejectionServer.close());
+    const rejectionBase = 'http://127.0.0.1:' + rejectionServer.address().port;
+    const publicRequest = requestAt(rejectionBase);
+    const decide = (id, action, actor, origin = 'http://localhost:5173') =>
+      fetch(`${rejectionBase}/api/admin/access-requests/${id}/${action}`, {
+        method: 'POST', headers: { origin, ...(actor ? { cookie: actor } : {}) },
+      });
+    const pending = async () => (await (await admin('access-requests', undefined, otherCookie)).json());
+    const address = 'rejection-candidate@example.test';
+    const token = await issueInvitation(db, address);
+    const submitted = await publicRequest('request-access', { email: address, replacement: true });
+    assert.equal(submitted.headers.get('x-camin-access-status'), 'replacement_received');
+    const [{ id }] = await pending();
+    assert.equal((await decide(id, 'reject')).status, 401);
+    assert.equal((await decide(id, 'reject', activeCookie)).status, 403);
+    assert.equal((await decide(id, 'reject', otherCookie, 'https://unrelated.example.test')).status, 403);
+    assert.equal((await decide(id, 'reject', otherCookie)).status, 502);
+    assert.equal(rejectedRecipients.length, 0);
+    assert.deepEqual((await pending()).map(item => [item.id, item.rejected, item.delivery]), [[id, true, 'failed']]);
+    assert.equal((await publicRequest('activate', { token, password })).status, 400);
+    assert.equal((await decide(id, 'approve', otherCookie)).status, 409);
+    for (const replacement of [false, true]) {
+      const repeated = await publicRequest('request-access', { email: address, replacement });
+      assert.equal(repeated.headers.get('x-camin-access-status'), 'rejected');
+    }
+    failDelivery = false;
+    const retries = await Promise.all([
+      decide(id, 'retry-rejection', otherCookie), decide(id, 'retry-rejection', otherCookie),
+    ]);
+    assert.deepEqual(retries.map(response => response.status).sort(), [200, 409]);
+    assert.deepEqual(rejectedRecipients, [address]);
+    assert.deepEqual(await pending(), []);
+
+    const concurrentAddress = 'rejection-race@example.test';
+    assert.equal((await publicRequest('request-access', { email: concurrentAddress })).status, 202);
+    const [{ id: concurrentId }] = await pending();
+    const outcomes = await Promise.all([
+      decide(concurrentId, 'reject', otherCookie), decide(concurrentId, 'approve', otherCookie),
+    ]);
+    assert.equal(outcomes.filter(response => response.status === 409).length, 1);
+    assert.ok([200, 201].includes(outcomes.find(response => response.status !== 409).status));
+    assert.equal(rejectedRecipients.includes(concurrentAddress),
+      !outbound.some(item => item.email === concurrentAddress));
+    assert.deepEqual(await pending(), []);
+  });
+
   const testEnvironment = { ...process.env, NODE_ENV: 'development', CAMIN_LOCAL_TEST_ACCOUNTS: 'true' };
   const configureTestAccount = (args, address, env = testEnvironment) => spawnSync(process.execPath,
     ['src/service-status-access.js', ...args], {
@@ -292,6 +395,7 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   assert.equal((await local('/api/admin/database/equipment', undefined, testCookie)).status, 200);
   assert.equal((await local('/api/admin/access-requests', undefined, testCookie)).status, 200);
   assert.equal((await request('session', undefined, testCookie)).status, 401);
+  assert.deepEqual(await testLogin.json(), { showWelcome: false });
 
   const fixtureAddress = 'rezident@example.test';
   assert.equal((await local('/api/auth/request-access', { email: fixtureAddress })).status, 202);
@@ -303,8 +407,30 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   const fixtureLink = new URL(outbound.at(-1).link);
   assert.equal(fixtureLink.origin, 'https://camin.example.test');
   assert.equal((await local('/api/auth/activate', { token: fixtureLink.hash.slice(1), password })).status, 201);
-  const fixtureLogin = await local('/api/auth/login', { email: fixtureAddress, password });
+
+  const expiredAddress = 'expired-replacement@example.test';
+  const expiredToken = await issueInvitation(db, expiredAddress);
+  await db.query("UPDATE invitations SET expires_at = clock_timestamp() - interval '1 second' WHERE token_hash = $1",
+    [tokenHash(expiredToken)]);
+  const expiredReplacement = await local('/api/auth/request-access', { email: expiredAddress, replacement: true });
+  assert.equal(expiredReplacement.status, 202);
+  assert.equal(expiredReplacement.headers.get('x-camin-access-status'), 'replacement_received');
+  const [expiredRequest] = await (await local('/api/admin/access-requests', undefined, testCookie)).json();
+  assert.equal(expiredRequest.email, expiredAddress);
+  assert.equal((await local('/api/admin/access-requests/' + expiredRequest.id + '/approve', {}, testCookie)).status, 201);
+
+  assert.equal((await local('/api/auth/login', { email: fixtureAddress, password: 'wrong' })).status, 401);
+  const fixtureLogins = await Promise.all(Array.from({ length: 2 }, () =>
+    local('/api/auth/login', { email: fixtureAddress, password })));
+  const welcomeFlags = await Promise.all(fixtureLogins.map(async response => {
+    assert.equal(response.status, 200);
+    return (await response.json()).showWelcome;
+  }));
+  assert.deepEqual(welcomeFlags.sort(), [false, true]);
+  const fixtureLogin = fixtureLogins[0];
   const fixtureCookie = fixtureLogin.headers.get('set-cookie').split(';')[0];
+  assert.equal((await local('/api/auth/logout', {}, fixtureLogins[1].headers.get('set-cookie').split(';')[0])).status, 204);
+  assert.deepEqual(await (await local('/api/auth/login', { email: fixtureAddress, password })).json(), { showWelcome: false });
   assert.equal(configureTestAccount(['--equipment', 'grant'], fixtureAddress, {
     ...testEnvironment, NODE_ENV: 'production',
   }).status, 1);

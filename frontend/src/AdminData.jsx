@@ -68,7 +68,7 @@ function useData(path) {
 
 function DataPage({ title, path, result, authorized, controls, children }) {
   useEffect(() => {
-    document.title = title + ' · app-camin';
+    document.title = title + ' · Căminul Meu';
   }, [title]);
 
   if (result.denied || authorized.denied) {

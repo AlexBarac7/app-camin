@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { upcomingInterval } from './LaundryCalendar.jsx';
+import PortalIcon from './PortalIcon.jsx';
 
 const endpoint = '/api/notifications';
 const button = 'rounded-lg border border-slate-400 px-3 py-2 font-medium disabled:opacity-60';
@@ -10,9 +10,23 @@ const offerLabels = {
   expired: 'Oferta a expirat',
   withdrawn: 'Oferta a fost retrasă',
 };
+const noticeLabels = {
+  shutdown: ['Echipament defect', 'warning', 'error'],
+  inspection: ['Verificare programată', 'warning', 'warning'],
+  restored: ['Echipament disponibil din nou', 'check', 'success'],
+  'report-new': ['Sesizare nouă', 'reports', 'info'],
+  'report-taken': ['Sesizare preluată', 'reports', 'info'],
+  'report-resolved': ['Sesizare rezolvată', 'check', 'success'],
+  'access-request': ['Cerere de acces nouă', 'account', 'info'],
+  'queue-turn': ['Interval disponibil astăzi', 'queue', 'info'],
+};
+const timeZone = 'Europe/Bucharest';
 const dateTime = new Intl.DateTimeFormat('ro-RO', {
-  timeZone: 'Europe/Bucharest', dateStyle: 'short', timeStyle: 'short',
+  timeZone, dateStyle: 'short', timeStyle: 'short',
 });
+const noticeTime = new Intl.DateTimeFormat('ro-RO', { timeZone, hour: '2-digit', minute: '2-digit' });
+const dayKey = new Intl.DateTimeFormat('sv-SE', { timeZone, dateStyle: 'short' });
+const noticeDay = new Intl.DateTimeFormat('ro-RO', { timeZone, dateStyle: 'long' });
 const pushSupported = () => window.isSecureContext &&
   'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 let badgeRevision = 0;
@@ -98,6 +112,76 @@ function PushControls({ publicKey, unreadCount }) {
     </button>
     {feedback && <p role="status" className="text-sm">{feedback}</p>}
   </div>;
+}
+
+function groupNotices(items, now) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = dayKey.format(new Date(item.createdAt));
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  const today = dayKey.format(now);
+  const yesterday = new Date(today);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const previous = yesterday.toISOString().slice(0, 10);
+  return Array.from(groups, ([day, notices]) => ({
+    day, notices,
+    label: day === today ? 'Astăzi' : day === previous ? 'Ieri' : noticeDay.format(new Date(notices[0].createdAt)),
+  }));
+}
+
+function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRead }) {
+  const { offer } = item;
+  const queue = item.kind === 'queue-turn';
+  const remaining = offer ? Math.max(0, Math.ceil((Date.parse(offer.expiresAt) - now) / 1000)) : 0;
+  const status = offer?.status === 'pending' && !remaining ? 'expired' : offer?.status;
+  const [defaultTitle, defaultIcon, defaultTone] = noticeLabels[item.kind] ?? ['Notificare', 'bell', 'info'];
+  const title = offerLabels[status] ?? (queue && offer?.immediate ? 'E rândul tău' : defaultTitle);
+  const icon = status === 'accepted' ? 'calendar' : status === 'expired' ? 'clock' : defaultIcon;
+  const tone = status === 'accepted' ? 'success' : status === 'expired' ? 'warning' : defaultTone;
+  const equipment = [item.machineName, item.machineLocation].filter(Boolean).join(' · ');
+  const calendar = item.room && item.machineId ? '/spalatorie/' + encodeURIComponent(item.room) + '?echipament=' + item.machineId : null;
+  const stamp = new Date(item.createdAt);
+
+  return <li id={'notificare-' + item.id} className="notice-card" data-unread={item.readAt ? undefined : 'true'}
+    data-target={target === item.id ? 'true' : undefined}>
+    <span className="notice-icon" data-tone={tone}><PortalIcon name={icon} /></span>
+    <div className="notice-copy">
+      <div className="notice-card-heading">
+        <h3>{title}</h3>
+        <time dateTime={item.createdAt} title={dateTime.format(stamp)}>{noticeTime.format(stamp)}</time>
+      </div>
+      {equipment && <p className="camin-muted">{equipment}</p>}
+      {(!queue || !equipment) && <p className="notice-message">{item.message}</p>}
+      {offer && !offer.immediate && <p>
+        {dayKey.format(new Date(offer.startsAt)) !== dayKey.format(stamp) &&
+          <span className="camin-muted">{noticeDay.format(new Date(offer.startsAt))} · </span>}
+        {noticeTime.format(new Date(offer.startsAt))}–{noticeTime.format(new Date(offer.endsAt))}
+      </p>}
+      {status === 'pending' && <>
+        <p>Oferta expiră în <span role="timer">{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')}</span>.</p>
+        <div className="notice-actions">
+          <button type="button" className="camin-primary" disabled={busy} onClick={() => onAnswer(item, 'accept')}>
+            {queue ? (offer.immediate ? 'Începe' : 'Rezervă intervalul') : 'Continuă rezervarea'}
+          </button>
+          <button type="button" className="camin-control" disabled={busy} onClick={() => onAnswer(item, 'decline')}>
+            {queue ? 'Refuză oferta' : 'Încheie rezervarea'}
+          </button>
+        </div>
+      </>}
+      {calendar && (queue || (!offer && item.kind === 'restored')) &&
+        <a className="camin-link" href={calendar}>Deschide calendarul <span aria-hidden="true">→</span></a>}
+      {item.kind === 'access-request' && <a className="camin-link" href="/admin/cereri-acces">Vezi cererile de acces</a>}
+      {item.reportId && <a className="camin-link"
+        href={(item.kind === 'report-new' ? '/admin/sesizari' : '/sesizari') + '#sesizare-' + item.reportId}>
+        Deschide sesizarea
+      </a>}
+      {!item.readAt && <button type="button" className="camin-control notice-read"
+        aria-label="OK, marchează notificarea ca citită" disabled={reading !== null}
+        onClick={() => onMarkRead(item.id)}>OK</button>}
+    </div>
+  </li>;
 }
 
 export default function Notifications({ onUnreadCount }) {
@@ -206,51 +290,25 @@ export default function Notifications({ onUnreadCount }) {
   }
 
   const now = snapshot ? Date.parse(snapshot.now) + time - snapshot.received : 0;
-  return <section className="mt-5 grid gap-4">
+  const groups = snapshot ? groupNotices(snapshot.items, now) : [];
+  return <section className="notice-inbox">
+    <header className="portal-heading-row">
+      <h1>Notificări</h1>
+      {snapshot?.pushPublicKey && <details className="notice-settings">
+        <summary className="portal-icon-button" aria-label="Setări pentru alertele pe dispozitiv" title="Setări pentru alertele pe dispozitiv">
+          <PortalIcon name="settings" />
+        </summary>
+        <div className="camin-panel"><PushControls publicKey={snapshot.pushPublicKey} unreadCount={unreadCount} /></div>
+      </details>}
+    </header>
     {loadError && <p role="alert">{loadError} <button className="underline" onClick={() => refresh(value => value + 1)}>Reîncarcă</button></p>}
     {!snapshot && !loadError && <p role="status">Se încarcă notificările…</p>}
-    {snapshot && <PushControls publicKey={snapshot.pushPublicKey} unreadCount={unreadCount} />}
     {feedback && <p role="status">{feedback}</p>}
     {snapshot?.items.length === 0 && <p>Nu ai notificări.</p>}
-    {!!snapshot?.items.length && <ul className="grid gap-3">
-      {snapshot.items.map(item => {
-        const { offer } = item;
-        const queue = item.kind === 'queue-turn';
-        const remaining = offer ? Math.max(0, Math.ceil((Date.parse(offer.expiresAt) - now) / 1000)) : 0;
-        const status = offer?.status === 'pending' && !remaining ? 'expired' : offer?.status;
-        return <li key={item.id} id={'notificare-' + item.id}
-          className={'grid gap-2 rounded-lg border p-3 ' + (target === item.id ? 'border-slate-900' : 'border-slate-200')
-            + (item.readAt ? '' : ' bg-slate-50')}>
-          <time dateTime={item.createdAt} className="text-sm text-slate-600">{dateTime.format(new Date(item.createdAt))}</time>
-          <p className="whitespace-pre-line break-words">{item.message}</p>
-          {offer && !offer.immediate && <p>{upcomingInterval(offer)}</p>}
-          {status === 'pending' && <>
-            <p>Oferta expiră în <span role="timer">{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')}</span>.</p>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className={button} disabled={busy} onClick={() => answer(item, 'accept')}>
-                {queue ? (offer.immediate ? 'Începe' : 'Rezervă intervalul') : 'Continuă rezervarea'}
-              </button>
-              <button type="button" className={button} disabled={busy} onClick={() => answer(item, 'decline')}>
-                {queue ? 'Refuză oferta' : 'Încheie rezervarea'}
-              </button>
-            </div>
-          </>}
-          {status && status !== 'pending' && <p className="font-medium">{offerLabels[status]}</p>}
-          {!offer && item.kind === 'restored' && <a className="underline"
-            href={'/spalatorie/' + encodeURIComponent(item.room) + '?echipament=' + item.machineId}>Deschide calendarul</a>}
-          {queue && <a className="underline"
-            href={'/spalatorie/' + encodeURIComponent(item.room) + '?echipament=' + item.machineId}>Deschide calendarul</a>}
-          {item.kind === 'access-request' && <a className="underline" href="/admin/cereri-acces">Vezi cererile de acces</a>}
-          {item.reportId && <a className="underline"
-            href={(item.kind === 'report-new' ? '/admin/sesizari' : '/sesizari') + '#sesizare-' + item.reportId}>
-            Deschide sesizarea
-          </a>}
-          {!item.readAt && <button type="button" className={button + ' justify-self-end bg-blue-700 text-white hover:bg-blue-800'
-            + ' focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'}
-            aria-label="OK, marchează notificarea ca citită" disabled={reading !== null}
-            onClick={() => markRead(item.id)}>OK</button>}
-        </li>;
-      })}
-    </ul>}
+    {groups.map(({ day, label, notices }) => <section className="notice-group" key={day}>
+      <h2>{label}</h2>
+      <ul>{notices.map(item => <NotificationCard key={item.id} item={item} now={now} target={target}
+        busy={busy} reading={reading} onAnswer={answer} onMarkRead={markRead} />)}</ul>
+    </section>)}
   </section>;
 }
