@@ -2,6 +2,7 @@ import { transaction } from '../../db.js';
 import { notifyQueueTurn, notifyReservation, notifyStrike } from '../notifications/laundry-notifications.js';
 import { fitQueueOffer, queueDay, queueOpenings } from './live-queue-rules.js';
 import { handoverTime } from './reservation-rules.js';
+import { reservationLimitConflict } from './reservation-limits.js';
 import {
   activeSuspension, attendanceState, confirmationDeadline, equipmentAllowsAttendance,
   excuseExpiredInspectionAttendance, issueStrike, suspendedBooking,
@@ -196,6 +197,8 @@ export async function answerQueueOffer(client, machine, offerId, userId, action,
   const useEndsAt = new Date(+startsAt + offer.duration_minutes * 60_000);
   const endsAt = +useEndsAt === queueDay(acceptedAt).closes ? useEndsAt : new Date(+useEndsAt + handoverTime);
   if (endsAt > offer.ends_at) return [409];
+  const conflict = await reservationLimitConflict(client, userId, machine, startsAt, endsAt);
+  if (conflict) return conflict;
   const { rows: [reservation] } = await client.query(`
     INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at, attendance_tracked, confirmed_at)
     SELECT $1::integer, $2::bigint, $3::timestamptz, $4::timestamptz, $5::timestamptz, $6::boolean, $7::timestamptz

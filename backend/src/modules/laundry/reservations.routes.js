@@ -5,6 +5,7 @@ import { calendarEntry, equipmentStatus, handoverTime, occupiedBlock, reservatio
 import { advanceQueue } from './live-queue.js';
 import { liveQueueRoutes } from './live-queue.routes.js';
 import { activeSuspension, attendanceState, confirmAttendance, suspendedBooking, suspensionCancellationReason } from './reservation-attendance.js';
+import { reservationLimitConflict } from './reservation-limits.js';
 import { lockEquipment } from './condition.routes.js';
 
 const overlapMessage = 'Intervalul tocmai a fost rezervat. Alege altul.';
@@ -98,6 +99,8 @@ async function saveReservation(client, machineId, userId, startsAt, endsAt) {
         AND lifted_at IS NULL AND ends_at > $4)
     LIMIT 1`, [machineId, start, end, now]);
   if (rows.length) return [409, { message: overlapMessage }];
+  const conflict = await reservationLimitConflict(client, userId, machine, start, end);
+  if (conflict) return conflict;
   const { rows: [reservation] } = await client.query(`
     INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at, attendance_tracked)
     VALUES ($1, $2, $3, $4, $5, true)

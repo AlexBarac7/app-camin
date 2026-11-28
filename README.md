@@ -321,6 +321,10 @@ Use a disposable or dedicated local database for tests involving these accounts.
 Admin and Administrator can filter reservation history at `/admin/rezervari`
 and correct strikes. Each new strike adds an in-app notice for both roles.
 Select **Mergi la rezervare** from the notice to open the exact Reservation.
+Under **Limită zilnică**, either role can set the number of laundry Reservations
+each resident can make for a local day of use. Migration 028 adds the setting
+with an initial value of two. Saving a new limit affects future booking actions
+and preserves existing Reservations.
 Admin can browse the read-only equipment, reservations and migrations tables
 at `/admin/baza-de-date`.
 
@@ -476,6 +480,16 @@ For acceptance, sign in with two resident sessions and subscribe a phone under
 future Reservation or end an active one early. Check the position changes in
 both calendars and confirm that the first eligible resident receives the offer
 with the app closed. [Issue #10](https://github.com/AlexBarac7/app-camin/issues/10)
+
+### Daily and simultaneous laundry Reservation limits
+
+The daily limit is shared by washers and dryers. A resident can hold at most
+one washer and one dryer in overlapping Reservation blocks, including handover.
+The same rules apply in the calendar, when accepting a Live-queue offer and
+when resuming a Reservation after a fault. Cancelling before the scheduled
+start frees a daily slot. A no-show consumes one slot. A resumed Reservation
+and its original count together as one. If a pre-start cancellation freed a
+slot and the resident has already filled it, the app can refuse the return offer.
 
 ## Laundry attendance
 

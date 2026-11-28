@@ -28,7 +28,12 @@ export default function UsageGuide({ reportsPath, canManage }) {
       <p>În <a className="camin-link" href="/resurse">Resurse</a> vezi unde se află mașinile de spălat și uscătoarele
         și în ce stare sunt.</p>
       <p>Deschide calendarul echipamentului, alege ziua și confirmă un interval liber. Ridică cheia de la recepție.</p>
-      <p>Poți anula rezervarea înainte de începere sau apăsa <strong>Încheie</strong> dacă termini mai devreme.</p>
+      <p>Limita inițială este de două rezervări în aceeași zi, pentru spălare și uscare cumulat. Poți rezerva în același
+        timp o mașină de spălat și un uscător. Limita se aplică și când accepți o ofertă din Live-queue.</p>
+      <p>O anulare înainte de începere îți eliberează un loc pentru ziua respectivă. O neprezentare consumă un loc din limita zilei.
+        Dacă termini mai devreme, apasă <strong>Încheie</strong>.</p>
+      {canManage && <p>Poți schimba valoarea din <a className="camin-link" href="/admin/rezervari">Istoricul rezervărilor</a>,
+        la <strong>Limită zilnică</strong>. Rezervările deja confirmate rămân valabile.</p>}
     </>,
     'prezenta-la-rezervari': <>
       <p>Pentru ca aplicația să fie cât mai utilă tuturor, există un sistem de sancționare a neprezentării la rezervare.

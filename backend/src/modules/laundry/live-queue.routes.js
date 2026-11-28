@@ -96,7 +96,7 @@ export function liveQueueRoutes(database) {
       const action = req.body?.action;
       if (action !== 'accept' && action !== 'decline') return [400];
       const result = await answerQueueOffer(client, machine, offerId, userId, action, now);
-      return result[0] === 409 ? [409, unavailable] : result;
+      return result[0] === 409 && !result[1] ? [409, unavailable] : result;
     }));
 
   router.get('/:machineId/queue/events', async (req, res) => {

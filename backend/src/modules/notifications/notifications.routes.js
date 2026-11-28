@@ -1,6 +1,7 @@
 import { json, Router } from 'express';
 import { localOrigins, requireSession } from '../auth/auth.routes.js';
 import { activeSuspension, residentStrikeProgress, suspendedBooking } from '../laundry/reservation-attendance.js';
+import { reservationLimitConflict } from '../laundry/reservation-limits.js';
 import { announcementRoutes, validNoticeId } from './announcements.routes.js';
 import { pushEndpoint, subscriptionKeys } from './push.js';
 
@@ -23,7 +24,7 @@ async function answerOffer(database, offerId, userId, action) {
 async function saveAnswer(client, offerId, userId, action) {
   // Acquire the equipment lock before reading the current offer state.
   const { rows: [machine] } = await client.query(`
-    SELECT machine.id, machine.technical_status FROM laundry_machines machine
+    SELECT machine.id, machine.type, machine.technical_status FROM laundry_machines machine
     JOIN laundry_restoration_offers offer ON offer.machine_id = machine.id
     JOIN laundry_notifications notice ON notice.id = offer.notification_id
     WHERE offer.id = $1 AND notice.user_id = $2 FOR UPDATE OF machine`, [offerId, userId]);
@@ -42,6 +43,10 @@ async function saveAnswer(client, offerId, userId, action) {
   if (suspension) return suspendedBooking(suspension);
   const { rows: [{ now: acceptedAt }] } = await client.query('SELECT clock_timestamp() AS now');
   if (offer.expires_at <= acceptedAt || offer.use_ends_at <= acceptedAt) return [409];
+  const startsAt = new Date(Math.max(+offer.starts_at, +acceptedAt));
+  const conflict = await reservationLimitConflict(client, userId, machine, startsAt, offer.ends_at,
+    offer.original_reservation_id);
+  if (conflict) return conflict;
   const { rows: [reservation] } = await client.query(`
     INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at, attendance_tracked, confirmed_at)
     SELECT $1::integer, $2::bigint, greatest($3::timestamptz, $4::timestamptz), $5::timestamptz, $6::timestamptz,
