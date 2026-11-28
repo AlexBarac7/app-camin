@@ -4,7 +4,227 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-28 · Prevent overlapping bookings when accepting laundry offers
+
+**Model:** GPT-6 (Codex).
+
+The owner asked to resolve the overlap found in the PR #26 review. Both
+Live-queue and restoration acceptance check for an overlapping active
+Reservation under the equipment lock when saving. If another booking owns
+the interval, the offer is withdrawn and acceptance returns HTTP 409.
+
+The PostgreSQL regression simulated a suspension starting between hold
+cleanup and the direct booking check, followed by the suspension being
+lifted. Both offer types initially returned HTTP 201 after the direct
+booking. Both now return HTTP 409, with one active Reservation and one
+withdrawn offer in each case. All 20 backend tests, the three PostgreSQL
+suites, the frontend build, ledger lint and `git diff --check` passed.
+The local backend and the phone HTTPS origin returned HTTP 200.
+
+## 2026-11-28 · Show the reservation holder on operator strike notices
+
+**Model:** GPT-6 (Codex).
+
+The owner approved showing the reservation holder's account email to Admin
+and Administrator in the strike notice and the corresponding history row.
+D-034 records the rule. Both views read the address from the linked account.
+The inbox checks the viewer's current role before returning the address.
+
+The new PostgreSQL assertion first failed because the operator notice had
+no holder field. It passed after the change, including checks for both
+operator roles, for the resident inbox and for a demoted Administrator.
+All 20 backend tests, the three PostgreSQL suites, the frontend build and
+ledger validation passed. Local readiness and both frontend modules served
+through the phone's HTTPS origin passed. The phone UI check is manual.
+
+## 2026-11-28 · Strike progress and correction notices
+
+**Model:** GPT-6 (Codex).
+
+The owner approved a current strike counter at the top of Notificări and one
+in-app notice when an operator corrects a strike. D-033 defines both. The
+counter uses the same eligibility and configured window as the suspension
+worker. The notice keeps the remaining count at issuance or correction.
+Migration 023 adds that snapshot and the correction notice kind. The
+correction and notice commit together, and a retry keeps the original notice.
+
+The integration scenario verified the countdown from three, activation,
+correction, one notice after a repeated request and expiry at the seven-day
+boundary. An earlier booking in the test scenario also generated a strike
+and produced two active strikes where the new expiry case expected one. The
+fixture now confirms that booking at its start. All 20 backend tests, the
+three PostgreSQL suites, the frontend build and ledger validation passed.
+Migration 023 was applied locally. The readiness probe and the frontend
+served through the phone's HTTPS origin passed the smoke checks. The Saturday
+test override remained active. The physical phone check is pending.
+
+## 2026-11-28 · Limit reservation cancellations to the suspension window
+
+**Model:** GPT-6 (Codex).
+
+The owner verified the resident strike notice and attendance confirmation on
+the phone, then approved limiting automatic cancellations to the time the
+suspension is active. D-032 supersedes D-031. When a new suspension starts,
+the backend cancels future Reservations scheduled before the stored expiry.
+Reservations scheduled at or after expiry stay valid. Residents can finish
+usage already started. Correcting a strike can lift the suspension, and
+cancelled Reservations stay in history. The Romanian guide and README now
+describe the same policy.
+
+The PostgreSQL regression first reproduced the previous behavior by finding
+cancellations at expiry and three days later. After the fix, a Reservation
+five minutes before expiry was cancelled, and Reservations at expiry and
+later stayed valid. All 20 backend tests, the three PostgreSQL suites, the
+frontend build, ledger validation and `git diff --check` passed. Local
+readiness and the phone HTTPS origin returned HTTP 200. The one-day Saturday
+override remained available for testing. The separate Live-queue overlap
+defect from the PR review remains open.
+
+## 2026-11-27 · PR #26 review fixes
+
+**Model:** GPT-6.2-Sol (Codex).
+
+The owner requested the fixes identified in review. The attendance worker
+skips locked machines and continues when processing one machine fails.
+Migration 021 validates the stored attendance policy and bounds existing
+values that exceed the supported range. Reservation and strike operations
+use an account lock compatible with notification foreign-key checks.
+
+Suspended accounts are skipped when assigning offers, and their pending
+holds are hidden and withdrawn. Acceptance checks the offer deadline again
+after acquiring the account lock. A reservation link from the Web Push alert
+returns to the same machine, day and Reservation after sign-in and accepts
+only an internal reservation path.
+
+The first integration run skipped a machine locked by the concurrent test
+request. The test now runs the next worker tick after that request releases
+its lock. Existing assertions were preserved. All 20 backend tests, the
+three PostgreSQL suites, the frontend build and ledger lint passed. Two
+parallel calendar bookings returned HTTP 201 on a disposable PostgreSQL
+database. Chromium with a simulated expired session opened the exact
+Reservation after sign-in. Applied migration 021 locally and verified HTTP
+200 on readiness.
+
+## 2026-11-27 · Attendance and strike correction in the usage guide
+
+**Model:** GPT-6.2-Sol (Codex).
+
+The owner requested two Romanian sections in the existing usage guide.
+**Prezența la rezervări** explains confirmation, no-show exceptions, the
+default suspension and when strikes stop counting. **Gestionarea
+strike-urilor** is visible to Admin and Administrator and explains the in-app
+notice, direct Reservation link, correction with a reason and policy settings.
+Both sections use the existing guide accordion and icons.
+
+The frontend build and ledger check passed. Chromium verified the sections,
+expand and collapse controls, and direct section links at mobile and desktop
+widths using simulated sessions for Rezident, Administrator and Admin.
+
+## 2026-11-27 · Excuse attendance blocked by equipment inspection
+
+**Model:** GPT-6.2-Sol (Codex).
+
+The owner confirmed that a resident who cannot confirm because equipment
+is under inspection must be excused. The backend now records expired
+confirmation windows during inspection and before clearing its timestamps
+on a condition change. An excused Reservation stays in the calendar and
+creates no strike or operator notice. Restoring service before the deadline
+allows confirmation during the remaining time.
+
+The regression test initially found a strike after service returned just
+past the deadline. It passed after the correction, together with the
+early-restoration case, the PostgreSQL Reservation suite, all 19 backend
+tests, the frontend build, Compose configuration validation and ledger lint.
+The change uses the existing schema.
+
+## 2026-11-27 · Issue #13 verification after laundry closing
+
+**Model:** GPT-6.2-Sol (Codex).
+
+The owner asked to verify the completed attendance flow after the laundry
+closed and audit the outstanding project requirements. All 19 backend tests,
+the three PostgreSQL 17 integration suites, the frontend build, Compose
+configuration validation and ledger lint passed. The databases were temporary.
+With a controlled clock, a 19:55–20:00 Reservation generated no strike, the
+exact seven-day and 48-hour boundaries worked, and a released no-show block
+went to Live-queue. Chromium at 390 px verified the strike notice, direct
+Reservation link, correction form and saving a policy change without a deploy.
+
+An additional inspection test failed with `1 !== 0`. Equipment stayed under
+inspection throughout the ten-minute confirmation window and returned to
+service before the next worker run. The worker saw it working and issued a
+strike to the resident who could not confirm. The audit left product code
+untouched. The two new resident Web Push alerts were tested with a simulated
+sender. Physical phone delivery remains to be verified for these alerts.
+
+## 2026-11-27 · Laundry attendance and strike notifications
+
+**Model:** GPT-6.2-Sol (Codex).
+
+The owner approved the laundry attendance pilot for
+[Issue #13](https://github.com/AlexBarac7/app-camin/issues/13). Residents receive
+a reminder ten minutes before start and an alert at the booked time. They can
+confirm in the calendar during the first ten minutes. **Începe** confirms an
+immediate Live-queue cycle. If an eligible Reservation expires unconfirmed,
+the interval is released and one strike is recorded. Usage shorter than ten
+minutes is exempt from strikes. Three strikes in seven days suspend new
+Reservations for 48 hours by default. Admin and Administrator can correct a
+strike with a reason, and correcting a strike that triggered an active
+suspension lifts it. The baseline is in commit `42d1e6d`.
+
+An error on the local **Notificări** page exposed that the running database
+was still at migration 018. Applied migration 019 and verified HTTP 200 for
+the authenticated notification list and unread count. The owner then approved
+one in-app notice per Admin and Administrator for each new strike. Migration
+020 adds the notice **S-a acordat un strike** with **Mergi la rezervare**, which
+opens the exact Reservation and its correction action. The worker writes
+these notices with the strike and creates no Web Push deliveries for them.
+Applied migration 020 to the local database.
+
+The first operator-notice test found zero notices for three strikes. With
+the change in place, all 19 backend tests, all three PostgreSQL integration
+suites, the frontend build, Compose configuration validation and the ledger
+check passed. Chromium at 390 px verified the link, the correction form and
+return to the history. Resident Web Push was tested with a simulated sender.
+Issue #14 still covers the reminder before use ends. Issue #15 awaits a
+confirmed quota policy.
+
+## 2026-11-27 · Portal navigation, usage guide and access email
+
+**Model:** GPT-6.2-Sol (Codex).
+
+The owner chose bottom navigation with icons and labels on phones and a left
+sidebar on desktop. The separate **Ghid de utilizare** opens from **?**. Its
+expandable sections provide contextual help for Reservations, Live-queue,
+reports and notifications. **Înapoi** restores the source screen, including
+the selected equipment and day in the calendar. The inbox now groups
+notification cards by date.
+
+The approved access changes are recorded in D-025 through D-027. Migration 017
+tracks whether a new account has signed in after invitation activation. On that
+first sign-in, the app offers **Consultă ghidul** and **Mergi la resurse**. The
+access form distinguishes existing accounts, pending requests, and issued or expired
+invitations. An applicant can request a replacement for a lost or expired
+link. Admin can reject a pending request, revoke any outstanding activation
+link, and retry the rejection email if delivery fails. Migration 018 stores the
+rejection and the latest delivery attempt.
+
+**Căminul Meu** is the application and email display name. **Cămin 3** identifies
+the current residence in the upper-left header. The owner configured the local
+backend to use Gmail SMTP from the Admin account. Gmail accepted SMTP
+authentication during setup. The approval, rejection and password-reset
+templates were verified separately in isolated Mailpit.
+
+A local sign-in failed because the database still lacked migration 017.
+Applying it resolved the schema mismatch. The local backend also applied
+migration 018 with its Gmail configuration intact. Backend unit tests, the three
+disposable PostgreSQL suites, the frontend build, ledger lint and phone and
+desktop Chromium checks passed. [PR #25](https://github.com/AlexBarac7/app-camin/pull/25)
+was merged into `main` after GitHub Actions passed.
+
 ## 2026-11-27 · Live-queue and early finish
+
+**Model:** GPT-6.2-Sol (Codex).
 
 The owner approved D-024 for washers and dryers. Residents enter a same-day
 Live-queue with their cycle duration. The first entrant whose cycle and

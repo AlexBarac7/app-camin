@@ -1,4 +1,5 @@
 import LaundryStatus from './LaundryStatus.jsx';
+import { portalSignInPath } from './sign-in-return.js';
 import GuideLink from './GuideLink.jsx';
 import { useEffect, useRef, useState } from 'react';
 
@@ -8,6 +9,7 @@ const dayFormat = new Intl.DateTimeFormat('ro-RO', { timeZone: 'UTC', dateStyle:
 const weekdayFormat = new Intl.DateTimeFormat('ro-RO', { timeZone: 'UTC', weekday: 'short' });
 const monthFormat = new Intl.DateTimeFormat('ro-RO', { timeZone: 'UTC', month: 'long', year: 'numeric' });
 const timeFormat = new Intl.DateTimeFormat('ro-RO', { timeZone, hour: '2-digit', minute: '2-digit' });
+const suspensionFormat = new Intl.DateTimeFormat('ro-RO', { timeZone, dateStyle: 'short', timeStyle: 'short' });
 const deadlineFormat = new Intl.DateTimeFormat('ro-RO', { timeZone, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const minute = 60_000;
 const step = 5 * minute;
@@ -78,7 +80,7 @@ function bookingOptions(calendar, blocks, now, maxUse) {
 
 async function request(path, options) {
   const response = await fetch(path, options);
-  if (response.status === 401) window.location.replace('/autentificare');
+  if (response.status === 401) window.location.replace(portalSignInPath(window.location));
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.message || 'Momentan nu putem finaliza cererea. Încearcă din nou.');
@@ -96,6 +98,7 @@ function CalendarDay({ machine, day, today, queue, onChange, onNextDay, children
   const [showJoin, setShowJoin] = useState(false);
   const [duration, setDuration] = useState('');
   const feedbackRegion = useRef(null);
+  const openedReservation = useRef(false);
   const endpoint = '/api/laundry-machines/' + machine.id;
 
   useEffect(() => {
@@ -129,18 +132,30 @@ function CalendarDay({ machine, day, today, queue, onChange, onNextDay, children
     if (feedback?.afterAction) feedbackRegion.current.focus();
   }, [feedback]);
 
-  async function mutate(event, id, finish = false) {
+  useEffect(() => {
+    if (!data || openedReservation.current || !/^#rezervare-\d+$/.test(window.location.hash)) return;
+    const item = document.getElementById(window.location.hash.slice(1));
+    if (item) {
+      openedReservation.current = true;
+      item.focus();
+    }
+  }, [data]);
+
+  async function mutate(event, id, action = '') {
     event.preventDefault();
     setPending(true);
     setFeedback(null);
     try {
-      await request(endpoint + '/reservations' + (id ? '/' + id : '') + (finish ? '/finish' : ''),
-        id ? { method: finish ? 'POST' : 'DELETE' } : {
+      await request(endpoint + '/reservations' + (id ? '/' + id : '') + (action ? '/' + action : ''),
+        id ? { method: action ? 'POST' : 'DELETE' } : {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString() }),
       });
-      const text = finish ? 'Utilizarea s-a încheiat.' : id ? 'Rezervarea a fost anulată.' : 'Rezervarea a fost confirmată.';
+      const text = {
+        confirm: 'Ai confirmat începerea utilizării.',
+        finish: 'Utilizarea s-a încheiat.',
+      }[action] ?? (id ? 'Rezervarea a fost anulată.' : 'Rezervarea a fost confirmată.');
       setFeedback({ afterAction: true, text });
       setSelection({ start: 0, end: 0 });
     } catch (error) {
@@ -206,10 +221,11 @@ function CalendarDay({ machine, day, today, queue, onChange, onNextDay, children
   }, [data, nextHoldExpiration]);
   const blocks = calendar?.open ? calendarBlocks(calendar, currentTime) : [];
   const maxUse = (machine.type === 'dryer' ? 240 : 180) * minute;
-  const options = calendar?.open && calendar.bookable
+  const suspension = Date.parse(calendar?.suspension?.until) > currentTime ? calendar.suspension : null;
+  const options = calendar?.open && calendar.bookable && !suspension
     ? bookingOptions(calendar, blocks, currentTime, maxUse)
     : new Map();
-  const fullToday = day === today && calendar?.bookable && !options.size;
+  const fullToday = day === today && calendar?.bookable && !suspension && !options.size;
   const offer = queue?.offer;
   const canJoin = queue?.open && queue.day === day && queue.technicalStatus === 'working' && !queue.joinedElsewhere;
   const start = options.has(selection.start) ? selection.start : 0;
@@ -233,7 +249,8 @@ function CalendarDay({ machine, day, today, queue, onChange, onNextDay, children
             setRevision(value => value + 1);
           }}>Reîncarcă data</button>
           : <p role="status" className="camin-notice" data-tone="info">Se încarcă intervalele…</p>)}
-        {machine.technicalStatus === 'broken' && calendar?.cancellations?.map((entry, index) => <p key={index} className="camin-notice" data-tone="warning">
+        {calendar?.cancellations?.filter(entry => entry.id || machine.technicalStatus === 'broken').map((entry, index) => <p key={entry.id ?? index} id={entry.id ? 'rezervare-' + entry.id : undefined}
+          tabIndex={entry.id ? -1 : undefined} className="camin-notice" data-tone="warning">
           Rezervarea ta {interval(entry.startsAt, entry.endsAt)} · <LaundryStatus status="cancelled">Anulată</LaundryStatus> · {entry.reason}
         </p>)}
         {calendar && !calendar.bookable && <p>Rezervare indisponibilă pentru acest echipament.</p>}
@@ -253,7 +270,7 @@ function CalendarDay({ machine, day, today, queue, onChange, onNextDay, children
                 <p>{offer.immediate ? 'E rândul tău. Poți începe acum.' : 'S-a eliberat intervalul ' + interval(offer.startsAt, offer.endsAt) + '.'}</p>
                 <p>Poți răspunde până la {deadlineFormat.format(new Date(offer.expiresAt))}.</p>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" className={primary} disabled={pending}
+                  <button type="button" className={primary} disabled={pending || !!suspension}
                     onClick={() => actOnQueue('/offers/' + offer.id, 'POST', { action: 'accept' })}>
                     {offer.immediate ? 'Începe' : 'Rezervă intervalul'}
                   </button>
@@ -284,7 +301,8 @@ function CalendarDay({ machine, day, today, queue, onChange, onNextDay, children
         {!!blocks.length && (
           <ul aria-label="Intervalele zilei" className="booking-intervals">
             {blocks.map(({ start, end, reservation }) => (
-              <li key={start}>
+              <li key={start} id={reservation?.id ? 'rezervare-' + reservation.id : undefined}
+                tabIndex={reservation?.id ? -1 : undefined}>
                 <div className="booking-interval-row"><strong>{interval(start, end)}</strong>{reservation?.hold
                   ? <LaundryStatus status="unavailable">Indisponibil temporar</LaundryStatus> : reservation
                   ? <LaundryStatus status="reserved">{reservation.id ? 'Rezervarea ta' : machine.technicalStatus === 'inspection' ? 'Rezervat' : 'Ocupat'}</LaundryStatus>
@@ -304,10 +322,16 @@ function CalendarDay({ machine, day, today, queue, onChange, onNextDay, children
                   {+new Date(reservation.useEndsAt) < end && <span><LaundryStatus status="handover">Predare</LaundryStatus> {interval(reservation.useEndsAt, end)}</span>}
                   {start > currentTime && <button type="button" className={control + ' justify-self-start'}
                     disabled={pending} onClick={event => mutate(event, reservation.id)}>Anulează rezervarea</button>}
-                  {start <= currentTime && currentTime < Date.parse(reservation.useEndsAt) &&
+                  {reservation.confirmBy && start <= currentTime && currentTime < Date.parse(reservation.confirmBy) &&
+                    (calendar.bookable || (machine.status === 'occupied' && machine.technicalStatus === 'inspection')) && <>
+                      <p>Confirmă până la {deadlineFormat.format(new Date(reservation.confirmBy))}.</p>
+                      <button type="button" className={primary + ' justify-self-start'} disabled={pending}
+                        onClick={event => mutate(event, reservation.id, 'confirm')}>Confirmă începerea</button>
+                    </>}
+                  {!reservation.confirmBy && start <= currentTime && currentTime < Date.parse(reservation.useEndsAt) &&
                     (calendar.bookable || (machine.status === 'occupied' && machine.technicalStatus === 'inspection')) &&
                     <button type="button" className={control + ' justify-self-start'} disabled={pending}
-                      onClick={event => mutate(event, reservation.id, true)}>Încheie</button>}
+                      onClick={event => mutate(event, reservation.id, 'finish')}>Încheie</button>}
                 </>}
               </li>
             ))}
@@ -317,7 +341,10 @@ function CalendarDay({ machine, day, today, queue, onChange, onNextDay, children
       <div className="camin-panel booking-selection">
         <h3>Alege intervalul</h3>
         <p className="camin-muted">{dayFormat.format(new Date(day))}</p>
-        {calendar?.open && calendar.bookable && (options.size ? (
+        {suspension && <p className="camin-notice" data-tone="warning">
+          Rezervările sunt suspendate până la {suspensionFormat.format(new Date(suspension.until))}. {suspension.reason}
+        </p>}
+        {!suspension && calendar?.open && calendar.bookable && (options.size ? (
           <form className="grid gap-3" onSubmit={event => mutate(event)}>
             <fieldset disabled={pending} className="grid gap-3">
               <div className="grid gap-1">

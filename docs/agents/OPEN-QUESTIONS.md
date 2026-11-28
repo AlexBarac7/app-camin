@@ -18,7 +18,7 @@
 - Q-007 · What are the drying room's operating hours? · _answered_
 - Q-008 · What establishes whether equipment is occupied? · _answered_
 - Q-009 · How do reservations and Live-queue interact with the notebook? · _answered_
-- Q-010 · How are no-shows confirmed and handled?
+- Q-010 · How are no-shows confirmed and handled? · _answered_
 - Q-011 · What happens to reservations when equipment is marked defective? · _answered_
 - Q-012 · When is equipment restored in time to notify a resident? · _answered_
 
@@ -65,8 +65,9 @@
 
 ## Q-005 · Which business rules and users should the product support?
 - **Status:** open
-- **Blocks:** Rules for other resources, fair-use quotas, no-show definitions and
-  consequences, and the remaining notification events and recipients.
+- **Blocks:** Rules for other resources, fair-use quotas, and the remaining
+  notification events and recipients. The laundry attendance pilot is covered
+  by [Q-010](#q-010--how-are-no-shows-confirmed-and-handled).
 - **Who answers:** Project owner, after interviews
 - **Evidence:** [INTERVIEW.md](../../INTERVIEW.md) documents residence practices. [Q-013 and Q-014](questions/laundry-reports.md) cover the confirmed maintenance workflow.
 - **Confirmed scope:** [D-022](decisions/admin-data.md#d-022--send-approved-invitations-by-email-and-let-residents-choose-an-eight-character-password)
@@ -130,10 +131,18 @@
   and [Live-queue priority](https://github.com/AlexBarac7/app-camin/issues/10).
 
 ## Q-010 · How are no-shows confirmed and handled?
-- **Status:** open
-- **Blocks:** Implementing the attendance confirmation window and any strike policy.
-- **Who answers:** Project owner, after consulting the residence administrator.
-- **Evidence:** [INTERVIEW.md](../../INTERVIEW.md) documents the practice for clothes left in equipment after the recorded interval. A no-show rule remains unconfirmed.
+- **Status:** answered
+- **Answer:** For the laundry pilot, remind the resident ten minutes before
+  start and ask for confirmation at start. The confirmation window ends at
+  the tenth minute. Usage periods shorter than ten minutes are exempt from
+  strikes. Three strikes in seven days trigger a 48-hour suspension and cancel
+  future Reservations that start before the suspension expires. The resident
+  can finish usage already started and keep Reservations starting at or after
+  expiration. See [D-032](decisions/laundry-decisions.md#d-032--cancel-only-reservations-starting-during-a-laundry-suspension).
+- **Evidence:** The project owner confirmed the application pilot policy for
+  [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13), including the
+  cancellation window for future Reservations.
+- **Confirmed:** 2026-11-28
 
 ## Q-011 · What happens to reservations when equipment is marked defective?
 - **Status:** answered

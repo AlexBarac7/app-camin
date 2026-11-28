@@ -15,13 +15,16 @@ async function queueSnapshot(database, machineId, userId) {
        WHERE earlier.machine_id = machine.id AND earlier.ended_at IS NULL AND earlier.id < entry.id) AS ahead,
       offer.id AS offer_id, offer.immediate, offer.starts_at, offer.ends_at, offer.expires_at,
       md5(concat_ws('|',
-        (SELECT string_agg(concat_ws(',', id, starts_at, use_ends_at, ends_at), '|' ORDER BY id)
+        (SELECT string_agg(concat_ws(',', id, starts_at, use_ends_at, ends_at,
+          CASE WHEN user_id = $2 THEN confirmed_at END, CASE WHEN user_id = $2 THEN attendance_excused_at END), '|' ORDER BY id)
          FROM laundry_reservations WHERE machine_id = machine.id AND cancelled_at IS NULL
            AND ends_at > statement_timestamp()),
         (SELECT string_agg(id::text, ',' ORDER BY id) FROM laundry_restoration_offers
          WHERE machine_id = machine.id AND status = 'pending' AND expires_at > statement_timestamp()),
         (SELECT string_agg(id::text, ',' ORDER BY id) FROM laundry_queue_offers
-         WHERE machine_id = machine.id AND status = 'pending' AND expires_at > statement_timestamp())
+         WHERE machine_id = machine.id AND status = 'pending' AND expires_at > statement_timestamp()),
+        (SELECT id FROM laundry_suspensions WHERE user_id = $2 AND lifted_at IS NULL
+          AND ends_at > statement_timestamp() ORDER BY ends_at DESC LIMIT 1)
       )) AS calendar_version,
       statement_timestamp() AS now
     FROM laundry_machines machine

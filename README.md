@@ -318,9 +318,11 @@ Use a disposable or dedicated local database for tests involving these accounts.
 
 ### Inspect reservations and database tables
 
-Admin and Administrator can filter reservation history at `/admin/rezervari`.
-Admin can browse equipment, reservations and migrations at `/admin/baza-de-date`.
-Both pages are read-only.
+Admin and Administrator can filter reservation history at `/admin/rezervari`
+and correct strikes. Each new strike adds an in-app notice for both roles.
+Select **Mergi la rezervare** from the notice to open the exact Reservation.
+Admin can browse the read-only equipment, reservations and migrations tables
+at `/admin/baza-de-date`.
 
 ### Clean up expired sessions
 
@@ -464,8 +466,8 @@ duration you need. The calendar shows your position and updates while it is open
 When an interval opens, the first entrant whose cycle and handover fit gets
 an in-app offer and, if enabled, Web Push. Accept within the displayed time
 using **Începe** or **Rezervă intervalul**, depending on when it starts.
-During any ongoing Reservation the holder can select **Încheie**, which releases
-the remaining time after handover. A resident can leave the queue at any time.
+During a confirmed or exempt ongoing Reservation the holder can select
+**Încheie**, which releases the remaining time after handover. A resident can leave the queue at any time.
 Entries expire at closing. During an inspection, entries keep their positions.
 A confirmed fault closes affected entries with the recorded reason.
 
@@ -475,12 +477,27 @@ future Reservation or end an active one early. Check the position changes in
 both calendars and confirm that the first eligible resident receives the offer
 with the app closed. [Issue #10](https://github.com/AlexBarac7/app-camin/issues/10)
 
+## Laundry attendance
+
+New calendar Reservations get an in-app reminder ten minutes before start
+and a start alert at the reserved time. Devices subscribed under **Notificări**
+also receive Web Push. Confirm in the calendar within ten minutes of the
+reserved start. **Începe** already confirms an immediate Live-queue cycle.
+A missed confirmation releases the block and records a strike. Usage shorter
+than ten minutes is exempt. If an inspection prevents confirmation through
+the deadline, the Reservation is kept and no strike is recorded. If service
+resumes before the deadline, the resident can confirm in the time remaining.
+The resident sees **Ai primit un strike** in **Notificări** and can open the
+cancelled Reservation from there. Three strikes in seven days suspend access
+for 48 hours by default and cancel future Reservations scheduled to start before
+the suspension expires. Reservations starting at or after expiration remain
+valid. Usage already started can finish. Admin and Administrator can change the two periods or
+correct a strike with a reason under **Rezervări**. A correction that lifts
+the suspension allows new Reservations. The cancellations stay in history.
+[Issue #13](https://github.com/AlexBarac7/app-camin/issues/13)
+
 ## Roadmap
-- Confirm the residence's no-show rules, including confirmation, strike
-  correction and suspension. Implement the approved policy and idempotent jobs.
-  [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13)
-- Add the reminder 10 minutes before a Reservation starts and the reminder
-  15 minutes before use ends. Add email fallback in a later stage.
+- Add the reminder 15 minutes before use ends. Add email fallback in a later stage.
   [Project brief](CONTEXT.md) · [Issue #14](https://github.com/AlexBarac7/app-camin/issues/14)
 - Define rolling fair-use quotas and configurable resource rules, including
   quiet hours and approved exceptions. Test the quota window, cancellations

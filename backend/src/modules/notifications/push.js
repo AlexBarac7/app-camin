@@ -1,5 +1,9 @@
 import { sendNotification } from 'web-push';
 
+const reservationDay = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'Europe/Bucharest', dateStyle: 'short',
+});
+
 export function pushEndpoint(value) {
   if (typeof value !== 'string' || value.length > 2048) return false;
   try {
@@ -22,11 +26,16 @@ export async function deliverPush(delivery, send) {
   const offerTtl = delivery.expires_at
     ? Math.floor((delivery.expires_at - delivery.now) / 1000) : null;
   if (offerTtl !== null && (offerTtl < 1 || delivery.offer_status !== 'pending')) return 'done';
+  const reservation = delivery.reservation_id && delivery.room ? {
+    message: delivery.message,
+    path: '/spalatorie/' + delivery.room + '?echipament=' + delivery.machine_id +
+      '&zi=' + reservationDay.format(delivery.reservation_start) + '#rezervare-' + delivery.reservation_id,
+  } : {};
   try {
     await send({
       endpoint: delivery.endpoint,
       keys: { p256dh: delivery.p256dh, auth: delivery.auth },
-    }, JSON.stringify({ id: delivery.notification_id, unreadCount: delivery.unread_count }), {
+    }, JSON.stringify({ id: delivery.notification_id, unreadCount: delivery.unread_count, ...reservation }), {
       TTL: offerTtl ?? 3600, urgency: offerTtl === null ? 'normal' : 'high', timeout: 4000,
     });
     return 'done';
@@ -52,11 +61,21 @@ export async function dispatchPushDeliveries(database, send) {
     SELECT leased.*, subscription.endpoint, subscription.p256dh, subscription.auth,
       (SELECT count(*)::integer FROM laundry_notifications notice
        WHERE notice.user_id = subscription.user_id AND notice.read_at IS NULL) AS unread_count,
-      COALESCE(offer.expires_at, queue.expires_at) AS expires_at,
-      COALESCE(offer.status, queue.status) AS offer_status, statement_timestamp() AS now
+      notice.reservation_id, notice.message, notice.machine_id, machine.room, reservation.starts_at AS reservation_start,
+      COALESCE(offer.expires_at, queue.expires_at, CASE notice.kind
+        WHEN 'reservation-reminder' THEN reservation.starts_at
+        WHEN 'reservation-start' THEN LEAST(reservation.starts_at + interval '10 minutes', reservation.use_ends_at)
+      END) AS expires_at,
+      COALESCE(offer.status, queue.status,
+        CASE WHEN reservation.id IS NOT NULL AND reservation.cancelled_at IS NULL
+          AND reservation.confirmed_at IS NULL AND reservation.attendance_excused_at IS NULL THEN 'pending' END
+      ) AS offer_status, statement_timestamp() AS now
     FROM leased JOIN push_subscriptions subscription ON subscription.id = leased.subscription_id
     LEFT JOIN laundry_restoration_offers offer ON offer.notification_id = leased.notification_id
-    LEFT JOIN laundry_queue_offers queue ON queue.notification_id = leased.notification_id`);
+    LEFT JOIN laundry_queue_offers queue ON queue.notification_id = leased.notification_id
+    JOIN laundry_notifications notice ON notice.id = leased.notification_id
+    LEFT JOIN laundry_reservations reservation ON reservation.id = notice.reservation_id
+    LEFT JOIN laundry_machines machine ON machine.id = notice.machine_id`);
 
   await Promise.all(rows.map(async delivery => {
     const result = await deliverPush(delivery, send);

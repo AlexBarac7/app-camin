@@ -5,6 +5,8 @@ import { normalizeEmail } from '../auth/credentials.js';
 import {
   finishAccessRejection, finishInvitationDelivery, listAccessRequests, startAccessRejection, startInvitationDelivery,
 } from '../auth/invitations.js';
+import { transaction } from '../../db.js';
+import { correctStrike, maxStrikeWindowDays, maxSuspensionHours } from '../laundry/reservation-attendance.js';
 import { residenceZone, validDay } from '../laundry/reservation-rules.js';
 
 const pageSize = 25;
@@ -18,6 +20,10 @@ const tables = new Map([
   ['migrations', `SELECT version, filename, applied_at
     FROM public.schema_migrations ORDER BY version LIMIT $1 OFFSET $2`],
 ]);
+
+function validReservationId(value) {
+  return typeof value === 'string' && /^[1-9]\d{0,18}$/.test(value) && BigInt(value) <= 9223372036854775807n;
+}
 
 function readPage(value = '1') {
   return typeof value === 'string' && /^[1-9]\d{0,5}$/.test(value) ? Number(value) : null;
@@ -100,10 +106,41 @@ export function adminRoutes(database, origins = localOrigins, appOrigin, { sendI
     res.sendStatus(204);
   });
 
+  router.get('/reservation-attendance-policy', operator, async (_req, res) => {
+    const { rows: [policy] } = await database.query(`
+      SELECT strike_window_days AS "strikeWindowDays", suspension_hours AS "suspensionHours"
+      FROM laundry_attendance_policy`);
+    res.json(policy);
+  });
+
+  router.put('/reservation-attendance-policy', operator, write, json({ limit: '1kb' }), async (req, res) => {
+    const { strikeWindowDays, suspensionHours } = req.body ?? {};
+    if (!Number.isInteger(strikeWindowDays) || strikeWindowDays < 1 || strikeWindowDays > maxStrikeWindowDays ||
+        !Number.isInteger(suspensionHours) || suspensionHours < 1 || suspensionHours > maxSuspensionHours) {
+      return res.status(400).json({
+        message: `Introdu perioadele în numere întregi, până la ${maxStrikeWindowDays} de zile și ${maxSuspensionHours} de ore.`,
+      });
+    }
+    await database.query(`
+      UPDATE laundry_attendance_policy SET strike_window_days = $1, suspension_hours = $2`,
+    [strikeWindowDays, suspensionHours]);
+    res.sendStatus(204);
+  });
+
+  router.post('/reservations/:id/strike-correction', operator, write, json({ limit: '4kb' }), async (req, res) => {
+    const { id } = req.params;
+    if (!validReservationId(id)) return res.sendStatus(404);
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    if (!reason || reason.length > 500) return res.status(400).json({ message: 'Introdu un motiv de cel mult 500 de caractere.' });
+    const corrected = await transaction(database, client => correctStrike(client, id, res.locals.account.id, reason));
+    res.sendStatus(corrected ? 204 : 404);
+  });
+
   router.get('/reservations', operator, async (req, res) => {
-    const { machineId, day, status } = req.query;
+    const { machineId, day, status, reservationId } = req.query;
     const page = readPage(req.query.page);
     if (!page ||
+        (reservationId !== undefined && !validReservationId(reservationId)) ||
         (machineId !== undefined && (typeof machineId !== 'string' ||
           !/^[1-9]\d{0,9}$/.test(machineId) || Number(machineId) > 2147483647)) ||
         (day !== undefined && !validDay(day)) ||
@@ -112,17 +149,22 @@ export function adminRoutes(database, origins = localOrigins, appOrigin, { sendI
     }
     const { rows } = await database.query(`
       SELECT reservation.id, machine.name AS equipment, machine.location,
-        reservation.starts_at, reservation.use_ends_at, reservation.ends_at, reservation.cancelled_at, reservation.cancellation_reason
+        reservation.starts_at, reservation.use_ends_at, reservation.ends_at, reservation.cancelled_at,
+        reservation.cancellation_reason, strike.issued_at AS strike_at, strike.corrected_at, strike.correction_reason,
+        strike_resident.email AS strike_resident_email
       FROM laundry_reservations reservation
       JOIN laundry_machines machine ON machine.id = reservation.machine_id
+      LEFT JOIN laundry_strikes strike ON strike.reservation_id = reservation.id
+      LEFT JOIN users strike_resident ON strike_resident.id = strike.user_id
       WHERE ($1::integer IS NULL OR reservation.machine_id = $1)
         AND ($2::date IS NULL OR (
           reservation.starts_at >= ($2::date::timestamp AT TIME ZONE $4)
           AND reservation.starts_at < (($2::date + 1)::timestamp AT TIME ZONE $4)
         ))
         AND ($3::text IS NULL OR (reservation.cancelled_at IS NOT NULL) = ($3 = 'cancelled'))
+        AND ($7::bigint IS NULL OR reservation.id = $7)
       ORDER BY reservation.starts_at DESC, reservation.id DESC
-      LIMIT $5 OFFSET $6`, [machineId, day, status, residenceZone, pageSize + 1, (page - 1) * pageSize]);
+      LIMIT $5 OFFSET $6`, [machineId, day, status, residenceZone, pageSize + 1, (page - 1) * pageSize, reservationId]);
     res.json({ ...pageResult(rows, page), items: rows.slice(0, pageSize) });
   });
 

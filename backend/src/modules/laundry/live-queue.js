@@ -1,9 +1,76 @@
 import { transaction } from '../../db.js';
-import { notifyQueueTurn } from '../notifications/laundry-notifications.js';
+import { notifyQueueTurn, notifyReservation, notifyStrike } from '../notifications/laundry-notifications.js';
 import { fitQueueOffer, queueDay, queueOpenings } from './live-queue-rules.js';
 import { handoverTime } from './reservation-rules.js';
+import {
+  activeSuspension, attendanceState, confirmationDeadline, equipmentAllowsAttendance,
+  excuseExpiredInspectionAttendance, issueStrike, suspendedBooking,
+} from './reservation-attendance.js';
+
+async function advanceAttendance(client, machine, now, testAccounts) {
+  const underInspection = machine.technical_status === 'inspection';
+  if (underInspection) await excuseExpiredInspectionAttendance(client, machine, now);
+  const { rows } = await client.query(`
+    SELECT reservation.*,
+      EXISTS (SELECT 1 FROM laundry_notifications
+        WHERE reservation_id = reservation.id AND kind = 'reservation-reminder') AS reminded,
+      EXISTS (SELECT 1 FROM laundry_notifications
+        WHERE reservation_id = reservation.id AND kind = 'reservation-start') AS notified
+    FROM laundry_reservations reservation
+    WHERE machine_id = $1 AND attendance_tracked AND confirmed_at IS NULL AND attendance_excused_at IS NULL
+      AND cancelled_at IS NULL AND starts_at <= $2::timestamptz + interval '10 minutes'
+      AND (use_ends_at > $2 OR use_ends_at - starts_at >= interval '10 minutes')
+    ORDER BY user_id, starts_at, id`, [machine.id, now]);
+
+  for (const reservation of rows) {
+    const state = attendanceState(reservation, now);
+    const usable = equipmentAllowsAttendance(machine, reservation);
+    if (state === 'expired') {
+      const deadline = confirmationDeadline(reservation);
+      // Under inspection, the update above already excused the blocked reservations.
+      if (usable || underInspection) {
+        const { rowCount } = await client.query(`
+          UPDATE laundry_reservations SET cancelled_at = $2, cancellation_reason = 'Neprezentare'
+          WHERE id = $1 AND cancelled_at IS NULL`,
+        [reservation.id, deadline]);
+        if (rowCount) {
+          const progress = await issueStrike(client, reservation, deadline);
+          if (progress) await notifyStrike(client, machine, reservation, now, testAccounts, progress);
+        }
+      } else {
+        await client.query('UPDATE laundry_reservations SET attendance_excused_at = $2 WHERE id = $1',
+          [reservation.id, now]);
+      }
+    } else if (usable && reservation.starts_at > now && !reservation.reminded) {
+      await notifyReservation(client, machine, reservation, 'reservation-reminder',
+        'Rezervarea ta la spălătorie începe în curând. Pregătește-te pentru ora rezervată.', now);
+    } else if (usable && reservation.starts_at <= now && !reservation.notified) {
+      await notifyReservation(client, machine, reservation, 'reservation-start',
+        state === 'pending'
+          ? 'Rezervarea ta a început. Confirmă începerea în 10 minute.'
+          : 'Rezervarea ta a început.', now);
+    }
+  }
+}
+
+async function releaseSuspendedHolds(client, machineId, now) {
+  await client.query(`
+    WITH suspended AS (
+      SELECT user_id FROM laundry_suspensions WHERE lifted_at IS NULL AND ends_at > $2
+    ), queue AS (
+      UPDATE laundry_queue_offers offer SET status = 'withdrawn'
+      FROM laundry_queue_entries entry JOIN suspended USING (user_id)
+      WHERE offer.entry_id = entry.id AND offer.machine_id = $1
+        AND offer.status = 'pending' AND offer.expires_at > $2
+    )
+    UPDATE laundry_restoration_offers offer SET status = 'withdrawn'
+    FROM laundry_notifications notice JOIN suspended USING (user_id)
+    WHERE offer.notification_id = notice.id AND offer.machine_id = $1
+      AND offer.status = 'pending' AND offer.expires_at > $2`, [machineId, now]);
+}
 
 export async function advanceQueue(client, machine, now) {
+  await releaseSuspendedHolds(client, machine.id, now);
   const { day, open, closes } = queueDay(now);
   await client.query(`
     WITH expired AS (
@@ -20,7 +87,9 @@ export async function advanceQueue(client, machine, now) {
     SELECT id, user_id, duration_minutes FROM laundry_queue_entries entry
     WHERE machine_id = $1 AND ended_at IS NULL AND day = $2
       AND NOT EXISTS (SELECT 1 FROM laundry_queue_offers WHERE entry_id = entry.id AND status = 'pending')
-    ORDER BY id`, [machine.id, day]);
+      AND NOT EXISTS (SELECT 1 FROM laundry_suspensions WHERE user_id = entry.user_id
+        AND lifted_at IS NULL AND ends_at > $3)
+    ORDER BY id`, [machine.id, day, now]);
   if (!waiting.length) return;
 
   const { rows: blocks } = await client.query(`
@@ -42,7 +111,8 @@ export async function advanceQueue(client, machine, now) {
     UNION ALL
     SELECT starts_at, ends_at FROM laundry_restoration_offers
     WHERE machine_id = $1 AND ends_at > $2 AND starts_at < $3
-      AND (status = 'declined' OR (status = 'pending' AND expires_at <= $2))
+      AND (status = 'declined' OR (status = 'pending' AND expires_at <= $2)
+        OR (status = 'withdrawn' AND withdrawn_by_fault_at IS NULL))
     ORDER BY starts_at`, [machine.id, now, new Date(closes)]);
 
   for (const entry of waiting) {
@@ -95,40 +165,78 @@ export async function answerQueueOffer(client, machine, offerId, userId, action,
     return [204];
   }
 
-  const startsAt = offer.immediate ? now : offer.starts_at;
+  const suspension = await activeSuspension(client, userId, { lock: true });
+  if (suspension) return suspendedBooking(suspension);
+  const { rows: [{ now: acceptedAt }] } = await client.query('SELECT clock_timestamp() AS now');
+  if (offer.expires_at <= acceptedAt) return [409];
+  const startsAt = offer.immediate ? acceptedAt : offer.starts_at;
   const useEndsAt = new Date(+startsAt + offer.duration_minutes * 60_000);
-  const endsAt = +useEndsAt === queueDay(now).closes ? useEndsAt : new Date(+useEndsAt + handoverTime);
+  const endsAt = +useEndsAt === queueDay(acceptedAt).closes ? useEndsAt : new Date(+useEndsAt + handoverTime);
   if (endsAt > offer.ends_at) return [409];
   const { rows: [reservation] } = await client.query(`
-    INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at)
-    VALUES ($1, $2, $3, $4, $5) RETURNING id`, [machine.id, userId, startsAt, useEndsAt, endsAt]);
+    INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at, attendance_tracked, confirmed_at)
+    SELECT $1::integer, $2::bigint, $3::timestamptz, $4::timestamptz, $5::timestamptz, $6::boolean, $7::timestamptz
+    WHERE NOT EXISTS (SELECT 1 FROM laundry_reservations
+      WHERE machine_id = $1 AND cancelled_at IS NULL AND starts_at < $5 AND ends_at > $3)
+    RETURNING id`,
+  [machine.id, userId, startsAt, useEndsAt, endsAt, !offer.immediate, offer.immediate ? acceptedAt : null]);
+  if (!reservation) {
+    await withdrawQueueOffers(client, machine.id, offer.entry_id);
+    return [409];
+  }
   await client.query(`
     UPDATE laundry_queue_offers SET status = 'accepted', reservation_id = $2 WHERE id = $1`, [offerId, reservation.id]);
   await client.query(`
-    UPDATE laundry_queue_entries SET ended_at = $2, end_reason = 'Interval preluat' WHERE id = $1`, [offer.entry_id, now]);
-  await advanceQueue(client, machine, now);
+    UPDATE laundry_queue_entries SET ended_at = $2, end_reason = 'Interval preluat' WHERE id = $1`, [offer.entry_id, acceptedAt]);
+  await advanceQueue(client, machine, acceptedAt);
   return [201, reservation];
 }
 
-export async function advanceWaitingQueues(database) {
+export async function advanceWaitingQueues(database, testAccounts = false) {
   const { rows } = await database.query(`
-    SELECT DISTINCT machine_id FROM laundry_queue_entries WHERE ended_at IS NULL ORDER BY machine_id`);
+    SELECT machine_id FROM laundry_queue_entries WHERE ended_at IS NULL
+    UNION
+    SELECT reservation.machine_id FROM laundry_reservations reservation
+    WHERE attendance_tracked AND confirmed_at IS NULL AND attendance_excused_at IS NULL AND cancelled_at IS NULL
+      AND starts_at <= statement_timestamp() + interval '10 minutes'
+      AND (use_ends_at - starts_at >= interval '10 minutes' AND
+           starts_at <= statement_timestamp() - interval '10 minutes'
+        OR use_ends_at > statement_timestamp() AND NOT EXISTS (
+          SELECT 1 FROM laundry_notifications notice WHERE notice.reservation_id = reservation.id
+            AND notice.kind = CASE WHEN starts_at > statement_timestamp()
+                                   THEN 'reservation-reminder' ELSE 'reservation-start' END
+        ))
+    UNION
+    SELECT offer.machine_id FROM laundry_restoration_offers offer
+    JOIN laundry_notifications notice ON notice.id = offer.notification_id
+    JOIN laundry_suspensions suspension ON suspension.user_id = notice.user_id
+    WHERE offer.status = 'pending' AND offer.expires_at > statement_timestamp()
+      AND suspension.lifted_at IS NULL AND suspension.ends_at > statement_timestamp()
+    ORDER BY machine_id`);
+  const failures = [];
   for (const { machine_id: machineId } of rows) {
-    await transaction(database, async client => {
-      const { rows: [machine] } = await client.query(
-        'SELECT * FROM laundry_machines WHERE id = $1 FOR UPDATE', [machineId]);
-      const { rows: [{ now }] } = await client.query('SELECT clock_timestamp() AS now');
-      await advanceQueue(client, machine, now);
-    });
+    try {
+      await transaction(database, async client => {
+        const { rows: [machine] } = await client.query(
+          'SELECT * FROM laundry_machines WHERE id = $1 FOR UPDATE SKIP LOCKED', [machineId]);
+        if (!machine) return;
+        const { rows: [{ now }] } = await client.query('SELECT clock_timestamp() AS now');
+        await advanceAttendance(client, machine, now, testAccounts);
+        await advanceQueue(client, machine, now);
+      });
+    } catch (error) {
+      failures.push(error);
+    }
   }
+  if (failures.length) throw new AggregateError(failures, 'Could not process laundry equipment.');
 }
 
-export function startQueueWorker(database) {
+export function startQueueWorker(database, testAccounts) {
   let current;
   const run = () => {
     if (current) return;
-    current = advanceWaitingQueues(database).catch(() => {
-      console.error('Could not advance laundry queues.');
+    current = advanceWaitingQueues(database, testAccounts).catch(() => {
+      console.error('Could not process laundry reservations and queues.');
     }).finally(() => { current = null; });
   };
   run();

@@ -106,6 +106,10 @@ function Pager({ page, hasNext, onPage }) {
   );
 }
 
+function cellValue({ name, type, render }, row) {
+  return render ? render(row) : type === 'timestamptz' ? formatDate(row[name]) : row[name] ?? '—';
+}
+
 function DataTable({ label, columns, rows }) {
   return (
     <div tabIndex={0} role="region" aria-label={label}
@@ -121,10 +125,8 @@ function DataTable({ label, columns, rows }) {
         </thead>
         <tbody>{rows.map(row => (
           <tr key={row.id ?? row.version} className="border-t border-slate-200">
-            {columns.map(({ name, type, render }) => (
-              <td key={name} className="min-w-24 px-4 py-3 align-top">
-                {render ? render(row) : type === 'timestamptz' ? formatDate(row[name]) : row[name] ?? '—'}
-              </td>
+            {columns.map(column => (
+              <td key={column.name} className="min-w-24 px-4 py-3 align-top">{cellValue(column, row)}</td>
             ))}
           </tr>
         ))}</tbody>
@@ -146,15 +148,95 @@ const reservationColumns = [
   { name: 'cancelled_at', label: 'Anulată la', type: 'timestamptz' },
 ];
 
+function AttendancePolicy({ policy, onSave }) {
+  return <form className="flex flex-wrap items-end gap-3" onSubmit={event => {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    onSave('/api/admin/reservation-attendance-policy', 'PUT', {
+      strikeWindowDays: Number(fields.get('window')),
+      suspensionHours: Number(fields.get('hours')),
+    }, 'Regula a fost salvată.');
+  }}>
+    <label className="grid gap-1">
+      Fereastra strike-urilor (zile)
+      <input name="window" type="number" required min="1" className={control} defaultValue={policy.strikeWindowDays} />
+    </label>
+    <label className="grid gap-1">
+      Suspendare (ore)
+      <input name="hours" type="number" required min="1" className={control} defaultValue={policy.suspensionHours} />
+    </label>
+    <button className={control}>Salvează regula</button>
+  </form>;
+}
+
 function AdminReservations({ path, authorized }) {
   const [filters, setFilters] = useState({ machineId: '', day: '', status: '' });
   const [page, setPage] = useState(1);
+  const reservationId = new URLSearchParams(window.location.search).get('rezervare');
   const params = new URLSearchParams({ page });
-  for (const [key, value] of Object.entries(filters)) {
+  if (reservationId) params.set('reservationId', reservationId);
+  else for (const [key, value] of Object.entries(filters)) {
     if (value) params.set(key, value);
   }
   const result = useData(authorized.allowed ? '/api/admin/reservations?' + params : null);
-  const equipment = useData(authorized.allowed ? '/api/laundry-machines' : null);
+  const equipment = useData(authorized.allowed && !reservationId ? '/api/laundry-machines' : null);
+  const policy = useData(authorized.allowed && !reservationId ? '/api/admin/reservation-attendance-policy' : null);
+  const [feedback, setFeedback] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  async function saveAttendance(url, method, body, message) {
+    if (saving) return;
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const response = await fetch(url, {
+        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (response.status === 401) {
+        window.location.replace('/autentificare');
+        return;
+      }
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message ?? 'Modificarea nu a putut fi salvată.');
+      }
+      setEditing(null);
+      setFeedback({ message });
+      if (method === 'PUT') policy.reload();
+      else result.reload();
+    } catch (error) {
+      setFeedback({ message: error.message, error: true });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const columns = [...reservationColumns, {
+    name: 'strike_resident_email', label: 'Rezident', render: row =>
+      <span className="[overflow-wrap:anywhere]">{row.strike_resident_email ?? '—'}</span>,
+  }, {
+    name: 'strike', label: 'Strike', render: row => {
+      if (!row.strike_at) return '—';
+      if (row.corrected_at) return <>Corectat · {row.correction_reason}</>;
+      if (editing !== row.id) {
+        return <button className={control} onClick={() => setEditing(row.id)}>Corectează strike-ul</button>;
+      }
+      return <form className="grid gap-2" onSubmit={event => {
+        event.preventDefault();
+        const reason = new FormData(event.currentTarget).get('reason');
+        saveAttendance('/api/admin/reservations/' + row.id + '/strike-correction', 'POST', { reason }, 'Strike-ul a fost corectat.');
+      }}>
+        <label className="grid gap-1">
+          Motivul corecției
+          <input name="reason" required maxLength={500} className={control} />
+        </label>
+        <button className={control} disabled={saving}>Confirmă corecția</button>
+        <button type="button" className={control} disabled={saving} onClick={() => setEditing(null)}>Renunță</button>
+      </form>;
+    },
+  }];
+
 
   function filter(event) {
     const { name, value } = event.target;
@@ -163,40 +245,57 @@ function AdminReservations({ path, authorized }) {
   }
 
   return (
-    <DataPage title="Rezervări" path={path} result={result} authorized={authorized} controls={
+    <DataPage title={reservationId ? 'Rezervare' : 'Rezervări'} path={path} result={result} authorized={authorized} controls={
       <>
-        <div className="grid items-end gap-3 sm:grid-cols-3">
-          <div className="grid gap-1">
-            <label htmlFor="admin-equipment">Echipament</label>
-            <select id="admin-equipment" className={control} name="machineId" value={filters.machineId} onChange={filter}>
-              <option value="">Toate echipamentele</option>
-              {equipment.data?.map(machine => (
-                <option key={machine.id} value={machine.id}>{machine.name} · {machine.location}</option>
-              ))}
-            </select>
+        {feedback && <p role={feedback.error ? 'alert' : 'status'}>{feedback.message}</p>}
+        {reservationId ? <a className="w-fit underline" href="/admin/rezervari">Toate rezervările</a> : <>
+          {policy.data && <fieldset disabled={saving} className="grid gap-2">
+            <legend className="font-semibold">Regulă de neprezentare</legend>
+            <AttendancePolicy policy={policy.data} onSave={saveAttendance} />
+          </fieldset>}
+          {policy.error && <button type="button" className={control + ' w-fit'} onClick={policy.reload}>
+            Reîncarcă regula de neprezentare
+          </button>}
+          <div className="grid items-end gap-3 sm:grid-cols-3">
+            <div className="grid gap-1">
+              <label htmlFor="admin-equipment">Echipament</label>
+              <select id="admin-equipment" className={control} name="machineId" value={filters.machineId} onChange={filter}>
+                <option value="">Toate echipamentele</option>
+                {equipment.data?.map(machine => (
+                  <option key={machine.id} value={machine.id}>{machine.name} · {machine.location}</option>
+                ))}
+              </select>
+            </div>
+            <label className="grid gap-1">
+              Zi
+              <input className={control} name="day" type="date" value={filters.day} onChange={filter} />
+            </label>
+            <div className="grid gap-1">
+              <label htmlFor="admin-reservation-status">Stare</label>
+              <select id="admin-reservation-status" className={control} name="status" value={filters.status} onChange={filter}>
+                <option value="">Toate stările</option>
+                <option value="active">Active</option>
+                <option value="cancelled">Anulate</option>
+              </select>
+            </div>
           </div>
-          <label className="grid gap-1">
-            Zi
-            <input className={control} name="day" type="date" value={filters.day} onChange={filter} />
-          </label>
-          <div className="grid gap-1">
-            <label htmlFor="admin-reservation-status">Stare</label>
-            <select id="admin-reservation-status" className={control} name="status" value={filters.status} onChange={filter}>
-              <option value="">Toate stările</option>
-              <option value="active">Active</option>
-              <option value="cancelled">Anulate</option>
-            </select>
-          </div>
-        </div>
-        {equipment.error && <button type="button" className={control + ' w-fit'} onClick={equipment.reload}>
-          Reîncarcă echipamentele
-        </button>}
+          {equipment.error && <button type="button" className={control + ' w-fit'} onClick={equipment.reload}>
+            Reîncarcă echipamentele
+          </button>}
+        </>}
       </>
     }>
-      {result.data && <>
-        <DataTable label="Rezervări" columns={reservationColumns} rows={result.data.items} />
-        <Pager page={page} hasNext={result.data.hasNext} onPage={setPage} />
-      </>}
+      {result.data && (reservationId
+        ? result.data.items[0] ? <dl className="grid gap-4 rounded-lg border border-slate-300 p-4 sm:grid-cols-2">
+          {columns.map(column => <div key={column.name}>
+            <dt className="font-semibold">{column.label}</dt>
+            <dd>{cellValue(column, result.data.items[0])}</dd>
+          </div>)}
+        </dl> : <p>Rezervarea nu a fost găsită.</p>
+        : <>
+          <DataTable label="Rezervări" columns={columns} rows={result.data.items} />
+          <Pager page={page} hasNext={result.data.hasNext} onPage={setPage} />
+        </>)}
     </DataPage>
   );
 }

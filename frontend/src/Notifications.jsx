@@ -18,6 +18,11 @@ const noticeLabels = {
   'report-taken': ['Sesizare preluată', 'reports', 'info'],
   'report-resolved': ['Sesizare rezolvată', 'check', 'success'],
   'access-request': ['Cerere de acces nouă', 'account', 'info'],
+  'reservation-reminder': ['Rezervarea ta se apropie', 'clock', 'info'],
+  'strike-issued': ['Strike pentru neprezentare', 'warning', 'warning'],
+  'strike-received': ['Ai primit un strike', 'warning', 'warning'],
+  'strike-corrected': ['Strike corectat', 'check', 'success'],
+  'reservation-start': ['Rezervarea ta a început', 'calendar', 'info'],
   'queue-turn': ['Interval disponibil astăzi', 'queue', 'info'],
 };
 const timeZone = 'Europe/Bucharest';
@@ -134,6 +139,7 @@ function groupNotices(items, now) {
 function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRead }) {
   const { offer } = item;
   const queue = item.kind === 'queue-turn';
+  const strike = item.kind === 'strike-issued';
   const remaining = offer ? Math.max(0, Math.ceil((Date.parse(offer.expiresAt) - now) / 1000)) : 0;
   const status = offer?.status === 'pending' && !remaining ? 'expired' : offer?.status;
   const [defaultTitle, defaultIcon, defaultTone] = noticeLabels[item.kind] ?? ['Notificare', 'bell', 'info'];
@@ -142,6 +148,8 @@ function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRe
   const tone = status === 'accepted' ? 'success' : status === 'expired' ? 'warning' : defaultTone;
   const equipment = [item.machineName, item.machineLocation].filter(Boolean).join(' · ');
   const calendar = item.room && item.machineId ? '/spalatorie/' + encodeURIComponent(item.room) + '?echipament=' + item.machineId : null;
+  const reservation = !strike && calendar && item.reservation && calendar +
+    '&zi=' + dayKey.format(new Date(item.reservation.startsAt)) + '#rezervare-' + item.reservation.id;
   const stamp = new Date(item.createdAt);
 
   return <li id={'notificare-' + item.id} className="notice-card" data-unread={item.readAt ? undefined : 'true'}
@@ -154,6 +162,7 @@ function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRe
       </div>
       {equipment && <p className="camin-muted">{equipment}</p>}
       {(!queue || !equipment) && <p className="notice-message">{item.message}</p>}
+      {item.strikeProgressMessage && <p className="camin-muted">{item.strikeProgressMessage}</p>}
       {offer && !offer.immediate && <p>
         {dayKey.format(new Date(offer.startsAt)) !== dayKey.format(stamp) &&
           <span className="camin-muted">{noticeDay.format(new Date(offer.startsAt))} · </span>}
@@ -170,6 +179,14 @@ function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRe
           </button>
         </div>
       </>}
+      {strike && item.reservation && <>
+        {item.residentEmail && <p className="[overflow-wrap:anywhere]"><strong>Rezident</strong> {item.residentEmail}</p>}
+        <p>Rezervare din {dateTime.format(new Date(item.reservation.startsAt))}</p>
+        <a className="camin-link" href={'/admin/rezervari?rezervare=' + encodeURIComponent(item.reservation.id)}>
+          Mergi la rezervare <span aria-hidden="true">→</span>
+        </a>
+      </>}
+      {reservation && <a className="camin-link" href={reservation}>Deschide rezervarea <span aria-hidden="true">→</span></a>}
       {calendar && (queue || (!offer && item.kind === 'restored')) &&
         <a className="camin-link" href={calendar}>Deschide calendarul <span aria-hidden="true">→</span></a>}
       {item.kind === 'access-request' && <a className="camin-link" href="/admin/cereri-acces">Vezi cererile de acces</a>}
@@ -254,7 +271,9 @@ export default function Notifications({ onUnreadCount }) {
         window.location.replace('/autentificare' + (target ? '?notificare=' + target : ''));
         return;
       }
-      if (response.status === 409) setFeedback('Oferta nu mai este disponibilă.');
+      const body = !response.ok ? await response.json().catch(() => null) : null;
+      if (body?.suspension) setFeedback(body.message);
+      else if (response.status === 409) setFeedback('Oferta nu mai este disponibilă.');
       else if (response.ok) setFeedback(action === 'accept' ? 'Rezervarea a fost confirmată.' : 'Intervalul a fost eliberat.');
       else throw new Error(unavailable);
     } catch {
@@ -291,6 +310,7 @@ export default function Notifications({ onUnreadCount }) {
 
   const now = snapshot ? Date.parse(snapshot.now) + time - snapshot.received : 0;
   const groups = snapshot ? groupNotices(snapshot.items, now) : [];
+  const strikeProgress = snapshot?.strikeProgress;
   return <section className="notice-inbox">
     <header className="portal-heading-row">
       <h1>Notificări</h1>
@@ -301,6 +321,11 @@ export default function Notifications({ onUnreadCount }) {
         <div className="camin-panel"><PushControls publicKey={snapshot.pushPublicKey} unreadCount={unreadCount} /></div>
       </details>}
     </header>
+    {strikeProgress && <p className="camin-muted">
+      {strikeProgress.suspendedUntil
+        ? 'Suspendare activă până la ' + dateTime.format(new Date(strikeProgress.suspendedUntil))
+        : `${strikeProgress.active} ${strikeProgress.active === 1 ? 'strike activ' : 'strike-uri active'} · Mai ai ${strikeProgress.remaining} până la suspendare`}
+    </p>}
     {loadError && <p role="alert">{loadError} <button className="underline" onClick={() => refresh(value => value + 1)}>Reîncarcă</button></p>}
     {!snapshot && !loadError && <p role="status">Se încarcă notificările…</p>}
     {feedback && <p role="status">{feedback}</p>}

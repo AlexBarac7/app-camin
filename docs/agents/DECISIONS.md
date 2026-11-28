@@ -29,6 +29,11 @@
 - D-025 · Welcome newly activated accounts at first sign-in · [Admin data](decisions/admin-data.md)
 - D-026 · Distinguish duplicate access requests and allow invitation replacement · [Admin data](decisions/admin-data.md)
 - D-027 · Reject pending access requests and notify the applicant · [Admin data](decisions/admin-data.md)
+- D-029 · Notify operators when a laundry strike is issued · [Laundry decisions](decisions/laundry-decisions.md)
+- D-030 · Notify the reservation holder when a laundry strike is issued · [Laundry decisions](decisions/laundry-decisions.md)
+- D-032 · Cancel only reservations starting during a laundry suspension · [Laundry decisions](decisions/laundry-decisions.md)
+- D-033 · Show each resident their strike count and notify them of corrections · [Laundry decisions](decisions/laundry-decisions.md)
+- D-034 · Show authorized operators whose reservation received a strike · [Laundry decisions](decisions/laundry-decisions.md)
 
 ---
 
