@@ -1,6 +1,7 @@
 import { json, Router } from 'express';
 import { localOrigins, requireSession } from '../auth/auth.routes.js';
 import { activeSuspension, residentStrikeProgress, suspendedBooking } from '../laundry/reservation-attendance.js';
+import { announcementRoutes, validNoticeId } from './announcements.routes.js';
 import { pushEndpoint, subscriptionKeys } from './push.js';
 
 async function answerOffer(database, offerId, userId, action) {
@@ -59,17 +60,23 @@ async function saveAnswer(client, offerId, userId, action) {
   return [201, reservation];
 }
 
-export function notificationRoutes(database, origins = localOrigins, publicKey = null) {
+export function notificationRoutes(database, origins = localOrigins, publicKey = null, photos) {
   const router = Router();
   router.use(requireSession(database), (req, res, next) => {
     if (req.method !== 'GET' && !origins.includes(req.get('origin'))) return res.sendStatus(403);
     next();
   });
+  router.use('/announcements', announcementRoutes(database, photos));
   router.get('/', async (_req, res) => {
     const { id: userId, role } = res.locals.account;
     const canReviewStrikes = role === 'admin' || role === 'administrator';
     const { rows } = await database.query(`
-      SELECT notice.id, notice.kind, notice.message, notice.strike_progress_message, notice.created_at, notice.read_at, notice.machine_id, machine.room,
+      SELECT notice.id, notice.kind, COALESCE(announcement.message, notice.message) AS message,
+        notice.announcement_id, notice.announcement_confirmed_at,
+        CASE WHEN announcement.id IS NOT NULL THEN ARRAY(
+          SELECT photo.id FROM admin_announcement_photos photo WHERE photo.announcement_id = announcement.id ORDER BY photo.id
+        ) END AS announcement_photos,
+        notice.strike_progress_message, notice.created_at, notice.read_at, notice.machine_id, machine.room,
         notice.report_id, notice.reservation_id, reservation.starts_at AS reservation_start, machine.name AS machine_name, machine.location AS machine_location,
         strike_resident.email AS strike_resident_email,
         COALESCE(offer.id, queue.id) AS offer_id,
@@ -82,6 +89,7 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
           THEN 'expired' ELSE COALESCE(offer.status, queue.status) END AS offer_status,
         statement_timestamp() AS now
       FROM laundry_notifications notice
+      LEFT JOIN admin_announcements announcement ON announcement.id = notice.announcement_id
       LEFT JOIN laundry_machines machine ON machine.id = notice.machine_id
       LEFT JOIN laundry_reservations reservation ON reservation.id = notice.reservation_id
       LEFT JOIN users strike_resident ON strike_resident.id = reservation.user_id
@@ -100,6 +108,9 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
         machineId: row.machine_id, room: row.room,
         ...(row.machine_name && { machineName: row.machine_name, machineLocation: row.machine_location }),
         ...(row.report_id && { reportId: row.report_id }),
+        ...(row.announcement_id && { announcement: {
+          id: row.announcement_id, confirmedAt: row.announcement_confirmed_at, photoIds: row.announcement_photos,
+        } }),
         ...(row.reservation_id && { reservation: { id: row.reservation_id, startsAt: row.reservation_start } }),
         ...(row.offer_id && { offer: {
           id: row.offer_id, status: row.offer_status,
@@ -117,16 +128,27 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
   });
   router.put('/:id/read', async (req, res) => {
     const { id } = req.params;
-    if (!/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) return res.sendStatus(404);
+    if (!validNoticeId(id)) return res.sendStatus(404);
     const { rows: [notice] } = await database.query(`
       UPDATE laundry_notifications SET read_at = coalesce(read_at, clock_timestamp())
       WHERE id = $1 AND user_id = $2 RETURNING read_at AS "readAt"`, [id, res.locals.account.id]);
     if (!notice) return res.sendStatus(404);
     res.json(notice);
   });
+  router.put('/:id/confirm', async (req, res) => {
+    const { id } = req.params;
+    if (!validNoticeId(id)) return res.sendStatus(404);
+    const { rows: [notice] } = await database.query(`
+      UPDATE laundry_notifications
+      SET announcement_confirmed_at = coalesce(announcement_confirmed_at, clock_timestamp())
+      WHERE id = $1 AND user_id = $2 AND announcement_id IS NOT NULL
+      RETURNING announcement_confirmed_at AS "confirmedAt"`, [id, res.locals.account.id]);
+    if (!notice) return res.sendStatus(404);
+    res.json(notice);
+  });
   router.post('/offers/:id', json({ limit: '1kb' }), async (req, res) => {
     const { id } = req.params;
-    if (!/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) return res.sendStatus(404);
+    if (!validNoticeId(id)) return res.sendStatus(404);
     const { action } = req.body ?? {};
     if (!['accept', 'decline'].includes(action)) return res.sendStatus(400);
     const [status, body] = await answerOffer(database, id, res.locals.account.id, action);

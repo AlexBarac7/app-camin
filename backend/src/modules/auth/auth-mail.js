@@ -25,17 +25,24 @@ const accessRejection = {
   intro: 'Cererea ta de acces în aplicația ' + appName + ' a fost respinsă.',
 };
 
+const accessRequest = {
+  subject: 'Cerere de acces nouă · ' + appName,
+  heading: 'Cerere de acces nouă',
+  intro: 'Ai o cerere de înregistrare de verificat în aplicația ' + appName + '.',
+  action: 'Vezi cererile de acces',
+};
+
 export function createAuthMailer({ from, ...smtp }) {
   const transport = nodemailer.createTransport({
     ...smtp, dnsTimeout: 5000, connectionTimeout: 5000, greetingTimeout: 5000, socketTimeout: 8000,
     disableFileAccess: true, disableUrlAccess: true, maxRecipients: 1,
   });
   async function send(to, { subject, heading, intro, action, expiry }, link) {
-    const details = link ? [action + ': ' + link, expiry] : [];
+    const details = link ? [action + ': ' + link, ...(expiry ? [expiry] : [])] : [];
     const introHtml = intro.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
     const actionHtml = link ? `
           <p style="margin:24px 0"><a href="${link}" style="display:inline-block;padding:12px 20px;border-radius:8px;background:#0d4840;color:#ffffff;font-weight:bold;text-decoration:none">${action}</a></p>
-          <p>${expiry}</p>` : '';
+          ${expiry ? '<p>' + expiry + '</p>' : ''}` : '';
     const { accepted } = await transport.sendMail({
       from: { name: appName, address: from },
       to: { address: to, name: '' },
@@ -57,6 +64,7 @@ export function createAuthMailer({ from, ...smtp }) {
     sendInvitation: (to, link) => send(to, invitation, link),
     sendPasswordReset: (to, link) => send(to, passwordReset, link),
     sendAccessRejection: to => send(to, accessRejection),
+    sendAccessRequest: (to, link) => send(to, accessRequest, link),
     sendEndReminder: (to, message) => send(to, {
       subject: 'Utilizarea la spălătorie se încheie în curând · ' + appName,
       heading: 'Se apropie finalul rezervării',

@@ -31,11 +31,14 @@ export async function deliverPush(delivery, send) {
     path: '/spalatorie/' + delivery.room + '?echipament=' + delivery.machine_id +
       '&zi=' + reservationDay.format(delivery.reservation_start) + '#rezervare-' + delivery.reservation_id,
   } : {};
+  const title = delivery.kind === 'announcement' ? delivery.message
+    : delivery.kind === 'access-request' ? 'Cerere de acces nouă' : null;
   try {
     await send({
       endpoint: delivery.endpoint,
       keys: { p256dh: delivery.p256dh, auth: delivery.auth },
-    }, JSON.stringify({ id: delivery.notification_id, unreadCount: delivery.unread_count, ...reservation }), {
+    }, JSON.stringify({ id: delivery.notification_id, unreadCount: delivery.unread_count, ...reservation,
+      ...(title && { title }) }), {
       TTL: offerTtl ?? 3600, urgency: offerTtl === null ? 'normal' : 'high', timeout: 4000,
     });
     return 'done';
@@ -61,7 +64,7 @@ export async function dispatchPushDeliveries(database, send) {
     SELECT leased.*, subscription.endpoint, subscription.p256dh, subscription.auth,
       (SELECT count(*)::integer FROM laundry_notifications notice
        WHERE notice.user_id = subscription.user_id AND notice.read_at IS NULL) AS unread_count,
-      notice.reservation_id, notice.message, notice.machine_id, machine.room, reservation.starts_at AS reservation_start,
+      notice.reservation_id, notice.kind, notice.message, notice.machine_id, machine.room, reservation.starts_at AS reservation_start,
       COALESCE(offer.expires_at, queue.expires_at, CASE notice.kind
         WHEN 'reservation-reminder' THEN reservation.starts_at
         WHEN 'reservation-start' THEN LEAST(reservation.starts_at + interval '10 minutes', reservation.use_ends_at)

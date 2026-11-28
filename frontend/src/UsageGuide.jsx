@@ -66,6 +66,17 @@ export default function UsageGuide({ reportsPath, canManage }) {
       <p>Administratorul este anunțat când apare o sesizare nouă. În <a className="camin-link" href="/notificari">Notificări</a> afli
         când sesizarea ta e preluată sau rezolvată, când o defecțiune îți afectează rezervarea ori când primești o ofertă în Live-queue.
         Apasă <strong>OK</strong> pe un mesaj ca să-l marchezi drept citit.</p>
+      <p>Când o cerere de înregistrare intră în lista de aprobare, Adminul primește o alertă în aplicație, un e-mail și o alertă
+        pe dispozitivele cu notificări activate. Linkul din e-mail deschide <strong>Cereri de acces</strong>.</p>
+      <h3>Anunțuri de la Administrator</h3>
+      <p>Administratorul poate trimite un mesaj tuturor rezidenților cu cont în aplicație. În <strong>Notificări</strong>,
+        apasă <strong>Anunță rezidenții</strong>, scrie mesajul și apasă <strong>Trimite</strong>. Poți atașa până la patru
+        poze de cel mult 10 MB fiecare, folosind <strong>Fă o poză</strong> sau <strong>Încarcă poze</strong>.</p>
+      <p>Ca rezident, găsești mesajul și pozele în <strong>Notificări</strong>, sub titlul <strong>Notificare de la Administrator</strong>.
+        Dacă ai activat alertele în browser, primești și o alertă pe dispozitiv care deschide anunțul.</p>
+      <p>Dacă vrei să îi comunici Administratorului că ai citit anunțul, apasă <strong>Confirm că am citit</strong>.
+        Confirmarea este opțională. Butonul <strong>OK</strong> marchează mesajul ca citit în lista ta.
+        În <strong>Anunțuri trimise</strong>, Administratorul poate deschide fiecare anunț ca să vadă câți rezidenți au confirmat și cine sunt.</p>
       <h3>Mesaj înainte de finalul utilizării</h3>
       <p>Cu 15 minute înainte să se termine timpul tău de utilizare, primești un mesaj ca să te pregătești să eliberezi echipamentul.
         De exemplu, dacă ai rezervat de la 18:00 la 18:40, folosești echipamentul până la 18:30, iar ultimele 10 minute sunt pentru predare.

@@ -12,6 +12,7 @@ import { createDatabase } from '../src/db.js';
 import { runMigrations } from '../src/migrations.js';
 import { tokenHash } from '../src/modules/auth/credentials.js';
 import { issueInvitation, revokeInvitation } from '../src/modules/auth/invitations.js';
+import { dispatchPushDeliveries } from '../src/modules/notifications/push.js';
 
 test('resident access on a fresh disposable PostgreSQL database', async t => {
   assert.equal(process.env.PGDATABASE, 'app_camin_auth_test');
@@ -205,6 +206,10 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   assert.deepEqual(await (await request('session', undefined, otherCookie)).json(), {
     email: otherEmail, role: 'admin',
   });
+  await db.query(`
+    INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+    SELECT id, 'https://fcm.googleapis.com/fcm/send/access-' || id, 'fixture', 'fixture'
+    FROM users WHERE email IN ($1, $2)`, [email, otherEmail]);
   const submissions = await Promise.all([
     request('request-access', { email: applicant }),
     request('request-access', { email: ' APPLICANT@example.test ' }),
@@ -220,6 +225,30 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
   assert.equal(requests[0].email, applicant);
   const notices = await (await fetch(base + '/api/notifications', { headers: { cookie: otherCookie } })).json();
   assert.equal(notices.items.filter(item => item.kind === 'access-request').length, 1);
+  const pushed = [];
+  await dispatchPushDeliveries(db, async (subscription, payload) => pushed.push({
+    endpoint: subscription.endpoint, notice: JSON.parse(payload),
+  }));
+  assert.deepEqual(pushed, [{
+    endpoint: (await db.query('SELECT endpoint FROM push_subscriptions JOIN users ON users.id = user_id WHERE email = $1',
+      [otherEmail])).rows[0].endpoint,
+    notice: { id: notices.items[0].id, unreadCount: 1, title: 'Cerere de acces nouă' },
+  }]);
+  const { dispatchAccessRequestEmails } = await import('../src/modules/notifications/access-request-email.js');
+  const delivered = [];
+  const sendAccessRequest = async address => delivered.push(address);
+  await dispatchAccessRequestEmails(db, false, async address => {
+    assert.equal(address, otherEmail);
+    throw Object.assign(new Error('fixture SMTP deferral'), { responseCode: 450 });
+  });
+  await dispatchAccessRequestEmails(db, false, sendAccessRequest);
+  assert.deepEqual(delivered, []);
+  await db.query('UPDATE access_request_notice_emails SET next_attempt_at = now() WHERE next_attempt_at IS NOT NULL');
+  await Promise.all([
+    dispatchAccessRequestEmails(db, false, sendAccessRequest),
+    dispatchAccessRequestEmails(db, false, sendAccessRequest),
+  ]);
+  assert.deepEqual(delivered, [otherEmail]);
   const approval = 'access-requests/' + requests[0].id + '/approve';
   assert.equal((await admin(approval, {}, activeCookie)).status, 403);
   const approvals = await Promise.all([admin(approval, {}, otherCookie), admin(approval, {}, otherCookie)]);
@@ -280,6 +309,13 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
     };
     assert.equal(await submit(true), 'no_invitation');
     assert.equal(await submit(), 'received');
+    const countDeliveries = async table => (await db.query(`
+      SELECT count(*)::integer AS count FROM ${table} delivery
+      JOIN laundry_notifications notice ON notice.id = delivery.notification_id
+      WHERE notice.kind = 'access-request'`)).rows[0].count;
+    const beforeReplacement = [
+      await countDeliveries('push_deliveries'), await countDeliveries('access_request_notice_emails'),
+    ];
     const [firstRequest] = await (await admin('access-requests', undefined, otherCookie)).json();
     const approvalPath = 'access-requests/' + firstRequest.id + '/approve';
     assert.equal((await admin(approvalPath, {}, otherCookie)).status, 201);
@@ -291,6 +327,9 @@ test('resident access on a fresh disposable PostgreSQL database', async t => {
     assert.equal(await submit(), 'invite_expired');
     await db.query("UPDATE invitations SET expires_at = clock_timestamp() + interval '1 hour' WHERE token_hash = $1", [digest]);
     assert.deepEqual((await Promise.all([submit(true), submit(true)])).sort(), ['pending', 'replacement_received']);
+    assert.deepEqual([
+      await countDeliveries('push_deliveries'), await countDeliveries('access_request_notice_emails'),
+    ], beforeReplacement.map(count => count + 1));
     const [reopened] = await (await admin('access-requests', undefined, otherCookie)).json();
     assert.equal(reopened.id, firstRequest.id);
     assert.equal(reopened.delivery, 'pending');

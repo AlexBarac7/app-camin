@@ -519,7 +519,7 @@ export default function ResidentAccess() {
   else if (guide) content = <UsageGuide reportsPath={canManage ? operatorReportsPath : personalReportsPath} canManage={canManage} />;
   else if (route === '/cont') content = <Account account={account} />;
   else if (route === '/am-uitat-parola') content = <PasswordResetRequest />;
-  else if (inbox) content = <Notifications onUnreadCount={setInboxUnreadCount} />;
+  else if (inbox) content = <Notifications onUnreadCount={setInboxUnreadCount} canAnnounce={account.role === 'administrator'} />;
   else if (route === operatorReportsPath) content = canManage
     ? <LaundryReports operator heading={headings[route]} />
     : <div className="grid gap-3"><h1>Acces interzis</h1><a className={authLinkStyle} href={personalReportsPath}>Sesizările mele</a></div>;

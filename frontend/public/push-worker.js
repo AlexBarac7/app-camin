@@ -29,11 +29,11 @@ async function updateAppBadge(fallbackCount) {
 const reservationPath = /^\/spalatorie\/(?:1|2|uscatorie)\?echipament=\d+&zi=\d{4}-\d{2}-\d{2}#rezervare-\d+$/;
 
 self.addEventListener('push', event => {
-  const { id, unreadCount, message, path } = event.data?.json() ?? {};
+  const { id, unreadCount, message, path, title } = event.data?.json() ?? {};
   if (!/^\d+$/.test(id)) return;
   const reservation = typeof message === 'string' && reservationPath.test(path);
   event.waitUntil(Promise.all([
-    self.registration.showNotification('Căminul Meu', {
+    self.registration.showNotification(typeof title === 'string' ? title : 'Căminul Meu', {
       body: reservation ? message : 'Ai un mesaj nou. Deschide aplicația pentru detalii.',
       tag: 'laundry-notice-' + id,
       data: { path: reservation ? path : '/notificari#notificare-' + id },

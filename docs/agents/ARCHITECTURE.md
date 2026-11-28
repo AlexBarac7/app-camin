@@ -78,8 +78,8 @@ See README.md for verified local commands. Compose uses development servers;
 frontend npm run build produces static assets. Railway is a future target only.
 
 ## Boundaries
-Quotas and the email fallback remain outside the current implementation. No Railway deployment configuration or
-authorization exists yet.
+Quotas remain outside the current implementation. Email fallback covers the
+end-of-use reminder. Railway is a future deployment target.
 
 Migration 006 adds the independent equipment permission, the reservation linked
 to a pending inspection and the cancellation reason. Equipment changes lock
@@ -134,3 +134,14 @@ Migration 025 gives an end-of-use notice one email job when the recipient has
 zero registered push subscriptions. The job resolves the account address at
 dispatch and claims the attempt before contacting SMTP. An explicit temporary
 SMTP rejection can schedule another attempt before use ends.
+
+Migration 026 stores Administrator announcements and private photo references.
+Publication records the announcement, its recipient inbox entries and Web Push
+jobs together. A per-author request ID makes submission retries idempotent.
+The inbox records the resident's optional confirmation separately from its
+existing read marker. Only the author can see the list of confirmations.
+
+Migration 027 adds the email queue for access request notices. When a request
+enters the approval queue, the same transaction writes the Admin inbox notice,
+push jobs for subscribed devices and an email job for the Admin account.
+The SMTP worker checks the current Admin role before sending.

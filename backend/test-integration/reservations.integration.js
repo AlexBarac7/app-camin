@@ -1276,3 +1276,121 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     });
   });
 });
+
+test('Administrator announcements reach resident accounts and track explicit confirmation', async t => {
+  assert.equal(process.env.PGDATABASE, 'app_camin_reservations_test');
+  const db = createDatabase(loadDatabaseConfig());
+  t.after(() => db.close());
+  await runMigrations(db, fileURLToPath(new URL('../migrations/', import.meta.url)), 'apply');
+  const objects = new Map();
+  let unavailable = false;
+  const photos = {
+    async put(key, bytes) {
+      objects.set(key, bytes);
+      if (unavailable && objects.size === 2) throw new Error('fixture storage unavailable');
+    },
+    async get(key) { return objects.get(key); },
+    async remove(key) { objects.delete(key); },
+  };
+  const server = createApp(db, undefined, 'fixture-public-key', photos, { testAccounts: true }).listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => server.close());
+  const { rows: users } = await db.query(`
+    INSERT INTO users (email, password_hash, can_view_service_status, can_manage_equipment) VALUES
+      ('announcement-author@example.test', 'fixture', false, true),
+      ('admin@example.test', 'fixture', false, true),
+      ('announcement-first@example.test', 'fixture', false, false),
+      ('announcement-second@example.test', 'fixture', false, false)
+    RETURNING id, email`);
+  const [author, admin, first, second] = users;
+  const cookies = new Map();
+  for (const user of users) {
+    const token = newToken();
+    await db.query('INSERT INTO sessions (user_id, token_hash) VALUES ($1, $2)', [user.id, tokenHash(token)]);
+    cookies.set(user, 'camin_session=' + token);
+  }
+  const inbox = '/api/notifications';
+  const announcements = inbox + '/announcements';
+  const request = (path, user, method = 'GET', body) => fetch(
+    'http://127.0.0.1:' + server.address().port + path, {
+      method, headers: { origin: 'http://localhost:5173',
+        ...(user && { cookie: cookies.get(user) }),
+        ...(body && !(body instanceof FormData) && { 'content-type': 'application/json' }) },
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    });
+  const message = 'Apa va fi oprită joi.';
+  const requestId = 'f5c977ae-cb2a-461b-8ca4-a458c55337e2';
+  const publish = (user, body = { message, requestId }) => request(announcements, user, 'POST', body);
+  assert.equal((await publish(null)).status, 401);
+  assert.equal((await publish(admin)).status, 403);
+  assert.equal((await publish(first)).status, 403);
+  assert.equal((await publish(author, { message: '  ', requestId })).status, 400);
+
+  const image = await sharp({ create: { width: 4, height: 4, channels: 3, background: 'red' } }).png().toBuffer();
+  const form = () => {
+    const body = new FormData();
+    body.set('message', message);
+    body.set('requestId', requestId);
+    body.append('photos', new Blob([image], { type: 'image/png' }), 'first.png');
+    body.append('photos', new Blob([image], { type: 'image/png' }), 'second.png');
+    return body;
+  };
+  unavailable = true;
+  assert.equal((await publish(author, form())).status, 503);
+  assert.equal(objects.size, 0);
+  assert.deepEqual(await (await request(announcements, author)).json(), []);
+  unavailable = false;
+  await db.query(`
+    INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+    VALUES ($1, 'https://fcm.googleapis.com/fcm/send/announcement-fixture', 'fixture', 'fixture')`, [first.id]);
+
+  const results = await Promise.all([publish(author, form()), publish(author, form())]);
+  assert.deepEqual(results.map(response => response.status).sort(), [200, 201]);
+  const [{ id }, retry] = await Promise.all(results.map(response => response.json()));
+  assert.equal(retry.id, id);
+  assert.equal(objects.size, 2);
+  const findNotices = async user => (await (await request(inbox, user)).json()).items
+    .filter(item => item.kind === 'announcement');
+  const [firstNotice] = await findNotices(first);
+  const secondNotices = await findNotices(second);
+  assert.equal(secondNotices.length, 1);
+  assert.equal(firstNotice.message, message);
+  assert.equal(firstNotice.announcement.id, id);
+  assert.equal(firstNotice.announcement.confirmedAt, null);
+  assert.equal(firstNotice.announcement.photoIds.length, 2);
+  assert.deepEqual(await findNotices(author), []);
+  assert.deepEqual(await findNotices(admin), []);
+  assert.equal((await request(announcements, first)).status, 403);
+  assert.equal((await request(announcements + '/' + id, first)).status, 404);
+  const photo = announcements + '/' + id + '/photos/' + firstNotice.announcement.photoIds[0];
+  assert.equal((await request(photo, null)).status, 401);
+  assert.equal((await request(photo, admin)).status, 404);
+  const attachment = await request(photo, second);
+  assert.equal(attachment.status, 200);
+  assert.equal(attachment.headers.get('content-type'), 'image/jpeg');
+  assert.equal((await request(photo, author)).status, 200);
+
+  const pushed = [];
+  await dispatchPushDeliveries(db, async (subscription, payload) => {
+    if (subscription.endpoint.endsWith('/announcement-fixture')) pushed.push(JSON.parse(payload));
+  });
+  assert.deepEqual(pushed, [{ id: firstNotice.id, unreadCount: 1, title: 'Notificare de la Administrator' }]);
+
+  const summary = async () => (await (await request(announcements + '/' + id, author)).json()).recipients;
+  const receipt = inbox + '/' + firstNotice.id + '/confirm';
+  assert.equal((await request(receipt, second, 'PUT')).status, 404);
+  assert.equal((await request(inbox + '/' + firstNotice.id + '/read', first, 'PUT')).status, 200);
+  assert.equal((await summary()).find(row => row.email === first.email).confirmedAt, null);
+  const confirmation = await request(receipt, first, 'PUT');
+  assert.equal(confirmation.status, 200);
+  const { confirmedAt } = await confirmation.json();
+  assert.ok(confirmedAt);
+  assert.deepEqual(await (await request(receipt, first, 'PUT')).json(), { confirmedAt });
+  assert.equal((await findNotices(first))[0].announcement.confirmedAt, confirmedAt);
+  assert.equal((await summary()).find(row => row.email === first.email).confirmedAt, confirmedAt);
+  assert.equal((await summary()).find(row => row.email === second.email).confirmedAt, null);
+
+  const textOnly = await publish(author, { message, requestId: '3dffab18-dc2f-47d4-a982-cc633d06be56' });
+  assert.equal(textOnly.status, 201);
+  assert.equal((await findNotices(first))[0].announcement.photoIds.length, 0);
+});

@@ -36,6 +36,7 @@
 - D-034 · Show authorized operators whose reservation received a strike · [Laundry decisions](decisions/laundry-decisions.md)
 - D-035 · Remind residents 15 minutes before laundry use ends · [Laundry decisions](decisions/laundry-decisions.md)
 - D-036 · Send the end-of-use reminder by email without a registered push device · [Laundry decisions](decisions/laundry-decisions.md)
+- D-037 · Alert Admin by Web Push and email about access requests · [Admin data](decisions/admin-data.md)
 
 ---
 

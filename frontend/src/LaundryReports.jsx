@@ -153,10 +153,17 @@ function ReportForm({ machine, onCancel, onSaved }) {
       </label>
       <fieldset className="grid gap-2">
         <legend className="mb-1 font-medium">Fotografie (opțional)</legend>
-        <label className={button + ' w-fit cursor-pointer focus-within:outline-2'}>
-          Încarcă o poză
-          <input type="file" accept={imageTypes} className="sr-only" onChange={choosePhoto} disabled={preparing} />
-        </label>
+        <div className="flex flex-wrap gap-2">
+          <label className={button + ' w-fit cursor-pointer focus-within:outline-2'}>
+            Fă o poză
+            <input type="file" accept="image/*" capture="environment" className="sr-only"
+              onChange={choosePhoto} disabled={preparing} />
+          </label>
+          <label className={button + ' w-fit cursor-pointer focus-within:outline-2'}>
+            Încarcă o poză
+            <input type="file" accept={imageTypes} className="sr-only" onChange={choosePhoto} disabled={preparing} />
+          </label>
+        </div>
         {preparing && <p role="status">Pregătim fotografia…</p>}
         {photo && <div className="flex flex-wrap items-center gap-2">
           <span className="break-all">{photo.name}</span>
