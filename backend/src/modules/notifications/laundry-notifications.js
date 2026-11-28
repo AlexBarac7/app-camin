@@ -9,7 +9,7 @@ async function notify(client, machine, userIds, kind, message, now, reportId = n
       INSERT INTO laundry_notifications (user_id, machine_id, kind, message, created_at, report_id, reservation_id, strike_progress_message)
       SELECT DISTINCT user_id, $1::integer, $2::text, $3::text, $4::timestamptz, $6::bigint, $8::bigint, $9::text
       FROM unnest($5::bigint[]) AS user_id
-      WHERE $2::text NOT IN ('reservation-reminder', 'reservation-start') OR EXISTS (
+      WHERE $2::text NOT IN ('reservation-reminder', 'reservation-start', 'reservation-end-reminder') OR EXISTS (
         SELECT 1 FROM laundry_reservations WHERE id = $8 AND cancelled_at IS NULL
       )
       RETURNING id, user_id
@@ -18,6 +18,12 @@ async function notify(client, machine, userIds, kind, message, now, reportId = n
       SELECT notices.id, subscription.id FROM notices
       JOIN push_subscriptions subscription USING (user_id)
       WHERE $7::boolean
+    ), emails AS (
+      INSERT INTO laundry_end_reminder_emails (notification_id, next_attempt_at)
+      SELECT notices.id, $4 FROM notices
+      WHERE $2::text = 'reservation-end-reminder' AND NOT EXISTS (
+        SELECT 1 FROM push_subscriptions subscription WHERE subscription.user_id = notices.user_id
+      )
     )
     SELECT id FROM notices`, [machine?.id ?? null, kind, message, now, userIds, reportId, push, reservationId, strikeProgressMessage]);
   return rows[0]?.id;

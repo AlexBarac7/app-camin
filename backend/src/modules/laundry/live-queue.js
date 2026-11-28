@@ -7,6 +7,29 @@ import {
   excuseExpiredInspectionAttendance, issueStrike, suspendedBooking,
 } from './reservation-attendance.js';
 
+const endReminderDue = now => `
+  reservation.cancelled_at IS NULL AND reservation.finished_at IS NULL
+  AND reservation.starts_at <= reservation.use_ends_at - interval '15 minutes'
+  AND COALESCE(reservation.created_at, reservation.starts_at) <= reservation.use_ends_at - interval '15 minutes'
+  AND reservation.use_ends_at > ${now} AND reservation.use_ends_at <= ${now} + interval '15 minutes'
+  AND (machine.technical_status = 'working' OR
+       (machine.technical_status = 'inspection' AND machine.inspection_reservation_id = reservation.id))
+  AND NOT EXISTS (
+    SELECT 1 FROM laundry_notifications notice
+    WHERE notice.reservation_id = reservation.id AND notice.kind = 'reservation-end-reminder'
+  )`;
+
+async function advanceEndReminders(client, machine, now) {
+  const { rows } = await client.query(`
+    SELECT reservation.id, reservation.user_id FROM laundry_reservations reservation
+    JOIN laundry_machines machine ON machine.id = reservation.machine_id
+    WHERE reservation.machine_id = $1 AND ${endReminderDue('$2::timestamptz')}`, [machine.id, now]);
+  for (const reservation of rows) {
+    await notifyReservation(client, machine, reservation, 'reservation-end-reminder',
+      'Mai ai cel mult 15 minute până la finalul utilizării. Pregătește-te să eliberezi echipamentul.', now);
+  }
+}
+
 async function advanceAttendance(client, machine, now, testAccounts) {
   const underInspection = machine.technical_status === 'inspection';
   if (underInspection) await excuseExpiredInspectionAttendance(client, machine, now);
@@ -207,6 +230,10 @@ export async function advanceWaitingQueues(database, testAccounts = false) {
                                    THEN 'reservation-reminder' ELSE 'reservation-start' END
         ))
     UNION
+    SELECT reservation.machine_id FROM laundry_reservations reservation
+    JOIN laundry_machines machine ON machine.id = reservation.machine_id
+    WHERE ${endReminderDue('statement_timestamp()')}
+    UNION
     SELECT offer.machine_id FROM laundry_restoration_offers offer
     JOIN laundry_notifications notice ON notice.id = offer.notification_id
     JOIN laundry_suspensions suspension ON suspension.user_id = notice.user_id
@@ -222,6 +249,7 @@ export async function advanceWaitingQueues(database, testAccounts = false) {
         if (!machine) return;
         const { rows: [{ now }] } = await client.query('SELECT clock_timestamp() AS now');
         await advanceAttendance(client, machine, now, testAccounts);
+        await advanceEndReminders(client, machine, now);
         await advanceQueue(client, machine, now);
       });
     } catch (error) {

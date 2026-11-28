@@ -5,6 +5,7 @@ import { loadConfig } from './config.js';
 import { createDatabase } from './db.js';
 import { createApp } from './app.js';
 import { startPushDelivery } from './modules/notifications/push.js';
+import { startEndReminderEmails } from './modules/notifications/end-reminder-email.js';
 import { createReportPhotoStore } from './modules/laundry/report-photos.js';
 import { localTestAccounts } from './modules/auth/account-roles.js';
 import { createAuthMailer } from './modules/auth/auth-mail.js';
@@ -35,6 +36,7 @@ try {
     console.log(`Backend listening on port ${config.port}.`);
   });
   const stopPushDelivery = startPushDelivery(database, config.push);
+  const stopEndReminderEmails = startEndReminderEmails(database, authMail?.sendEndReminder);
   const stopQueue = startQueueWorker(database, testAccounts);
   const listeners = [server];
   if (config.internalReadinessPort) {
@@ -51,7 +53,10 @@ try {
     process.once(signal, async () => {
       const deadline = setTimeout(() => process.exit(1), 5000);
       deadline.unref();
-      await Promise.all([stopPushDelivery(), stopQueue(), ...listeners.map(listener => new Promise(resolve => listener.close(resolve)))]);
+      await Promise.all([
+        stopPushDelivery(), stopEndReminderEmails(), stopQueue(),
+        ...listeners.map(listener => new Promise(resolve => listener.close(resolve))),
+      ]);
       await database.close();
       clearTimeout(deadline);
       process.exit(0);

@@ -19,6 +19,7 @@ const noticeLabels = {
   'report-resolved': ['Sesizare rezolvată', 'check', 'success'],
   'access-request': ['Cerere de acces nouă', 'account', 'info'],
   'reservation-reminder': ['Rezervarea ta se apropie', 'clock', 'info'],
+  'reservation-end-reminder': ['Utilizarea se încheie în curând', 'clock', 'info'],
   'strike-issued': ['Strike pentru neprezentare', 'warning', 'warning'],
   'strike-received': ['Ai primit un strike', 'warning', 'warning'],
   'strike-corrected': ['Strike corectat', 'check', 'success'],

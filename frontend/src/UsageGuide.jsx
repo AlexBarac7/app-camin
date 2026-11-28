@@ -62,9 +62,20 @@ export default function UsageGuide({ reportsPath, canManage }) {
         : 'Administratorul preia sesizarea, îi stabilește prioritatea și o marchează ca rezolvată.'}
         {' '}Autorul poate confirma apoi că problema s-a rezolvat.</p>
     </>,
-    notificari: <p>Administratorul este anunțat când apare o sesizare nouă. În <a className="camin-link" href="/notificari">Notificări</a> afli
-      când sesizarea ta e preluată sau rezolvată, când o defecțiune îți afectează rezervarea ori când primești o ofertă în Live-queue.
-      Poți activa și alerte în browser pe dispozitivele compatibile. Apasă <strong>OK</strong> pe un mesaj ca să-l marchezi drept citit.</p>,
+    notificari: <>
+      <p>Administratorul este anunțat când apare o sesizare nouă. În <a className="camin-link" href="/notificari">Notificări</a> afli
+        când sesizarea ta e preluată sau rezolvată, când o defecțiune îți afectează rezervarea ori când primești o ofertă în Live-queue.
+        Apasă <strong>OK</strong> pe un mesaj ca să-l marchezi drept citit.</p>
+      <h3>Mesaj înainte de finalul utilizării</h3>
+      <p>Cu 15 minute înainte să se termine timpul tău de utilizare, primești un mesaj ca să te pregătești să eliberezi echipamentul.
+        De exemplu, dacă ai rezervat de la 18:00 la 18:40, folosești echipamentul până la 18:30, iar ultimele 10 minute sunt pentru predare.
+        Mesajul vine la <strong>18:15</strong>. Dacă poți folosi echipamentul până la închiderea de la 20:00, mesajul vine la <strong>19:45</strong>.</p>
+      <p>Găsești mesajul în <strong>Notificări</strong>. Dacă ai activat alertele în browser pe un dispozitiv, îl primești și pe acel dispozitiv,
+        chiar și cu aplicația închisă. Dacă nu ai alerte activate pe niciun dispozitiv, primești mesajul la adresa de e-mail a contului.
+        Folosește <strong>Setări pentru alertele pe dispozitiv</strong> din <strong>Notificări</strong> ca să le activezi pe un dispozitiv compatibil.</p>
+      <p>Mesajul este omis dacă ai anulat sau ai încheiat rezervarea înainte de ora mesajului, dacă utilizarea durează sub 15 minute
+        sau dacă ai rezervat când mai erau sub 15 minute până la finalul utilizării.</p>
+    </>,
     'gestionarea-strike-urilor': <>
       <p>La fiecare strike nou, Administratorul și Adminul primesc mesajul <strong>S-a acordat un strike</strong> în
         {' '}<a className="camin-link" href="/notificari">Notificări</a>, doar în aplicație. Mesajul arată e-mailul rezidentului,
