@@ -13,8 +13,13 @@ import { dispatchPushDeliveries } from '../src/modules/notifications/push.js';
 test('authenticated laundry reservations on disposable PostgreSQL', async t => {
   assert.equal(process.env.PGDATABASE, 'app_camin_reservations_test');
   const db = createDatabase(loadDatabaseConfig());
-  t.after(() => db.close());
+  t.after(async () => {
+    try { await db.query('UPDATE laundry_attendance_policy SET daily_reservation_limit = DEFAULT'); }
+    finally { await db.close(); }
+  });
   await runMigrations(db, fileURLToPath(new URL('../migrations/', import.meta.url)), 'apply');
+  // These independent workflow scenarios share accounts and a booking day.
+  await db.query('UPDATE laundry_attendance_policy SET daily_reservation_limit = 20');
   const objects = new Map();
   let storageUnavailable = false;
   const photos = {
@@ -403,8 +408,9 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
   assert.deepEqual(roomTwoDryers.map(machine => [machine.label, machine.technicalStatus, machine.status]), [
     ['1A', 'working', 'available'], ['2A', 'working', 'available'],
   ]);
-  for (const dryer of roomTwoDryers) {
-    assert.equal((await book(0, 0, 60, dryer.id)).status, 201);
+  for (const [index, dryer] of roomTwoDryers.entries()) {
+    const start = index * 60;
+    assert.equal((await book(0, start, start + 60, dryer.id)).status, 201);
   }
 
   await t.test('laundry reports, targeted notices and temporary verification', async () => {
@@ -483,7 +489,7 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     const operatorView = (await list(0, true)).find(item => item.id === report.id);
     assert.equal(operatorView.technicalStatus, 'unspecified');
     assert.equal((await action(report.id, 'resolve', 0, { machineRevision: operatorView.machineRevision })).status, 204);
-    assert.equal((await book(1, 80, 140, unconfirmed.id)).status, 201);
+    assert.equal((await book(1, 140, 200, unconfirmed.id)).status, 201);
     assert.equal((await request(reports, 'POST', 1, extra)).status, 201);
     assert.equal((await action(report.id, 'verify', 1)).status, 204);
     const { rows: [equipment] } = await db.query(
@@ -1082,7 +1088,7 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
         clock = at(434);
         const { rows: [raceMachine] } = await db.query(`
           INSERT INTO laundry_machines (name, location, room, type, label, technical_status)
-          VALUES ('Offer conflict washer', 'Test location', '1', 'washer', $1, 'working') RETURNING id`, [kind]);
+          VALUES ('Offer conflict dryer', 'Test location', '1', 'dryer', $1, 'working') RETURNING id`, [kind]);
         const raceEndpoint = '/api/laundry-machines/' + raceMachine.id;
         const offerNotice = await notice(kind, raceMachine.id);
         let offerPath;
@@ -1127,6 +1133,8 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
         const { rows: survivors } = await db.query(`
           SELECT id FROM laundry_reservations WHERE machine_id = $1 AND cancelled_at IS NULL`, [raceMachine.id]);
         assert.deepEqual(survivors.map(row => row.id), [(await winner.json()).id]);
+        // Free the resident's interval so the next offer type exercises the same equipment-level race.
+        assert.equal((await send(raceEndpoint + '/reservations/' + survivors[0].id, 'DELETE', 2)).status, 204);
       });
     }
 
@@ -1139,7 +1147,7 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     await t.test('the end-of-use reminder uses the handover boundary and sends once', async () => {
       const { rows: [reminderMachine] } = await db.query(`
         INSERT INTO laundry_machines (name, location, room, type, label, technical_status)
-        VALUES ('Reminder washer', 'Test location', '1', 'washer', 'REMINDER', 'working') RETURNING id`);
+        VALUES ('Reminder dryer', 'Test location', '1', 'dryer', 'REMINDER', 'working') RETURNING id`);
       const reservationPath = '/api/laundry-machines/' + reminderMachine.id + '/reservations';
       const endNotices = async id => (await noticesFor(id)).filter(item => item.kind === 'reservation-end-reminder');
       const endPushes = id => pushes.filter(item => item.path?.endsWith('#rezervare-' + id));
@@ -1393,4 +1401,177 @@ test('Administrator announcements reach resident accounts and track explicit con
   const textOnly = await publish(author, { message, requestId: '3dffab18-dc2f-47d4-a982-cc633d06be56' });
   assert.equal(textOnly.status, 201);
   assert.equal((await findNotices(first))[0].announcement.photoIds.length, 0);
+});
+
+test('daily and simultaneous laundry Reservation limits', async t => {
+  assert.equal(process.env.PGDATABASE, 'app_camin_reservations_test');
+  const db = createDatabase(loadDatabaseConfig());
+  t.after(() => db.close());
+  await runMigrations(db, fileURLToPath(new URL('../migrations/', import.meta.url)), 'apply');
+  const { rows: [{ day, start }] } = await db.query(`
+    SELECT day::text, (day + time '10:00') AT TIME ZONE 'Europe/Bucharest' AS start
+    FROM (SELECT (now() AT TIME ZONE 'Europe/Bucharest')::date + n AS day FROM generate_series(1, 4) AS n) days
+    WHERE extract(isodow FROM day) <= 5 ORDER BY day LIMIT 1`);
+  const at = minutes => new Date(+start + minutes * 60_000).toISOString();
+  let clock = at(-60);
+  const timed = (query, args = []) => {
+    if (!/clock_timestamp\(\) AS now|statement_timestamp\(\)/.test(query)) return [query, args];
+    const value = '$' + (args.length + 1) + '::timestamptz';
+    return [query.replaceAll('clock_timestamp() AS now', value + ' AS now')
+      .replaceAll('statement_timestamp()', value), [...args, clock]];
+  };
+  const database = {
+    ...db,
+    query: (query, args) => db.query(...timed(query, args)),
+    async connect() {
+      const client = await db.connect();
+      return { query: (query, args) => client.query(...timed(query, args)), release: discard => client.release(discard) };
+    },
+  };
+  const server = createApp(database).listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const { rows: [washer, otherWasher, dryer, otherDryer] } = await db.query(`
+    INSERT INTO laundry_machines (name, location, room, type, label, technical_status)
+    VALUES ('Limit washer A', 'Test location', '1', 'washer', 'LIMIT-A', 'working'),
+           ('Limit washer B', 'Test location', '1', 'washer', 'LIMIT-B', 'working'),
+           ('Limit dryer A', 'Test location', '1', 'dryer', 'LIMIT-C', 'working'),
+           ('Limit dryer B', 'Test location', '1', 'dryer', 'LIMIT-D', 'working') RETURNING id`);
+  async function account(label, operator = false) {
+    const { rows: [user] } = await db.query(`
+      INSERT INTO users (email, password_hash, can_manage_equipment)
+      VALUES ($1, 'fixture', $2) RETURNING id`, [`limit-${label}@example.test`, operator]);
+    return session(user);
+  }
+  async function session(user) {
+    const token = newToken();
+    await db.query('INSERT INTO sessions (user_id, token_hash) VALUES ($1, $2)', [user.id, tokenHash(token)]);
+    return { ...user, cookie: 'camin_session=' + token };
+  }
+  const send = (user, url, method = 'GET', body) => fetch('http://127.0.0.1:' + server.address().port + url, {
+    method, headers: { origin: 'http://localhost:5173', 'content-type': 'application/json',
+      ...(user && { cookie: user.cookie }) }, body: JSON.stringify(body),
+  });
+  const path = (machine, suffix = '') => '/api/laundry-machines/' + machine.id + suffix;
+  const book = (user, machine, from, to, dayOffset = 0) => send(user, path(machine, '/reservations'), 'POST', {
+    startsAt: at(from + dayOffset), endsAt: at(to + dayOffset),
+  });
+  const status = async (response, expected) => {
+    const result = await response;
+    const body = await result.json().catch(() => ({}));
+    assert.equal(result.status, expected, JSON.stringify(body));
+    return body;
+  };
+  const operator = await account('operator', true);
+  const policy = '/api/admin/reservation-daily-limit';
+
+  await t.test('blocks overlap within a type and allows washer and dryer together', async () => {
+    const user = await account('types');
+    await status(book(user, washer, 0, 40), 201);
+    assert.match((await status(book(user, otherWasher, 15, 45), 409)).message, /mașină de spălat/);
+    await status(book(user, dryer, 0, 40), 201);
+    assert.match((await status(book(user, otherDryer, 15, 45), 409)).message, /uscător/);
+  });
+
+  await t.test('limits both types together, frees cancellations and counts each local day separately', async () => {
+    const user = await account('daily');
+    const first = await status(book(user, washer, 50, 80), 201);
+    await status(book(user, otherWasher, 80, 110), 201);
+    assert.match((await status(book(user, dryer, 80, 110), 409)).message, /2 rezervări/);
+    await status(send(user, path(washer, '/reservations/' + first.id), 'DELETE'), 204);
+    await status(book(user, dryer, 80, 110), 201);
+    clock = at(50);
+    await status(book(user, washer, 50, 80, 7 * 1440), 201);
+    clock = at(-60);
+  });
+
+  await t.test('serializes competing Reservations on different equipment', async () => {
+    const user = await account('race');
+    await status(book(user, washer, 120, 150), 201);
+    const results = await Promise.all([book(user, otherWasher, 150, 180), book(user, otherDryer, 150, 180)]);
+    assert.deepEqual(results.map(response => response.status).sort(), [201, 409]);
+    const overlap = await account('overlap-race');
+    const simultaneous = await Promise.all([book(overlap, washer, 185, 215), book(overlap, otherWasher, 185, 215)]);
+    assert.deepEqual(simultaneous.map(response => response.status).sort(), [201, 409]);
+  });
+
+  await t.test('counts a no-show and checks Live-queue claims against the current limit', async () => {
+    const user = await account('queue');
+    await db.query(`INSERT INTO laundry_reservations
+      (machine_id, user_id, starts_at, use_ends_at, ends_at, cancelled_at, cancellation_reason)
+      VALUES ($1, $2, $3, $4, $5, $4, 'Neprezentare')`, [washer.id, user.id, at(-45), at(-35), at(-25)]);
+    const queued = await db.query(`INSERT INTO laundry_queue_entries (machine_id, user_id, day, duration_minutes)
+      VALUES ($1, $2, $3, 20) RETURNING id`, [otherDryer.id, user.id, day]);
+    const notice = await db.query(`INSERT INTO laundry_notifications (user_id, machine_id, kind, message, created_at)
+      VALUES ($1, $2, 'queue-turn', 'Fixture', $3) RETURNING id`, [user.id, otherDryer.id, clock]);
+    const offer = await db.query(`INSERT INTO laundry_queue_offers
+      (entry_id, machine_id, notification_id, starts_at, ends_at, expires_at, immediate)
+      VALUES ($1, $2, $3, $4, $5, $6, false) RETURNING id`,
+    [queued.rows[0].id, otherDryer.id, notice.rows[0].id, at(225), at(255), at(-55)]);
+    const booking = await status(book(user, washer, 225, 255), 201);
+    const url = path(otherDryer, '/queue/offers/' + offer.rows[0].id);
+    await status(send(user, url, 'POST', { action: 'accept' }), 409);
+    await status(send(user, path(washer, '/reservations/' + booking.id), 'DELETE'), 204);
+    await status(send(user, url, 'POST', { action: 'accept' }), 201);
+  });
+
+  async function restoration(user, originalStart, offerStart, useEnd) {
+    const original = await db.query(`INSERT INTO laundry_reservations
+      (machine_id, user_id, starts_at, use_ends_at, ends_at, cancelled_at, cancellation_reason)
+      VALUES ($1, $2, $3, $4, $5, $6, 'Echipament defect') RETURNING id`,
+    [washer.id, user.id, at(originalStart), at(useEnd), at(useEnd + 10), at(300)]);
+    const notice = await db.query(`INSERT INTO laundry_notifications (user_id, machine_id, kind, message, created_at)
+      VALUES ($1, $2, 'restored', 'Fixture', $3) RETURNING id`, [user.id, washer.id, clock]);
+    const offer = await db.query(`INSERT INTO laundry_restoration_offers
+      (notification_id, original_reservation_id, machine_id, starts_at, use_ends_at, ends_at, expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    [notice.rows[0].id, original.rows[0].id, washer.id, at(offerStart), at(useEnd), at(useEnd + 10), at(310)]);
+    return '/api/notifications/offers/' + offer.rows[0].id;
+  }
+
+  await t.test('counts a restoration once, even after the original started', async () => {
+    clock = at(305);
+    const user = await account('restoration');
+    const offer = await restoration(user, 270, 305, 370);
+    await status(send(user, offer, 'POST', { action: 'accept' }), 201);
+    await status(book(user, dryer, 315, 350), 201);
+    await status(book(user, otherWasher, 380, 410), 409);
+  });
+
+  await t.test('resuming a booking cancelled before start requires a free daily slot', async () => {
+    const user = await account('restoration-refilled');
+    const offer = await restoration(user, 410, 410, 440);
+    const booking = await status(book(user, otherWasher, 380, 410), 201);
+    await status(book(user, dryer, 380, 410), 201);
+    assert.match((await status(send(user, offer, 'POST', { action: 'accept' }), 409)).message, /2 rezervări/);
+    await status(send(user, path(otherWasher, '/reservations/' + booking.id), 'DELETE'), 204);
+    await status(send(user, offer, 'POST', { action: 'accept' }), 201);
+  });
+
+  await t.test('only operators configure the validated limit', async t => {
+    const resident = await account('settings');
+    const { rows: [existingAdmin] } = await db.query('SELECT id FROM users WHERE can_view_service_status');
+    const admin = existingAdmin ?? await account('admin');
+    if (!existingAdmin) await db.query('UPDATE users SET can_view_service_status = true WHERE id = $1', [admin.id]);
+    await status(send(null, policy), 401);
+    await status(send(resident, policy, 'PUT', { dailyLimit: 3 }), 403);
+    assert.deepEqual(await status(send(await session(admin), policy), 200), { dailyLimit: 2 });
+    await status(send(operator, policy, 'PUT', { dailyLimit: 0 }), 400);
+    await status(send(operator, policy, 'PUT', { dailyLimit: 3 }), 204);
+    t.after(() => send(operator, policy, 'PUT', { dailyLimit: 2 }));
+    for (const from of [425, 455, 485]) await status(book(resident, otherWasher, from, from + 30), 201);
+    await status(book(resident, otherWasher, 515, 545), 409);
+    await status(send(operator, policy, 'PUT', { dailyLimit: 1 }), 204);
+    const { reservations } = await status(send(resident, path(otherWasher, '/calendar?day=' + day)), 200);
+    assert.equal(reservations.filter(booking => booking.id).length, 3);
+  });
+
+  await t.test('a 19:40–20:00 booking still blocks another washer for the same resident', async () => {
+    clock = at(579);
+    const resident = await account('closing');
+    const booking = await status(book(resident, washer, 580, 600), 201);
+    assert.equal(booking.useEndsAt, at(600));
+    assert.match((await status(book(resident, otherWasher, 580, 600), 409)).message, /mașină de spălat/);
+    await status(book(resident, dryer, 580, 600), 201);
+  });
 });

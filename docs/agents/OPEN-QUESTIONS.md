@@ -76,6 +76,10 @@
   eligibility rules, and early finish for all ongoing Reservations in
   [D-024](decisions/laundry-decisions.md#d-024--offer-same-day-laundry-openings-through-live-queue).
   SSE is the transport approved in the Issue #10 implementation plan.
+  [D-038](decisions/laundry-decisions.md#d-038--limit-daily-and-simultaneous-laundry-reservations)
+  defines the pilot's daily and simultaneous Reservation limits. The minute
+  thresholds for the separate rolling seven-day quota remain open under
+  [Issue #15](https://github.com/AlexBarac7/app-camin/issues/15).
 
 ## Q-006 · Who manages the laundry catalog and with what permissions?
 - **Status:** open

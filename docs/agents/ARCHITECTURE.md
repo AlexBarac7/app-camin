@@ -78,7 +78,7 @@ See README.md for verified local commands. Compose uses development servers;
 frontend npm run build produces static assets. Railway is a future target only.
 
 ## Boundaries
-Quotas remain outside the current implementation. Email fallback covers the
+Rolling seven-day quotas remain outside the current implementation. Email fallback covers the
 end-of-use reminder. Railway is a future deployment target.
 
 Migration 006 adds the independent equipment permission, the reservation linked
@@ -145,3 +145,10 @@ Migration 027 adds the email queue for access request notices. When a request
 enters the approval queue, the same transaction writes the Admin inbox notice,
 push jobs for subscribed devices and an email job for the Admin account.
 The SMTP worker checks the current Admin role before sending.
+
+Migration 028 adds the configurable daily Reservation limit and indexes
+Reservations by resident and start. Calendar bookings, Live-queue claims and
+restoration offers check the local day and equipment type under the existing
+resident lock. Accepted restoration links group replacement Reservations with
+their originals for the daily count. Admin and Administrator can change the
+limit from the existing Reservation history page.

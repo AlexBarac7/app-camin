@@ -148,6 +148,8 @@ const reservationColumns = [
   { name: 'cancelled_at', label: 'Anulată la', type: 'timestamptz' },
 ];
 
+const dailyLimitEndpoint = '/api/admin/reservation-daily-limit';
+
 function AttendancePolicy({ policy, onSave }) {
   return <form className="flex flex-wrap items-end gap-3" onSubmit={event => {
     event.preventDefault();
@@ -169,6 +171,21 @@ function AttendancePolicy({ policy, onSave }) {
   </form>;
 }
 
+function DailyLimit({ policy, onSave }) {
+  return <form className="flex flex-wrap items-end gap-3" onSubmit={event => {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    onSave(dailyLimitEndpoint, 'PUT', { dailyLimit: Number(fields.get('dailyLimit')) }, 'Limita zilnică a fost salvată.');
+  }}>
+    <label className="grid gap-1">
+      Rezervări pe rezident pe zi (spălare și uscare)
+      <input name="dailyLimit" type="number" required min="1" max="2147483647" className={control}
+        defaultValue={policy.dailyLimit} />
+    </label>
+    <button className={control}>Salvează limita</button>
+  </form>;
+}
+
 function AdminReservations({ path, authorized }) {
   const [filters, setFilters] = useState({ machineId: '', day: '', status: '' });
   const [page, setPage] = useState(1);
@@ -181,6 +198,7 @@ function AdminReservations({ path, authorized }) {
   const result = useData(authorized.allowed ? '/api/admin/reservations?' + params : null);
   const equipment = useData(authorized.allowed && !reservationId ? '/api/laundry-machines' : null);
   const policy = useData(authorized.allowed && !reservationId ? '/api/admin/reservation-attendance-policy' : null);
+  const dailyLimit = useData(authorized.allowed && !reservationId ? dailyLimitEndpoint : null);
   const [feedback, setFeedback] = useState(null);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -203,7 +221,8 @@ function AdminReservations({ path, authorized }) {
       }
       setEditing(null);
       setFeedback({ message });
-      if (method === 'PUT') policy.reload();
+      if (url === dailyLimitEndpoint) dailyLimit.reload();
+      else if (method === 'PUT') policy.reload();
       else result.reload();
     } catch (error) {
       setFeedback({ message: error.message, error: true });
@@ -255,6 +274,13 @@ function AdminReservations({ path, authorized }) {
           </fieldset>}
           {policy.error && <button type="button" className={control + ' w-fit'} onClick={policy.reload}>
             Reîncarcă regula de neprezentare
+          </button>}
+          {dailyLimit.data && <fieldset disabled={saving} className="grid gap-2">
+            <legend className="font-semibold">Limită zilnică</legend>
+            <DailyLimit key={dailyLimit.data.dailyLimit} policy={dailyLimit.data} onSave={saveAttendance} />
+          </fieldset>}
+          {dailyLimit.error && <button type="button" className={control + ' w-fit'} onClick={dailyLimit.reload}>
+            Reîncarcă limita zilnică
           </button>}
           <div className="grid items-end gap-3 sm:grid-cols-3">
             <div className="grid gap-1">

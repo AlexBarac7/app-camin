@@ -279,7 +279,7 @@ export default function Notifications({ onUnreadCount, canAnnounce }) {
         return;
       }
       const body = !response.ok ? await response.json().catch(() => null) : null;
-      if (body?.suspension) setFeedback(body.message);
+      if (body?.message) setFeedback(body.message);
       else if (response.status === 409) setFeedback('Oferta nu mai este disponibilă.');
       else if (response.ok) setFeedback(action === 'accept' ? 'Rezervarea a fost confirmată.' : 'Intervalul a fost eliberat.');
       else throw new Error(unavailable);

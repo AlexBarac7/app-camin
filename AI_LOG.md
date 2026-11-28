@@ -4,6 +4,63 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-28 · End the Saturday laundry test
+
+**Model:** GPT-6 (Codex).
+
+The owner confirmed that the booking limit worked and ended the temporary
+Saturday test. The local backend was recreated with the standard Compose
+configuration. Calendar booking and Live-queue checks confirmed Saturday
+was closed and Monday was open. The backend returned ready.
+
+At the owner's request, a single PostgreSQL transaction removed the Saturday
+laundry test data. It deleted 16 Reservations, 67 linked notices and their
+delivery records, seven strikes and one suspension. There were no Saturday
+queue entries or restoration offers, and the suspension had no cancellations
+in other days. A read-only check confirmed zero remaining Saturday test
+Reservations, strikes or suspensions. Access requests and announcements were
+outside the cleanup scope.
+
+## 2026-11-28 · Daily and simultaneous laundry Reservation limits
+
+**Model:** GPT-6 (Codex).
+
+The owner approved D-038 and its implementation plan. The pilot starts with
+two Reservations per resident per local day of use, shared by washers and
+dryers. A resident can use one washer and one dryer at the same time. The
+overlap check includes handover and applies to calendar bookings, Live-queue
+claims and restoration offers. An early cancellation frees a daily slot. A
+no-show consumes one. A resumed Reservation and its original count as one.
+If a pre-start cancellation freed a slot that the resident has since filled,
+accepting the restoration requires freeing a slot first.
+
+Migration 028 adds the limit and an index by resident and start time. The
+three booking paths reuse the existing resident lock to serialize concurrent
+bookings for different machines. Admin and Administrator can edit the limit
+in **Rezervări → Limită zilnică**. Lowering the limit preserves existing
+Reservations. The README and Romanian resident guide describe the rule.
+
+The new PostgreSQL tests initially returned `201` for bookings that should
+return `409`. The reservation suite covers both equipment types, the local
+day, cancellation, no-show, restoration, concurrent requests and operator
+permissions. Existing scenario fixtures were adjusted to respect the new
+overlap rule while preserving the original expectations.
+
+All 20 backend tests and all 27 PostgreSQL integration tests passed. The
+frontend build, ledger lint, diff check and quiet Compose configuration check
+passed. Migration 028 first ran against disposable PostgreSQL databases. Visual
+acceptance remains pending.
+
+The owner reported three simultaneous washer bookings at 19:40. The local
+Saturday test configuration was still mounting a pre-D-038 calendar route,
+and the running database listed migration 027 as its latest migration.
+The added 19:40–20:00 regression passed on disposable PostgreSQL. It accepts
+one washer, rejects a second washer and accepts an overlapping dryer. After the
+owner authorized the local update, the backend image was rebuilt, migration 028
+was applied, and the backend was recreated with the Saturday schedule retained.
+The backend readiness check passed. A read-only check of the live 19:40 booking
+returned the washer-overlap conflict with the daily limit configured at two.
+
 ## 2026-11-28 · Notify Admin by Web Push and email about access requests
 
 **Model:** GPT-6 (Codex).

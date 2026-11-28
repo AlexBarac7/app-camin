@@ -113,6 +113,21 @@ export function adminRoutes(database, origins = localOrigins, appOrigin, { sendI
     res.json(policy);
   });
 
+  router.get('/reservation-daily-limit', operator, async (_req, res) => {
+    const { rows: [policy] } = await database.query(`
+      SELECT daily_reservation_limit AS "dailyLimit" FROM laundry_attendance_policy`);
+    res.json(policy);
+  });
+
+  router.put('/reservation-daily-limit', operator, write, json({ limit: '1kb' }), async (req, res) => {
+    const { dailyLimit } = req.body ?? {};
+    if (!Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 2147483647) {
+      return res.status(400).json({ message: 'Introdu un număr întreg pozitiv pentru limita zilnică.' });
+    }
+    await database.query('UPDATE laundry_attendance_policy SET daily_reservation_limit = $1', [dailyLimit]);
+    res.sendStatus(204);
+  });
+
   router.put('/reservation-attendance-policy', operator, write, json({ limit: '1kb' }), async (req, res) => {
     const { strikeWindowDays, suspensionHours } = req.body ?? {};
     if (!Number.isInteger(strikeWindowDays) || strikeWindowDays < 1 || strikeWindowDays > maxStrikeWindowDays ||

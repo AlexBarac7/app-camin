@@ -368,3 +368,23 @@
   registered at the time of the reminder for
   [Issue #14](https://github.com/AlexBarac7/app-camin/issues/14).
 - **Confirmed:** 2026-11-28
+
+## D-038 · Limit daily and simultaneous laundry reservations
+- **Status:** approved
+- **Rule:** For the pilot, start with a configurable limit of two Reservations
+  per resident per local day of use, across washers and dryers combined. A
+  resident may reserve at most one washer and one dryer for overlapping
+  intervals. Apply the checks to calendar bookings and Live-queue claims,
+  including concurrent requests for different machines.
+- **Counting:** A cancellation before use starts frees a daily slot. A no-show
+  consumes a daily slot and contributes zero usage minutes. A replacement
+  accepted under D-016 and its original Reservation count as one.
+- **Statistics:** Rank residents by confirmed usage minutes. The named ranking
+  is visible to Administrator and Admin only.
+- **Why:** Preserve access to laundry equipment by limiting how many slots a
+  resident can hold in one day and preventing them from holding two machines
+  of the same type at the same time.
+- **Evidence:** The owner proposed and approved the daily and simultaneous
+  limits. The separate rolling seven-day quota is tracked in
+  [Issue #15](https://github.com/AlexBarac7/app-camin/issues/15).
+- **Confirmed:** 2026-11-28
