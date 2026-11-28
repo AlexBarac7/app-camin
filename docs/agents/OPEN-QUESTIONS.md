@@ -135,11 +135,14 @@
 - **Answer:** For the laundry pilot, remind the resident ten minutes before
   start and ask for confirmation at start. The confirmation window ends at
   the tenth minute. Usage periods shorter than ten minutes are exempt from
-  strikes. Three strikes in seven days trigger a 48-hour booking suspension.
-  See [D-028](decisions/laundry-decisions.md#d-028--confirm-laundry-attendance-and-apply-temporary-booking-suspensions).
+  strikes. Three strikes in seven days trigger a 48-hour suspension and cancel
+  future Reservations that start before the suspension expires. The resident
+  can finish usage already started and keep Reservations starting at or after
+  expiration. See [D-032](decisions/laundry-decisions.md#d-032--cancel-only-reservations-starting-during-a-laundry-suspension).
 - **Evidence:** The project owner confirmed the application pilot policy for
-  [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13).
-- **Confirmed:** 2026-11-27
+  [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13), including the
+  cancellation window for future Reservations.
+- **Confirmed:** 2026-11-28
 
 ## Q-011 · What happens to reservations when equipment is marked defective?
 - **Status:** answered

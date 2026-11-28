@@ -2,13 +2,16 @@ import { operatorAccountsSql, roleQueryValues } from '../auth/account-roles.js';
 
 const minute = 60_000;
 
-async function notify(client, machine, userIds, kind, message, now, reportId = null, push = true, reservationId = null) {
+async function notify(client, machine, userIds, kind, message, now, reportId = null, push = true, reservationId = null, strikeProgressMessage = null) {
   if (!userIds.length) return;
   const { rows } = await client.query(`
     WITH notices AS (
-      INSERT INTO laundry_notifications (user_id, machine_id, kind, message, created_at, report_id, reservation_id)
-      SELECT DISTINCT user_id, $1::integer, $2::text, $3::text, $4::timestamptz, $6::bigint, $8::bigint
+      INSERT INTO laundry_notifications (user_id, machine_id, kind, message, created_at, report_id, reservation_id, strike_progress_message)
+      SELECT DISTINCT user_id, $1::integer, $2::text, $3::text, $4::timestamptz, $6::bigint, $8::bigint, $9::text
       FROM unnest($5::bigint[]) AS user_id
+      WHERE $2::text NOT IN ('reservation-reminder', 'reservation-start') OR EXISTS (
+        SELECT 1 FROM laundry_reservations WHERE id = $8 AND cancelled_at IS NULL
+      )
       RETURNING id, user_id
     ), deliveries AS (
       INSERT INTO push_deliveries (notification_id, subscription_id)
@@ -16,7 +19,7 @@ async function notify(client, machine, userIds, kind, message, now, reportId = n
       JOIN push_subscriptions subscription USING (user_id)
       WHERE $7::boolean
     )
-    SELECT id FROM notices`, [machine?.id ?? null, kind, message, now, userIds, reportId, push, reservationId]);
+    SELECT id FROM notices`, [machine?.id ?? null, kind, message, now, userIds, reportId, push, reservationId, strikeProgressMessage]);
   return rows[0]?.id;
 }
 
@@ -76,11 +79,25 @@ export function notifyReservation(client, machine, reservation, kind, message, n
   return notify(client, machine, [reservation.user_id], kind, message, now, null, true, reservation.id);
 }
 
-export async function notifyStrike(client, machine, reservation, now, testAccounts) {
+function remainingStrikeMessage(remaining) {
+  return `Mai ai ${remaining} ${remaining === 1 ? 'strike' : 'strike-uri'} până la suspendare.`;
+}
+
+export async function notifyStrike(client, machine, reservation, now, testAccounts, progress) {
   const { rows } = await client.query('SELECT id FROM users WHERE ' + operatorAccountsSql,
     roleQueryValues(testAccounts));
   await notify(client, machine, rows.map(row => row.id), 'strike-issued', 'S-a acordat un strike.',
     now, null, false, reservation.id);
+  const message = progress.started ? 'Suspendarea a început.'
+    : progress.suspended ? 'Suspendarea este activă.' : remainingStrikeMessage(progress.remaining);
+  await notify(client, machine, [reservation.user_id], 'strike-received', 'Neprezentare la rezervare.',
+    now, null, false, reservation.id, message);
+}
+
+export function notifyStrikeCorrection(client, reservation, now, progress) {
+  const message = progress.suspendedUntil ? 'Suspendarea este încă activă.' : remainingStrikeMessage(progress.remaining);
+  return notify(client, { id: reservation.machine_id }, [reservation.user_id], 'strike-corrected',
+    'Un administrator ți-a corectat un strike.', now, null, false, reservation.id, message);
 }
 
 export async function withdrawOffers(client, machineId, now) {

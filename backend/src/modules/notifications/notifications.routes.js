@@ -1,6 +1,6 @@
 import { json, Router } from 'express';
 import { localOrigins, requireSession } from '../auth/auth.routes.js';
-import { activeSuspension, suspendedBooking } from '../laundry/reservation-attendance.js';
+import { activeSuspension, residentStrikeProgress, suspendedBooking } from '../laundry/reservation-attendance.js';
 import { pushEndpoint, subscriptionKeys } from './push.js';
 
 async function answerOffer(database, offerId, userId, action) {
@@ -43,10 +43,16 @@ async function saveAnswer(client, offerId, userId, action) {
   if (offer.expires_at <= acceptedAt || offer.use_ends_at <= acceptedAt) return [409];
   const { rows: [reservation] } = await client.query(`
     INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at, attendance_tracked, confirmed_at)
-    VALUES ($1, $2, greatest($3::timestamptz, $4::timestamptz), $5, $6,
-      $3::timestamptz > $4::timestamptz, CASE WHEN $3::timestamptz <= $4::timestamptz THEN $4::timestamptz END)
+    SELECT $1::integer, $2::bigint, greatest($3::timestamptz, $4::timestamptz), $5::timestamptz, $6::timestamptz,
+      $3::timestamptz > $4::timestamptz, CASE WHEN $3::timestamptz <= $4::timestamptz THEN $4::timestamptz END
+    WHERE NOT EXISTS (SELECT 1 FROM laundry_reservations
+      WHERE machine_id = $1 AND cancelled_at IS NULL AND starts_at < $6 AND ends_at > greatest($3, $4))
     RETURNING id`,
   [machine.id, userId, offer.starts_at, acceptedAt, offer.use_ends_at, offer.ends_at]);
+  if (!reservation) {
+    await client.query("UPDATE laundry_restoration_offers SET status = 'withdrawn' WHERE id = $1", [offerId]);
+    return [409];
+  }
   await client.query(`
     UPDATE laundry_restoration_offers SET status = 'accepted', new_reservation_id = $2 WHERE id = $1`,
   [offerId, reservation.id]);
@@ -60,9 +66,12 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
     next();
   });
   router.get('/', async (_req, res) => {
+    const { id: userId, role } = res.locals.account;
+    const canReviewStrikes = role === 'admin' || role === 'administrator';
     const { rows } = await database.query(`
-      SELECT notice.id, notice.kind, notice.message, notice.created_at, notice.read_at, notice.machine_id, machine.room,
+      SELECT notice.id, notice.kind, notice.message, notice.strike_progress_message, notice.created_at, notice.read_at, notice.machine_id, machine.room,
         notice.report_id, notice.reservation_id, reservation.starts_at AS reservation_start, machine.name AS machine_name, machine.location AS machine_location,
+        strike_resident.email AS strike_resident_email,
         COALESCE(offer.id, queue.id) AS offer_id,
         COALESCE(offer.starts_at, queue.starts_at) AS starts_at,
         COALESCE(offer.ends_at, queue.ends_at) AS ends_at,
@@ -75,14 +84,19 @@ export function notificationRoutes(database, origins = localOrigins, publicKey =
       FROM laundry_notifications notice
       LEFT JOIN laundry_machines machine ON machine.id = notice.machine_id
       LEFT JOIN laundry_reservations reservation ON reservation.id = notice.reservation_id
+      LEFT JOIN users strike_resident ON strike_resident.id = reservation.user_id
+        AND notice.kind = 'strike-issued' AND $2::boolean
       LEFT JOIN laundry_restoration_offers offer ON offer.notification_id = notice.id
       LEFT JOIN laundry_queue_offers queue ON queue.notification_id = notice.id
-      WHERE notice.user_id = $1 ORDER BY notice.id DESC`, [res.locals.account.id]);
+      WHERE notice.user_id = $1 ORDER BY notice.id DESC`, [userId, canReviewStrikes]);
     res.json({
       pushPublicKey: publicKey,
       now: rows[0]?.now ?? new Date(),
+      strikeProgress: await residentStrikeProgress(database, userId),
       items: rows.map(row => ({
         id: row.id, kind: row.kind, message: row.message, createdAt: row.created_at, readAt: row.read_at,
+        ...(row.strike_progress_message && { strikeProgressMessage: row.strike_progress_message }),
+        ...(row.strike_resident_email && { residentEmail: row.strike_resident_email }),
         machineId: row.machine_id, room: row.room,
         ...(row.machine_name && { machineName: row.machine_name, machineLocation: row.machine_location }),
         ...(row.report_id && { reportId: row.report_id }),

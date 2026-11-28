@@ -176,7 +176,7 @@
 
 
 ## D-028 · Confirm laundry attendance and apply temporary booking suspensions
-- **Status:** approved
+- **Status:** superseded-by D-031
 - **Rule:** In the laundry pilot, send a reminder ten minutes before a Reservation
   starts and an alert at its scheduled start. The resident can confirm from the
   start until just before the ten-minute deadline, using the server clock.
@@ -203,7 +203,6 @@
 - **Evidence:** The owner proposed the two alerts, seven-day window, 48-hour
   suspension and short-use exception, then approved the revised plan for
   [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13).
-- **Confirmed:** 2026-11-27
 
 ## D-029 · Notify operators when a laundry strike is issued
 - **Status:** approved
@@ -217,3 +216,122 @@
 - **Evidence:** The owner requested this notification and approved the proposed
   [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13) follow-up.
 - **Confirmed:** 2026-11-27
+
+## D-030 · Notify the reservation holder when a laundry strike is issued
+- **Status:** approved
+- **Rule:** Write one in-app notice for the reservation holder in the
+  transaction that issues each new laundry strike. Display “Ai primit un
+  strike” with the no-show reason and a link to the cancelled Reservation in
+  the calendar. The notice is in-app only and applies to strikes issued after
+  rollout.
+- **Why:** The holder can find the strike in the inbox and open the affected
+  Reservation directly.
+- **Evidence:** The owner requested the notice after testing the no-show flow
+  and approved the proposal on 2026-11-28.
+- **Confirmed:** 2026-11-28
+
+## D-031 · Confirm laundry attendance and cancel future reservations on suspension
+- **Status:** superseded-by D-032
+- **Rule:** In the laundry pilot, send a reminder ten minutes before a Reservation
+  starts and an alert at its scheduled start. The resident can confirm from the
+  start until just before the ten-minute deadline, using the server clock.
+  Publish the notices in the app and deliver them through opt-in Web Push.
+  At the deadline, release the remaining block for an eligible unconfirmed
+  Reservation and record exactly one strike. A usage period shorter than ten
+  minutes is exempt and keeps its original end time. Apply attendance tracking
+  to Reservations created after rollout.
+- **Live-queue and restoration:** Starting an immediate Live-queue cycle or
+  accepting a restoration offer for immediate use confirms attendance. Future
+  Reservations created through offers follow the calendar confirmation rule.
+  An unused offer does not create a strike.
+- **Suspension:** Three uncorrected strikes in the previous seven days suspend
+  access for 48 hours. Keep the strikes that triggered a suspension in history
+  and exclude them from subsequent suspensions. In the transaction that activates
+  a suspension, cancel every Reservation for that resident whose scheduled start
+  is still in the future, including starts after the suspension would expire.
+  Release those intervals and retain the reason “Suspendare pentru neprezentare”
+  in the calendar and history. These cancellations generate no strikes. The
+  resident can finish usage that has already started. Reject new Reservations
+  during suspension and show the resident the reason and end date.
+- **Administration:** Admin and Administrator can edit the accumulation period
+  and suspension duration in the app. Policy edits apply to new sanctions.
+  They can correct a strike with a recorded reason. Correcting one of the
+  three strikes that triggered an active suspension lifts that suspension.
+  Lifting or expiring a suspension allows new Reservations and leaves the
+  cancellations in history.
+- **Why:** Give residents time to prepare while returning unused blocks to
+  other residents and letting operators correct unfair strikes.
+- **Evidence:** The owner proposed the two alerts, seven-day window, 48-hour
+  suspension and short-use exception, then approved the revised plan for
+  [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13).
+  On 2026-11-28 the owner also approved cancelling all future Reservations,
+  finishing usage that has already started and leaving the cancellations in
+  history after a correction.
+
+## D-032 · Cancel only reservations starting during a laundry suspension
+- **Status:** approved
+- **Rule:** In the laundry pilot, send a reminder ten minutes before a Reservation
+  starts and an alert at its scheduled start. The resident can confirm from the
+  start until just before the ten-minute deadline, using the server clock.
+  Publish the notices in the app and deliver them through opt-in Web Push.
+  At the deadline, release the remaining block for an eligible unconfirmed
+  Reservation and record exactly one strike. A usage period shorter than ten
+  minutes is exempt and keeps its original end time. Apply attendance tracking
+  to Reservations created after rollout.
+- **Live-queue and restoration:** Starting an immediate Live-queue cycle or
+  accepting a restoration offer for immediate use confirms attendance. Future
+  Reservations created through offers follow the calendar confirmation rule.
+  An unused offer does not create a strike.
+- **Suspension:** Three uncorrected strikes in the previous seven days suspend
+  access for 48 hours. Keep the strikes that triggered a suspension in history
+  and exclude them from subsequent suspensions. In the transaction that activates
+  a suspension, cancel future Reservations for that resident whose scheduled
+  start is earlier than the stored suspension expiry. Keep Reservations starting
+  at the expiry or later. The expiry uses the duration configured when the
+  suspension was issued.
+  Release those intervals and retain the reason “Suspendare pentru neprezentare”
+  in the calendar and history. These cancellations generate no strikes. The
+  resident can finish usage that has already started. Reject new Reservations
+  during suspension and show the resident the reason and end date.
+- **Administration:** Admin and Administrator can edit the accumulation period
+  and suspension duration in the app. Policy edits apply to new sanctions.
+  They can correct a strike with a recorded reason. Correcting one of the
+  three strikes that triggered an active suspension lifts that suspension.
+  Lifting or expiring a suspension allows new Reservations and leaves the
+  cancellations in history.
+- **Why:** Give residents time to prepare while returning unused blocks to
+  other residents and letting operators correct unfair strikes.
+- **Evidence:** The owner proposed the two alerts, seven-day window, 48-hour
+  suspension and short-use exception, then approved the revised plan for
+  [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13).
+  On 2026-11-28 the owner approved cancelling future Reservations only within
+  the actual suspension window, finishing usage that has already started and
+  leaving the cancellations in history after a correction.
+- **Confirmed:** 2026-11-28
+
+## D-033 · Show each resident their strike count and notify them of corrections
+- **Status:** approved
+- **Rule:** Show the signed-in resident the current count of strikes that can
+  trigger a suspension and how many more would trigger it in Notificări. Use
+  the same configured window and eligibility as D-032. While a suspension is
+  active, show its end time. Save the remaining count at the time of each new
+  strike in the resident's notice, or state that a suspension is active or
+  has started. When an operator corrects a strike, write one in-app notice to
+  its holder in the correction transaction. Include the remaining count
+  after correction, or indicate that a suspension is still active.
+- **Why:** Residents can see how close they are to suspension and know when
+  an operator has corrected a strike.
+- **Evidence:** The owner approved the inbox counter, notice wording and
+  one in-app notice per correction on 2026-11-28.
+- **Confirmed:** 2026-11-28
+
+## D-034 · Show authorized operators whose reservation received a strike
+- **Status:** approved
+- **Rule:** Show the holder's account email on the operator strike notice and
+  on the Reservation history row associated with the strike. Authorize both
+  views using the current Admin or Administrator role. Resolve the email
+  from the linked account when reading the views.
+- **Why:** Operators can verify whose strike they are reviewing or correcting.
+- **Evidence:** The owner approved showing the holder's email in both views
+  on 2026-11-28.
+- **Confirmed:** 2026-11-28

@@ -728,6 +728,7 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     const { advanceWaitingQueues } = await import('../src/modules/laundry/live-queue.js');
     let clock = at(240);
     let clockAfterAccountLock;
+    let afterHoldCleanup;
     const timed = (sql, args = []) => {
       if (!/clock_timestamp\(\) AS now|statement_timestamp\(\)/.test(sql)) return [sql, args];
       const value = '$' + (args.length + 1) + '::timestamptz';
@@ -742,6 +743,11 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
         return {
           async query(sql, args) {
             const result = await client.query(...timed(sql, args));
+            if (afterHoldCleanup && sql.includes('WITH suspended AS')) {
+              const suspend = afterHoldCleanup;
+              afterHoldCleanup = undefined;
+              await suspend();
+            }
             if (clockAfterAccountLock && /SELECT id FROM users WHERE id = \$1 FOR (?:NO KEY )?UPDATE/.test(sql)) {
               clock = clockAfterAccountLock;
               clockAfterAccountLock = undefined;
@@ -757,7 +763,7 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     t.after(() => { attendanceServer.closeAllConnections(); attendanceServer.close(); });
     await db.query('UPDATE users SET can_manage_equipment = true WHERE id = $1', [users[0].id]);
     const { rows: [resident] } = await db.query(
-      "INSERT INTO users (email, password_hash) VALUES ('attendance@example.test', 'fixture') RETURNING id");
+      "INSERT INTO users (email, password_hash) VALUES ('attendance@example.test', 'fixture') RETURNING id, email");
     const token = newToken();
     await db.query('INSERT INTO sessions (user_id, token_hash) VALUES ($1, $2)', [resident.id, tokenHash(token)]);
     const { rows: [noticeAdmin] } = await db.query(`
@@ -780,17 +786,18 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
         method, headers: { origin: 'http://localhost:5173', 'content-type': 'application/json', cookie: attendanceCookies[resident] },
         body: JSON.stringify(body),
       });
-    async function create(start, minutes = 20) {
+    async function create(start, minutes = 20, machineId = equipment.id) {
       const { rows: [row] } = await db.query(`
         INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at, attendance_tracked)
         VALUES ($1, $2, $3, $4, $5, true) RETURNING id`,
-      [equipment.id, resident.id, at(start), at(start + minutes), at(start + minutes + 10)]);
+      [machineId, resident.id, at(start), at(start + minutes), at(start + minutes + 10)]);
       return row.id;
     }
     const noticesFor = async id => (await (await send('/api/notifications')).json()).items
       .filter(item => item.reservation?.id === id).reverse();
     const confirm = (id, resident = 1) => send(endpoint + '/reservations/' + id + '/confirm', 'POST', resident);
     const calendar = resident => send(endpoint + '/calendar?day=' + fixture.day, 'GET', resident).then(response => response.json());
+    const inbox = account => send('/api/notifications', 'GET', account).then(response => response.json());
     const tick = () => advanceWaitingQueues(database);
 
     const subscription = 'https://fcm.googleapis.com/fcm/send/attendance-test';
@@ -831,19 +838,54 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     clock = new Date(Date.parse(at(260)) - 1).toISOString();
     assert.equal((await confirm(attended)).status, 204);
 
-    const missed = [await create(300), await create(340), await create(380)];
-    const short = await create(420, 5);
+    const missed = [await create(300), await create(340), await create(380, 10)];
+    assert.deepEqual((await inbox(1)).strikeProgress, { active: 0, remaining: 3, suspendedUntil: null });
+    const short = await create(285, 5);
+    const { rows: [otherMachine] } = await db.query(`
+      INSERT INTO laundry_machines (name, location, room, type, label, technical_status)
+      VALUES ('Suspension washer', 'Test location', '1', 'washer', 'SUSPENSION', 'working') RETURNING id`);
+    const otherEndpoint = '/api/laundry-machines/' + otherMachine.id;
+    const ongoing = await create(385, 20, otherMachine.id);
+    const future = await create(400);
+    const suspensionEnd = 390 + 48 * 60;
+    const justBeforeExpiry = await create(suspensionEnd - 5);
+    const atExpiry = await create(suspensionEnd, 20, otherMachine.id);
+    const beyondSuspension = await create(390 + 3 * 1440, 20, otherMachine.id);
     for (const [index, offset] of [310, 350, 390].entries()) {
+      if (index === 2) {
+        clock = at(385);
+        assert.equal((await send(otherEndpoint + '/reservations/' + ongoing + '/confirm', 'POST')).status, 204);
+      }
       clock = at(offset);
       const [, , confirmation] = await Promise.all([tick(), tick(), confirm(missed[index])]);
       assert.equal(confirmation.status, 409);
       // A tick may skip the equipment while the confirmation request holds its lock.
       await tick();
+      const expected = ['Mai ai 2 strike-uri până la suspendare.', 'Mai ai 1 strike până la suspendare.', 'Suspendarea a început.'];
+      assert.equal((await noticesFor(missed[index])).find(item => item.kind === 'strike-received').strikeProgressMessage,
+        expected[index]);
+      if (index < 2) {
+        assert.deepEqual((await inbox(1)).strikeProgress, { active: index + 1, remaining: 2 - index, suspendedUntil: null });
+      }
     }
     const residentView = await calendar(1);
     assert.equal(residentView.suspension.until, new Date(Date.parse(at(390)) + 48 * 3_600_000).toISOString());
+    assert.deepEqual((await inbox(1)).strikeProgress, { active: 0, remaining: 0, suspendedUntil: residentView.suspension.until });
     assert.equal(residentView.cancellations.filter(item => item.reason === 'Neprezentare').length, 3);
+    assert.ok(residentView.cancellations.some(item => item.id === future && item.reason === 'Suspendare pentru neprezentare'));
     assert.equal((await calendar(0)).cancellations.length, 0);
+    assert.ok(!(await calendar(0)).reservations.some(item => item.startsAt === at(400)));
+    const { rows: affectedReservations } = await db.query(`
+      SELECT id, cancelled_at, cancellation_reason FROM laundry_reservations
+      WHERE id = ANY($1::bigint[]) ORDER BY id`, [[future, justBeforeExpiry, atExpiry, beyondSuspension]]);
+    assert.deepEqual(affectedReservations.map(row => [row.id, row.cancelled_at?.toISOString() ?? null, row.cancellation_reason]), [
+      [future, at(390), 'Suspendare pentru neprezentare'],
+      [justBeforeExpiry, at(390), 'Suspendare pentru neprezentare'],
+      [atExpiry, null, null],
+      [beyondSuspension, null, null],
+    ]);
+    assert.ok(!(await noticesFor(future)).some(item => Date.parse(item.createdAt) >= Date.parse(at(390))));
+    assert.equal((await send(otherEndpoint + '/reservations/' + ongoing + '/finish', 'POST')).status, 204);
     assert.equal((await send(endpoint + '/reservations', 'POST', 1, { startsAt: at(450), endsAt: at(480) })).status, 403);
 
     clock = at(430);
@@ -853,9 +895,9 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     assert.deepEqual(strikes.map(row => row.reservation_id), missed);
     assert.equal((await db.query('SELECT cancelled_at FROM laundry_reservations WHERE id = $1', [short])).rows[0].cancelled_at, null);
 
-    const notice = async kind => (await db.query(`
+    const notice = async (kind, machineId = equipment.id) => (await db.query(`
       INSERT INTO laundry_notifications (user_id, machine_id, kind, message, created_at)
-      VALUES ($1, $2, $3, 'Test offer', $4) RETURNING id`, [resident.id, equipment.id, kind, clock])).rows[0].id;
+      VALUES ($1, $2, $3, 'Test offer', $4) RETURNING id`, [resident.id, machineId, kind, clock])).rows[0].id;
     const { rows: [entry] } = await db.query(`
       INSERT INTO laundry_queue_entries (machine_id, user_id, day, duration_minutes)
       VALUES ($1, $2, $3, 20) RETURNING id`, [equipment.id, resident.id, fixture.day]);
@@ -892,13 +934,35 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
       const alerts = await strikeAlerts(account);
       assert.deepEqual(alerts.map(item => item.reservation.id).sort(), [...missed].sort());
       assert.ok(alerts.every(item => item.message === 'S-a acordat un strike.'));
+      assert.ok(alerts.every(item => item.residentEmail === resident.email));
     }
     assert.deepEqual(await strikeAlerts(1), []);
+    const residentStrikes = async account => (await (await send('/api/notifications', 'GET', account)).json()).items
+      .filter(item => item.kind === 'strike-received');
+    const personalAlerts = await residentStrikes(1);
+    assert.deepEqual(personalAlerts.map(item => item.reservation.id), [...missed].reverse());
+    for (const item of personalAlerts) {
+      const index = missed.indexOf(item.reservation.id);
+      assert.equal(item.reservation.startsAt, at([300, 340, 380][index]));
+      assert.equal(item.machineId, equipment.id);
+      assert.equal(item.room, '1');
+      assert.equal(item.message, 'Neprezentare la rezervare.');
+      assert.equal(item.readAt, null);
+      assert.equal(Object.hasOwn(item, 'residentEmail'), false);
+    }
+    for (const account of [0, 2]) {
+      assert.ok(!(await residentStrikes(account)).some(item => missed.includes(item.reservation.id)));
+    }
     const { rows: [deliveryCount] } = await db.query(`
       SELECT count(*)::integer AS count FROM push_deliveries delivery
       JOIN laundry_notifications notice ON notice.id = delivery.notification_id
       WHERE notice.kind = 'strike-issued'`);
     assert.equal(deliveryCount.count, 0);
+    const { rowCount: residentDeliveries } = await db.query(`
+      SELECT 1 FROM push_deliveries delivery
+      JOIN laundry_notifications notice ON notice.id = delivery.notification_id
+      WHERE notice.kind = 'strike-received'`);
+    assert.equal(residentDeliveries, 0);
 
     // Put the target beyond the first page of the unfiltered history.
     await db.query(`
@@ -917,6 +981,7 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
       const result = await (await send(target, 'GET', account)).json();
       assert.deepEqual(result.items.map(item => item.id), [missed[0]]);
       assert.ok(result.items[0].strike_at);
+      assert.equal(result.items[0].strike_resident_email, resident.email);
       assert.equal(result.hasNext, false);
     }
 
@@ -925,6 +990,17 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     assert.equal((await send(correction, 'POST', 0, { reason: '' })).status, 400);
     assert.equal((await send(correction, 'POST', 0, { reason: 'Corecție de test' })).status, 204);
     assert.equal((await calendar(1)).suspension, null);
+    assert.ok((await calendar(1)).cancellations.some(item => item.id === future));
+    assert.equal((await send(correction, 'POST', 2, { reason: 'Repetare corecție' })).status, 204);
+    const correctionAlerts = (await noticesFor(missed[0])).filter(item => item.kind === 'strike-corrected');
+    assert.deepEqual(correctionAlerts.map(item => item.strikeProgressMessage), ['Mai ai 3 strike-uri până la suspendare.']);
+    assert.ok(!(await inbox(0)).items.some(item => item.kind === 'strike-corrected' && item.reservation?.id === missed[0]));
+    assert.deepEqual((await inbox(1)).strikeProgress, { active: 0, remaining: 3, suspendedUntil: null });
+    assert.equal((await noticesFor(missed[0])).find(item => item.kind === 'strike-received').strikeProgressMessage,
+      'Mai ai 2 strike-uri până la suspendare.');
+    assert.equal((await db.query(`
+      SELECT 1 FROM push_deliveries delivery JOIN laundry_notifications notice ON notice.id = delivery.notification_id
+      WHERE notice.kind = 'strike-corrected'`)).rowCount, 0);
 
     const { rows: [newQueueOffer] } = await db.query(`
       INSERT INTO laundry_queue_offers (entry_id, machine_id, notification_id, starts_at, ends_at, expires_at, immediate)
@@ -944,7 +1020,9 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
       assert.equal(clockAfterAccountLock, undefined);
     }
 
-    assert.equal((await send(endpoint + '/reservations', 'POST', 1, { startsAt: at(510), endsAt: at(540) })).status, 201);
+    const afterCorrection = await send(endpoint + '/reservations', 'POST', 1, { startsAt: at(510), endsAt: at(540) });
+    assert.equal(afterCorrection.status, 201);
+    const afterCorrectionId = (await afterCorrection.json()).id;
 
     const changeCondition = action => send(endpoint + '/condition', 'POST', 0, { action });
     const inspectionOutcome = async id => (await db.query(`
@@ -970,9 +1048,12 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     assert.ok(excused.attendance_excused_at);
     const operatorInbox = await (await send('/api/notifications', 'GET', 0)).json();
     assert.ok(!operatorInbox.items.some(item => item.kind === 'strike-issued' && item.reservation?.id === blocked));
+    assert.ok(!(await residentStrikes(1)).some(item => item.reservation.id === blocked));
 
     const secondCycle = await create(540, 10);
     const restoredInTime = await create(560);
+    clock = at(510);
+    assert.equal((await confirm(afterCorrectionId)).status, 204);
     clock = at(540);
     assert.equal((await confirm(secondCycle)).status, 204);
     assert.equal((await changeCondition('inspect')).status, 204);
@@ -985,5 +1066,74 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     assert.deepEqual(await inspectionOutcome(restoredInTime), {
       attendance_excused_at: null, cancelled_at: null, strike_at: null,
     });
+
+    const newerMiss = await create(590);
+    clock = at(600);
+    await tick();
+    assert.deepEqual((await inbox(1)).strikeProgress, { active: 1, remaining: 2, suspendedUntil: null });
+    clock = at(600 + 7 * 1440);
+    assert.deepEqual((await inbox(1)).strikeProgress, { active: 0, remaining: 3, suspendedUntil: null });
+    clock = at(600);
+    assert.equal((await send('/api/admin/reservations/' + newerMiss + '/strike-correction', 'POST', 0, { reason: 'Corecție individuală' })).status, 204);
+    assert.deepEqual((await inbox(1)).strikeProgress, { active: 0, remaining: 3, suspendedUntil: null });
+
+    for (const kind of ['queue-turn', 'restored']) {
+      await t.test(kind + ' stays blocked if another resident booked during suspension', async () => {
+        clock = at(434);
+        const { rows: [raceMachine] } = await db.query(`
+          INSERT INTO laundry_machines (name, location, room, type, label, technical_status)
+          VALUES ('Offer conflict washer', 'Test location', '1', 'washer', $1, 'working') RETURNING id`, [kind]);
+        const raceEndpoint = '/api/laundry-machines/' + raceMachine.id;
+        const offerNotice = await notice(kind, raceMachine.id);
+        let offerPath;
+        if (kind === 'queue-turn') {
+          const { rows: [raceEntry] } = await db.query(`
+            INSERT INTO laundry_queue_entries (machine_id, user_id, day, duration_minutes)
+            VALUES ($1, $2, $3, 20) RETURNING id`, [raceMachine.id, resident.id, fixture.day]);
+          const { rows: [offer] } = await db.query(`
+            INSERT INTO laundry_queue_offers (entry_id, machine_id, notification_id, starts_at, ends_at, expires_at, immediate)
+            VALUES ($1, $2, $3, $4, $5, $6, false) RETURNING id`,
+          [raceEntry.id, raceMachine.id, offerNotice, at(450), at(480), at(435)]);
+          offerPath = raceEndpoint + '/queue/offers/' + offer.id;
+        } else {
+          const original = await create(450, 20, raceMachine.id);
+          await db.query(`UPDATE laundry_reservations SET cancelled_at = $2, cancellation_reason = 'Echipament defect'
+            WHERE id = $1`, [original, at(430)]);
+          const { rows: [offer] } = await db.query(`
+            INSERT INTO laundry_restoration_offers
+              (notification_id, original_reservation_id, machine_id, starts_at, use_ends_at, ends_at, expires_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+          [offerNotice, original, raceMachine.id, at(450), at(470), at(480), at(435)]);
+          offerPath = '/api/notifications/offers/' + offer.id;
+        }
+        let suspensionId;
+        afterHoldCleanup = async () => {
+          const { rows: [suspension] } = await db.query(`
+            INSERT INTO laundry_suspensions (user_id, starts_at, ends_at) VALUES ($1, $2, $3) RETURNING id`,
+          [resident.id, clock, at(1000)]);
+          suspensionId = suspension.id;
+        };
+        const winner = await send(raceEndpoint + '/reservations', 'POST', 2, { startsAt: at(450), endsAt: at(480) });
+        assert.equal(winner.status, 201);
+        assert.ok(suspensionId);
+        await db.query('UPDATE laundry_suspensions SET lifted_at = $2 WHERE id = $1', [suspensionId, clock]);
+        const answer = await send(offerPath, 'POST', 1, { action: 'accept' });
+        assert.equal(answer.status, 409);
+        const { rows: holds } = await db.query(`
+          SELECT status FROM laundry_queue_offers WHERE notification_id = $1
+          UNION ALL
+          SELECT status FROM laundry_restoration_offers WHERE notification_id = $1`, [offerNotice]);
+        assert.deepEqual(holds.map(row => row.status), ['withdrawn']);
+        const { rows: survivors } = await db.query(`
+          SELECT id FROM laundry_reservations WHERE machine_id = $1 AND cancelled_at IS NULL`, [raceMachine.id]);
+        assert.deepEqual(survivors.map(row => row.id), [(await winner.json()).id]);
+      });
+    }
+
+    await db.query('UPDATE users SET can_manage_equipment = false WHERE id = $1', [users[0].id]);
+    const formerOperatorAlerts = await strikeAlerts(0);
+    assert.equal(formerOperatorAlerts.length, missed.length);
+    assert.ok(formerOperatorAlerts.every(item => !Object.hasOwn(item, 'residentEmail')));
+    assert.equal((await send(target, 'GET', 0)).status, 403);
   });
 });

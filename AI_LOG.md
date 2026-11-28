@@ -4,6 +4,82 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-28 · Prevent overlapping bookings when accepting laundry offers
+
+**Model:** GPT-6 (Codex).
+
+The owner asked to resolve the overlap found in the PR #26 review. Both
+Live-queue and restoration acceptance check for an overlapping active
+Reservation under the equipment lock when saving. If another booking owns
+the interval, the offer is withdrawn and acceptance returns HTTP 409.
+
+The PostgreSQL regression simulated a suspension starting between hold
+cleanup and the direct booking check, followed by the suspension being
+lifted. Both offer types initially returned HTTP 201 after the direct
+booking. Both now return HTTP 409, with one active Reservation and one
+withdrawn offer in each case. All 20 backend tests, the three PostgreSQL
+suites, the frontend build, ledger lint and `git diff --check` passed.
+The local backend and the phone HTTPS origin returned HTTP 200.
+
+## 2026-11-28 · Show the reservation holder on operator strike notices
+
+**Model:** GPT-6 (Codex).
+
+The owner approved showing the reservation holder's account email to Admin
+and Administrator in the strike notice and the corresponding history row.
+D-034 records the rule. Both views read the address from the linked account.
+The inbox checks the viewer's current role before returning the address.
+
+The new PostgreSQL assertion first failed because the operator notice had
+no holder field. It passed after the change, including checks for both
+operator roles, for the resident inbox and for a demoted Administrator.
+All 20 backend tests, the three PostgreSQL suites, the frontend build and
+ledger validation passed. Local readiness and both frontend modules served
+through the phone's HTTPS origin passed. The phone UI check is manual.
+
+## 2026-11-28 · Strike progress and correction notices
+
+**Model:** GPT-6 (Codex).
+
+The owner approved a current strike counter at the top of Notificări and one
+in-app notice when an operator corrects a strike. D-033 defines both. The
+counter uses the same eligibility and configured window as the suspension
+worker. The notice keeps the remaining count at issuance or correction.
+Migration 023 adds that snapshot and the correction notice kind. The
+correction and notice commit together, and a retry keeps the original notice.
+
+The integration scenario verified the countdown from three, activation,
+correction, one notice after a repeated request and expiry at the seven-day
+boundary. An earlier booking in the test scenario also generated a strike
+and produced two active strikes where the new expiry case expected one. The
+fixture now confirms that booking at its start. All 20 backend tests, the
+three PostgreSQL suites, the frontend build and ledger validation passed.
+Migration 023 was applied locally. The readiness probe and the frontend
+served through the phone's HTTPS origin passed the smoke checks. The Saturday
+test override remained active. The physical phone check is pending.
+
+## 2026-11-28 · Limit reservation cancellations to the suspension window
+
+**Model:** GPT-6 (Codex).
+
+The owner verified the resident strike notice and attendance confirmation on
+the phone, then approved limiting automatic cancellations to the time the
+suspension is active. D-032 supersedes D-031. When a new suspension starts,
+the backend cancels future Reservations scheduled before the stored expiry.
+Reservations scheduled at or after expiry stay valid. Residents can finish
+usage already started. Correcting a strike can lift the suspension, and
+cancelled Reservations stay in history. The Romanian guide and README now
+describe the same policy.
+
+The PostgreSQL regression first reproduced the previous behavior by finding
+cancellations at expiry and three days later. After the fix, a Reservation
+five minutes before expiry was cancelled, and Reservations at expiry and
+later stayed valid. All 20 backend tests, the three PostgreSQL suites, the
+frontend build, ledger validation and `git diff --check` passed. Local
+readiness and the phone HTTPS origin returned HTTP 200. The one-day Saturday
+override remained available for testing. The separate Live-queue overlap
+defect from the PR review remains open.
+
 ## 2026-11-27 · PR #26 review fixes
 
 **Model:** GPT-6.2-Sol (Codex).

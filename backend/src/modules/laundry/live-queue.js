@@ -29,11 +29,13 @@ async function advanceAttendance(client, machine, now, testAccounts) {
       const deadline = confirmationDeadline(reservation);
       // Under inspection, the update above already excused the blocked reservations.
       if (usable || underInspection) {
-        await client.query(`
-          UPDATE laundry_reservations SET cancelled_at = $2, cancellation_reason = 'Neprezentare' WHERE id = $1`,
+        const { rowCount } = await client.query(`
+          UPDATE laundry_reservations SET cancelled_at = $2, cancellation_reason = 'Neprezentare'
+          WHERE id = $1 AND cancelled_at IS NULL`,
         [reservation.id, deadline]);
-        if (await issueStrike(client, reservation, deadline)) {
-          await notifyStrike(client, machine, reservation, now, testAccounts);
+        if (rowCount) {
+          const progress = await issueStrike(client, reservation, deadline);
+          if (progress) await notifyStrike(client, machine, reservation, now, testAccounts, progress);
         }
       } else {
         await client.query('UPDATE laundry_reservations SET attendance_excused_at = $2 WHERE id = $1',
@@ -173,8 +175,15 @@ export async function answerQueueOffer(client, machine, offerId, userId, action,
   if (endsAt > offer.ends_at) return [409];
   const { rows: [reservation] } = await client.query(`
     INSERT INTO laundry_reservations (machine_id, user_id, starts_at, use_ends_at, ends_at, attendance_tracked, confirmed_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    SELECT $1::integer, $2::bigint, $3::timestamptz, $4::timestamptz, $5::timestamptz, $6::boolean, $7::timestamptz
+    WHERE NOT EXISTS (SELECT 1 FROM laundry_reservations
+      WHERE machine_id = $1 AND cancelled_at IS NULL AND starts_at < $5 AND ends_at > $3)
+    RETURNING id`,
   [machine.id, userId, startsAt, useEndsAt, endsAt, !offer.immediate, offer.immediate ? acceptedAt : null]);
+  if (!reservation) {
+    await withdrawQueueOffers(client, machine.id, offer.entry_id);
+    return [409];
+  }
   await client.query(`
     UPDATE laundry_queue_offers SET status = 'accepted', reservation_id = $2 WHERE id = $1`, [offerId, reservation.id]);
   await client.query(`

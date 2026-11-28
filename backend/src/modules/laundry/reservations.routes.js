@@ -4,7 +4,7 @@ import { localOrigins, requireSession } from '../auth/auth.routes.js';
 import { calendarEntry, equipmentStatus, handoverTime, occupiedBlock, reservationWindow, residenceZone, validDay } from './reservation-rules.js';
 import { advanceQueue } from './live-queue.js';
 import { liveQueueRoutes } from './live-queue.routes.js';
-import { activeSuspension, attendanceState, confirmAttendance, suspendedBooking } from './reservation-attendance.js';
+import { activeSuspension, attendanceState, confirmAttendance, suspendedBooking, suspensionCancellationReason } from './reservation-attendance.js';
 import { lockEquipment } from './condition.routes.js';
 
 const overlapMessage = 'Intervalul tocmai a fost rezervat. Alege altul.';
@@ -125,12 +125,13 @@ async function changeReservation(database, machineId, id, userId, action) {
       const endsAt = new Date(Math.min(+reservation.ends_at, +now + handoverTime));
       await client.query(`
         UPDATE laundry_reservations
-        SET original_ends_at = ends_at, finished_at = $2, use_ends_at = $2, ends_at = $3 WHERE id = $1`,
+        SET original_ends_at = ends_at, finished_at = $2, use_ends_at = $2, ends_at = $3
+        WHERE id = $1 AND cancelled_at IS NULL`,
       [id, now, endsAt]);
     } else {
       if (reservation.cancelled_at) return [204];
       if (reservation.starts_at <= now) return [409, { message: 'Rezervarea a început și nu mai poate fi anulată.' }];
-      await client.query('UPDATE laundry_reservations SET cancelled_at = $2 WHERE id = $1', [id, now]);
+      await client.query('UPDATE laundry_reservations SET cancelled_at = $2 WHERE id = $1 AND cancelled_at IS NULL', [id, now]);
     }
     await advanceQueue(client, machine, now);
     return [204];
@@ -180,11 +181,12 @@ export function reservationRoutes(database, origins = localOrigins) {
       ) holds ON true
       LEFT JOIN laundry_reservations reservation ON reservation.machine_id = machine.id
         AND (reservation.cancelled_at IS NULL OR (reservation.user_id = $4 AND (
-          reservation.cancellation_reason = 'Neprezentare' OR
+          reservation.cancellation_reason IN ('Neprezentare', $5) OR
           (reservation.cancelled_at = machine.current_fault_at AND reservation.cancellation_reason IS NOT NULL))))
         AND reservation.starts_at < (($2::date + 1)::timestamp AT TIME ZONE $3)
         AND reservation.ends_at > ($2::date::timestamp AT TIME ZONE $3)
-      WHERE machine.id = $1 ORDER BY reservation.starts_at`, [req.params.machineId, day, residenceZone, res.locals.account.id]);
+      WHERE machine.id = $1 ORDER BY reservation.starts_at`,
+    [req.params.machineId, day, residenceZone, res.locals.account.id, suspensionCancellationReason]);
     if (!rows.length) return res.status(404).json(notFound);
     const [{ technical_status, now, opens_at, closes_at, latest_start, open, holds, next_hold_expiration }] = rows;
     res.json({
@@ -197,7 +199,7 @@ export function reservationRoutes(database, origins = localOrigins) {
       nextHoldExpiration: next_hold_expiration,
       cancellations: rows.filter(row => row.cancellation_reason).map(row => ({
         ...occupiedBlock(row), reason: row.cancellation_reason,
-        ...(row.cancellation_reason === 'Neprezentare' && { id: row.id }),
+        ...((row.cancellation_reason === 'Neprezentare' || row.cancellation_reason === suspensionCancellationReason) && { id: row.id }),
       })),
       reservations: rows.filter(row => row.id && !row.cancellation_reason).map(row => calendarEntry(row, res.locals.account.id)),
     });

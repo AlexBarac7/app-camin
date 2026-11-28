@@ -150,10 +150,12 @@ export function adminRoutes(database, origins = localOrigins, appOrigin, { sendI
     const { rows } = await database.query(`
       SELECT reservation.id, machine.name AS equipment, machine.location,
         reservation.starts_at, reservation.use_ends_at, reservation.ends_at, reservation.cancelled_at,
-        reservation.cancellation_reason, strike.issued_at AS strike_at, strike.corrected_at, strike.correction_reason
+        reservation.cancellation_reason, strike.issued_at AS strike_at, strike.corrected_at, strike.correction_reason,
+        strike_resident.email AS strike_resident_email
       FROM laundry_reservations reservation
       JOIN laundry_machines machine ON machine.id = reservation.machine_id
       LEFT JOIN laundry_strikes strike ON strike.reservation_id = reservation.id
+      LEFT JOIN users strike_resident ON strike_resident.id = strike.user_id
       WHERE ($1::integer IS NULL OR reservation.machine_id = $1)
         AND ($2::date IS NULL OR (
           reservation.starts_at >= ($2::date::timestamp AT TIME ZONE $4)

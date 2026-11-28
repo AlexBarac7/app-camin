@@ -213,6 +213,9 @@ function AdminReservations({ path, authorized }) {
   }
 
   const columns = [...reservationColumns, {
+    name: 'strike_resident_email', label: 'Rezident', render: row =>
+      <span className="[overflow-wrap:anywhere]">{row.strike_resident_email ?? '—'}</span>,
+  }, {
     name: 'strike', label: 'Strike', render: row => {
       if (!row.strike_at) return '—';
       if (row.corrected_at) return <>Corectat · {row.correction_reason}</>;

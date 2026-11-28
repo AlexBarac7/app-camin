@@ -249,7 +249,7 @@ function CalendarDay({ machine, day, today, queue, onChange, onNextDay, children
             setRevision(value => value + 1);
           }}>Reîncarcă data</button>
           : <p role="status" className="camin-notice" data-tone="info">Se încarcă intervalele…</p>)}
-        {calendar?.cancellations?.filter(entry => entry.reason === 'Neprezentare' || machine.technicalStatus === 'broken').map((entry, index) => <p key={index} id={entry.id ? 'rezervare-' + entry.id : undefined}
+        {calendar?.cancellations?.filter(entry => entry.id || machine.technicalStatus === 'broken').map((entry, index) => <p key={entry.id ?? index} id={entry.id ? 'rezervare-' + entry.id : undefined}
           tabIndex={entry.id ? -1 : undefined} className="camin-notice" data-tone="warning">
           Rezervarea ta {interval(entry.startsAt, entry.endsAt)} · <LaundryStatus status="cancelled">Anulată</LaundryStatus> · {entry.reason}
         </p>)}

@@ -487,9 +487,13 @@ A missed confirmation releases the block and records a strike. Usage shorter
 than ten minutes is exempt. If an inspection prevents confirmation through
 the deadline, the Reservation is kept and no strike is recorded. If service
 resumes before the deadline, the resident can confirm in the time remaining.
-Three strikes in seven days suspend new
-Reservations for 48 hours by default. Admin and Administrator can change the
-two periods or correct a strike with a reason under **Rezervări**.
+The resident sees **Ai primit un strike** in **Notificări** and can open the
+cancelled Reservation from there. Three strikes in seven days suspend access
+for 48 hours by default and cancel future Reservations scheduled to start before
+the suspension expires. Reservations starting at or after expiration remain
+valid. Usage already started can finish. Admin and Administrator can change the two periods or
+correct a strike with a reason under **Rezervări**. A correction that lifts
+the suspension allows new Reservations. The cancellations stay in history.
 [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13)
 
 ## Roadmap

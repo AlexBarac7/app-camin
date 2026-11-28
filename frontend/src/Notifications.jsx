@@ -20,6 +20,8 @@ const noticeLabels = {
   'access-request': ['Cerere de acces nouă', 'account', 'info'],
   'reservation-reminder': ['Rezervarea ta se apropie', 'clock', 'info'],
   'strike-issued': ['Strike pentru neprezentare', 'warning', 'warning'],
+  'strike-received': ['Ai primit un strike', 'warning', 'warning'],
+  'strike-corrected': ['Strike corectat', 'check', 'success'],
   'reservation-start': ['Rezervarea ta a început', 'calendar', 'info'],
   'queue-turn': ['Interval disponibil astăzi', 'queue', 'info'],
 };
@@ -160,6 +162,7 @@ function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRe
       </div>
       {equipment && <p className="camin-muted">{equipment}</p>}
       {(!queue || !equipment) && <p className="notice-message">{item.message}</p>}
+      {item.strikeProgressMessage && <p className="camin-muted">{item.strikeProgressMessage}</p>}
       {offer && !offer.immediate && <p>
         {dayKey.format(new Date(offer.startsAt)) !== dayKey.format(stamp) &&
           <span className="camin-muted">{noticeDay.format(new Date(offer.startsAt))} · </span>}
@@ -177,6 +180,7 @@ function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRe
         </div>
       </>}
       {strike && item.reservation && <>
+        {item.residentEmail && <p className="[overflow-wrap:anywhere]"><strong>Rezident</strong> {item.residentEmail}</p>}
         <p>Rezervare din {dateTime.format(new Date(item.reservation.startsAt))}</p>
         <a className="camin-link" href={'/admin/rezervari?rezervare=' + encodeURIComponent(item.reservation.id)}>
           Mergi la rezervare <span aria-hidden="true">→</span>
@@ -306,6 +310,7 @@ export default function Notifications({ onUnreadCount }) {
 
   const now = snapshot ? Date.parse(snapshot.now) + time - snapshot.received : 0;
   const groups = snapshot ? groupNotices(snapshot.items, now) : [];
+  const strikeProgress = snapshot?.strikeProgress;
   return <section className="notice-inbox">
     <header className="portal-heading-row">
       <h1>Notificări</h1>
@@ -316,6 +321,11 @@ export default function Notifications({ onUnreadCount }) {
         <div className="camin-panel"><PushControls publicKey={snapshot.pushPublicKey} unreadCount={unreadCount} /></div>
       </details>}
     </header>
+    {strikeProgress && <p className="camin-muted">
+      {strikeProgress.suspendedUntil
+        ? 'Suspendare activă până la ' + dateTime.format(new Date(strikeProgress.suspendedUntil))
+        : `${strikeProgress.active} ${strikeProgress.active === 1 ? 'strike activ' : 'strike-uri active'} · Mai ai ${strikeProgress.remaining} până la suspendare`}
+    </p>}
     {loadError && <p role="alert">{loadError} <button className="underline" onClick={() => refresh(value => value + 1)}>Reîncarcă</button></p>}
     {!snapshot && !loadError && <p role="status">Se încarcă notificările…</p>}
     {feedback && <p role="status">{feedback}</p>}

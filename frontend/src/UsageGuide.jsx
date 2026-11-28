@@ -38,8 +38,12 @@ export default function UsageGuide({ reportsPath, canManage }) {
         {' '}confirmă și prezența.</p>
       <p>Dacă nu confirmi la timp, intervalul rămas se eliberează și primești un strike. Ești scutit dacă utilizarea durează sub
         10 minute sau dacă echipamentul e în verificare și nu poți confirma până la termen.</p>
-      <p>În mod implicit, trei strike-uri în ultimele șapte zile suspendă rezervările noi pentru 48 de ore. Calendarul îți arată
-        motivul și data la care poți rezerva din nou. Poți folosi rezervările pe care le-ai făcut deja.</p>
+      <p>În <a className="camin-link" href="/notificari">Notificări</a> găsești mesajul <strong>Ai primit un strike</strong> și un link
+        către rezervarea anulată. Deasupra listei vezi câte strike-uri active ai și câte mai sunt până la suspendare.
+        Primești un mesaj și când un administrator îți corectează un strike.</p>
+      <p>În mod implicit, trei strike-uri în ultimele șapte zile suspendă accesul pentru 48 de ore. Se anulează rezervările
+        viitoare programate să înceapă înainte de expirarea suspendării. Rezervările de la ora expirării sau de mai târziu rămân
+        valabile. Poți termina utilizarea deja începută. Calendarul îți arată motivul și data la care poți rezerva din nou.</p>
       <p>Conform regulii implicite, fiecare strike iese din calcul la șapte zile de la acordare. Cele trei strike-uri care au declanșat o
         suspendare rămân în istoric, iar o nouă suspendare cere alte trei strike-uri. Dacă un strike a fost acordat pe nedrept,
         cere administratorului să îl corecteze.</p>
@@ -63,14 +67,14 @@ export default function UsageGuide({ reportsPath, canManage }) {
       Poți activa și alerte în browser pe dispozitivele compatibile. Apasă <strong>OK</strong> pe un mesaj ca să-l marchezi drept citit.</p>,
     'gestionarea-strike-urilor': <>
       <p>La fiecare strike nou, Administratorul și Adminul primesc mesajul <strong>S-a acordat un strike</strong> în
-        {' '}<a className="camin-link" href="/notificari">Notificări</a>, doar în aplicație. Mesajul arată echipamentul,
-        data și ora rezervării.</p>
+        {' '}<a className="camin-link" href="/notificari">Notificări</a>, doar în aplicație. Mesajul arată e-mailul rezidentului,
+        echipamentul, data și ora rezervării.</p>
       <p>Apasă <strong>Mergi la rezervare</strong> din mesaj pentru a deschide direct detaliile. Poți găsi aceeași rezervare din
         {' '}<strong>Contul meu</strong>, la <a className="camin-link" href="/admin/rezervari">Istoricul rezervărilor</a>,
         folosind filtrul <strong>Anulate</strong>.</p>
       <p>Dacă verifici că strike-ul a fost acordat pe nedrept, apasă <strong>Corectează strike-ul</strong>, scrie motivul și apasă
         {' '}<strong>Confirmă corecția</strong>. Strike-ul apare ca <strong>Corectat</strong>, cu motivul în istoric, și iese din calcul.
-        Dacă a contribuit la o suspendare încă activă, suspendarea se ridică imediat.</p>
+        Dacă a contribuit la o suspendare încă activă, suspendarea se ridică imediat. Rezervările anulate rămân în istoric.</p>
       <p>În istoricul rezervărilor, la <strong>Regulă de neprezentare</strong>, poți schimba perioada de acumulare a strike-urilor
         și durata suspendării. Apasă <strong>Salvează regula</strong> pentru a aplica valorile la sancțiunile noi.</p>
     </>,

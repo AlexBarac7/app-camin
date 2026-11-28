@@ -17,6 +17,8 @@
 
 ### [Laundry decisions](decisions/laundry-decisions.md)
 - D-014 · Authorize equipment operations separately and restore service manually · _superseded-by D-021_
+- D-028 · Confirm laundry attendance and apply temporary booking suspensions · _superseded-by D-031_
+- D-031 · Confirm laundry attendance and cancel future reservations on suspension · _superseded-by D-032_
 
 ---
 
