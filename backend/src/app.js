@@ -15,7 +15,7 @@ export function createApp(database, appOrigins, pushPublicKey, photos, {
   app.disable('x-powered-by');
   app.locals.testAccounts = testAccounts;
   app.use('/api/auth', authRoutes(database, appOrigins, { appOrigin, sendPasswordReset }));
-  app.use('/api/notifications', notificationRoutes(database, appOrigins, pushPublicKey));
+  app.use('/api/notifications', notificationRoutes(database, appOrigins, pushPublicKey, photos));
   app.get('/api/laundry-machines', requireSession(database), async (req, res) => {
     const withAvailability = req.query.availability === '1';
     const rows = withAvailability ? await laundryAvailability(database)

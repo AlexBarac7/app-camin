@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AdminNav } from './AdminData.jsx';
+import { portalSignInPath } from './sign-in-return.js';
 
 const field = 'min-w-0 rounded-lg border border-slate-400 bg-white px-3 py-2.5 focus-visible:outline-2 focus-visible:outline-offset-2';
 const button = 'w-fit rounded-lg bg-teal-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60';
@@ -15,7 +16,7 @@ async function adminRequest(path, body, signal) {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     }),
   });
-  if (response.status === 401) window.location.replace('/autentificare');
+  if (response.status === 401) window.location.replace(portalSignInPath(window.location));
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     throw Object.assign(new Error(data.message || 'Cererea nu a putut fi finalizată. Încearcă din nou.'), { status: response.status });

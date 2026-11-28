@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import AdminAnnouncements, { AnnouncementPhotos } from './AdminAnnouncements.jsx';
 import PortalIcon from './PortalIcon.jsx';
 
 const endpoint = '/api/notifications';
@@ -25,6 +26,7 @@ const noticeLabels = {
   'strike-corrected': ['Strike corectat', 'check', 'success'],
   'reservation-start': ['Rezervarea ta a început', 'calendar', 'info'],
   'queue-turn': ['Interval disponibil astăzi', 'queue', 'info'],
+  announcement: ['Notificare de la Administrator', 'bell', 'info'],
 };
 const timeZone = 'Europe/Bucharest';
 const dateTime = new Intl.DateTimeFormat('ro-RO', {
@@ -137,7 +139,7 @@ function groupNotices(items, now) {
   }));
 }
 
-function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRead }) {
+function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRead, onConfirm }) {
   const { offer } = item;
   const queue = item.kind === 'queue-turn';
   const strike = item.kind === 'strike-issued';
@@ -163,6 +165,7 @@ function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRe
       </div>
       {equipment && <p className="camin-muted">{equipment}</p>}
       {(!queue || !equipment) && <p className="notice-message">{item.message}</p>}
+      {item.announcement && <AnnouncementPhotos id={item.announcement.id} photoIds={item.announcement.photoIds} />}
       {item.strikeProgressMessage && <p className="camin-muted">{item.strikeProgressMessage}</p>}
       {offer && !offer.immediate && <p>
         {dayKey.format(new Date(offer.startsAt)) !== dayKey.format(stamp) &&
@@ -195,6 +198,9 @@ function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRe
         href={(item.kind === 'report-new' ? '/admin/sesizari' : '/sesizari') + '#sesizare-' + item.reportId}>
         Deschide sesizarea
       </a>}
+      {item.announcement && (item.announcement.confirmedAt ? <p>Ai confirmat citirea.</p>
+        : <div className="notice-actions"><button type="button" className="camin-control" disabled={reading !== null}
+          onClick={() => onConfirm(item.id)}>Confirm că am citit</button></div>)}
       {!item.readAt && <button type="button" className="camin-control notice-read"
         aria-label="OK, marchează notificarea ca citită" disabled={reading !== null}
         onClick={() => onMarkRead(item.id)}>OK</button>}
@@ -202,7 +208,7 @@ function NotificationCard({ item, now, target, busy, reading, onAnswer, onMarkRe
   </li>;
 }
 
-export default function Notifications({ onUnreadCount }) {
+export default function Notifications({ onUnreadCount, canAnnounce }) {
   const [snapshot, setSnapshot] = useState(null);
   const [time, setTime] = useState(() => performance.now());
   const [revision, refresh] = useState(0);
@@ -285,25 +291,28 @@ export default function Notifications({ onUnreadCount }) {
     }
   }
 
-  async function markRead(id) {
+  async function acknowledge(id, action) {
     setReading(id);
     setFeedback('');
     try {
-      const response = await send('/' + id + '/read', 'PUT');
+      const response = await send('/' + id + '/' + action, 'PUT');
       if (response.status === 401) {
         window.location.replace('/autentificare' + (target ? '?notificare=' + target : ''));
         return;
       }
       if (!response.ok) throw new Error(unavailable);
-      const { readAt } = await response.json();
+      const result = await response.json();
       // An inbox request started before this update can still contain the unread state.
       loadVersion.current += 1;
       setSnapshot(current => ({
         ...current,
-        items: current.items.map(item => item.id === id ? { ...item, readAt } : item),
+        items: current.items.map(item => item.id !== id ? item : action === 'confirm'
+          ? { ...item, announcement: { ...item.announcement, ...result } }
+          : { ...item, ...result }),
       }));
     } catch {
-      setFeedback('Mesajul nu a putut fi marcat drept citit. Încearcă din nou.');
+      setFeedback(action === 'confirm' ? 'Citirea nu a putut fi confirmată. Încearcă din nou.'
+        : 'Mesajul nu a putut fi marcat drept citit. Încearcă din nou.');
     } finally {
       setReading(null);
     }
@@ -322,6 +331,7 @@ export default function Notifications({ onUnreadCount }) {
         <div className="camin-panel"><PushControls publicKey={snapshot.pushPublicKey} unreadCount={unreadCount} /></div>
       </details>}
     </header>
+    {canAnnounce && <AdminAnnouncements />}
     {strikeProgress && <p className="camin-muted">
       {strikeProgress.suspendedUntil
         ? 'Suspendare activă până la ' + dateTime.format(new Date(strikeProgress.suspendedUntil))
@@ -334,7 +344,8 @@ export default function Notifications({ onUnreadCount }) {
     {groups.map(({ day, label, notices }) => <section className="notice-group" key={day}>
       <h2>{label}</h2>
       <ul>{notices.map(item => <NotificationCard key={item.id} item={item} now={now} target={target}
-        busy={busy} reading={reading} onAnswer={answer} onMarkRead={markRead} />)}</ul>
+        busy={busy} reading={reading} onAnswer={answer}
+        onMarkRead={id => acknowledge(id, 'read')} onConfirm={id => acknowledge(id, 'confirm')} />)}</ul>
     </section>)}
   </section>;
 }

@@ -6,6 +6,7 @@ import { createDatabase } from './db.js';
 import { createApp } from './app.js';
 import { startPushDelivery } from './modules/notifications/push.js';
 import { startEndReminderEmails } from './modules/notifications/end-reminder-email.js';
+import { startAccessRequestEmails } from './modules/notifications/access-request-email.js';
 import { createReportPhotoStore } from './modules/laundry/report-photos.js';
 import { localTestAccounts } from './modules/auth/account-roles.js';
 import { createAuthMailer } from './modules/auth/auth-mail.js';
@@ -37,6 +38,9 @@ try {
   });
   const stopPushDelivery = startPushDelivery(database, config.push);
   const stopEndReminderEmails = startEndReminderEmails(database, authMail?.sendEndReminder);
+  const accessRequestsLink = new URL('/admin/cereri-acces', appOrigin ?? 'http://localhost:5173').href;
+  const stopAccessRequestEmails = startAccessRequestEmails(database, testAccounts,
+    authMail && (to => authMail.sendAccessRequest(to, accessRequestsLink)));
   const stopQueue = startQueueWorker(database, testAccounts);
   const listeners = [server];
   if (config.internalReadinessPort) {
@@ -54,7 +58,7 @@ try {
       const deadline = setTimeout(() => process.exit(1), 5000);
       deadline.unref();
       await Promise.all([
-        stopPushDelivery(), stopEndReminderEmails(), stopQueue(),
+        stopPushDelivery(), stopEndReminderEmails(), stopAccessRequestEmails(), stopQueue(),
         ...listeners.map(listener => new Promise(resolve => listener.close(resolve))),
       ]);
       await database.close();

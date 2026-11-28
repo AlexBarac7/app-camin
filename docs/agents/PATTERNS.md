@@ -21,6 +21,7 @@
 - PATTERN-013 · Approve an access request and issue its invitation together · candidate
 - PATTERN-014 · Record an invitation attempt before handing it to SMTP · candidate
 - PATTERN-015 · Serialize credential changes and session creation on the account row · candidate
+- PATTERN-019 · Deduplicate publication retries by author and request ID · candidate
 
 ### [Laundry patterns](patterns/laundry-patterns.md)
 - PATTERN-016 · Rebuild the live queue view from committed state · candidate
@@ -149,3 +150,12 @@
   transaction.
 - **Example:** backend/src/modules/auth/password-resets.js and
   backend/src/modules/auth/auth.routes.js.
+
+## PATTERN-019 · Deduplicate publication retries by author and request ID
+- **Status:** candidate
+- **How:** The client reuses a request ID for an unchanged submission. A unique
+  key on the author and request ID allows a single transaction to publish
+  recipient notices and deliveries. Concurrent requests use distinct upload
+  keys, and a retry removes any copies its own transaction left unreferenced.
+- **Example:** backend/src/modules/notifications/announcements.routes.js and
+  frontend/src/AdminAnnouncements.jsx.

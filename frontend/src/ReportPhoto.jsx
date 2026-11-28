@@ -7,7 +7,7 @@ function distance(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function PhotoViewer({ src, onClose }) {
+function PhotoViewer({ src, onClose, label, alt }) {
   const dialog = useRef(null);
   const stage = useRef(null);
   const pointers = useRef(new Map());
@@ -91,11 +91,11 @@ function PhotoViewer({ src, onClose }) {
     if (pointers.current.delete(event.pointerId)) pinch.current = null;
   }
 
-  return <dialog ref={dialog} aria-label="Fotografia sesizării" onClose={onClose}
+  return <dialog ref={dialog} aria-label={label} onClose={onClose}
     className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none overflow-hidden bg-slate-950 text-white backdrop:bg-slate-950">
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between gap-4 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-5">
-        <h2 className="font-semibold">Fotografia sesizării</h2>
+        <h2 className="font-semibold">{label}</h2>
         <button type="button" className={control + ' text-2xl'} aria-label="Închide fotografia"
           onClick={() => dialog.current.close()}>×</button>
       </header>
@@ -106,7 +106,7 @@ function PhotoViewer({ src, onClose }) {
           (zoom > 1 ? 'cursor-grab active:cursor-grabbing' : '')}>
         <div className="grid min-h-full min-w-full place-items-center" style={{ width, height }}>
           {failed ? <p role="status" className="p-4 text-center">Fotografia nu este disponibilă momentan.</p>
-            : <img src={src} alt={photoAlt} draggable={false} className="pointer-events-none max-w-none select-none"
+            : <img src={src} alt={alt} draggable={false} className="pointer-events-none max-w-none select-none"
               style={{ width, height }} onError={() => setFailed(true)} onLoad={event => {
                 setImage({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight });
               }} />}
@@ -125,21 +125,21 @@ function PhotoViewer({ src, onClose }) {
   </dialog>;
 }
 
-export default function ReportPhoto({ src }) {
+export default function ReportPhoto({ src, label = 'Fotografia sesizării', alt = photoAlt }) {
   const trigger = useRef(null);
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
 
   if (failed) return <p className="text-sm text-slate-600">Fotografia nu este disponibilă momentan.</p>;
   return <>
-    <button ref={trigger} type="button" aria-label="Mărește fotografia sesizării" aria-haspopup="dialog"
+    <button ref={trigger} type="button" aria-label={'Mărește ' + label.toLocaleLowerCase('ro-RO')} aria-haspopup="dialog"
       className="relative w-fit max-w-full cursor-zoom-in overflow-hidden rounded-lg border border-slate-300 bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2"
       onClick={() => setOpen(true)}>
-      <img src={src} alt={photoAlt} loading="lazy" className="block max-h-36 max-w-full object-contain sm:max-h-44"
+      <img src={src} alt={alt} loading="lazy" className="block max-h-36 max-w-full object-contain sm:max-h-44"
         onError={() => setFailed(true)} />
       <span aria-hidden="true" className="absolute right-1 bottom-1 rounded bg-slate-950/85 px-2 text-lg text-white">+</span>
     </button>
-    {open && <PhotoViewer src={src} onClose={() => {
+    {open && <PhotoViewer src={src} label={label} alt={alt} onClose={() => {
       setOpen(false);
       trigger.current?.focus({ preventScroll: true });
     }} />}

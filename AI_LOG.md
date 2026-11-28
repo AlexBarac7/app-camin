@@ -4,6 +4,57 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-28 · Notify Admin by Web Push and email about access requests
+
+**Model:** GPT-6 (Codex).
+
+The owner approved D-037. Each new or explicitly reopened access request
+creates an Admin inbox notice, a push job for each subscribed Admin device
+and one email job per Admin account in the same transaction. A duplicate
+submission while the request is pending creates no deliveries. The SMTP
+worker rechecks the Admin role before sending and retries only an explicit
+temporary rejection, up to three attempts. The email opens **Cereri de
+acces**, including after sign-in.
+
+The PostgreSQL regression first showed the missing push job. It now covers
+concurrent duplicate requests, reopening an existing request, the Admin-only
+recipient, SMTP deferral and concurrent worker claims. All backend tests,
+the three PostgreSQL suites, frontend build and ledger checks passed.
+Mailpit received one message with the expected subject and protected link.
+Migration 027 was applied in Compose, and the rebuilt backend returned
+healthy with SMTP and Web Push configured.
+The owner confirmed that a real access request reached Gmail. The missing
+Gmail alert was resolved in the owner's notification settings.
+
+## 2026-11-28 · Administrator announcements and optional read confirmation
+
+**Model:** GPT-6 (Codex).
+
+The owner approved [Issue #27](https://github.com/AlexBarac7/app-camin/issues/27).
+The Administrator publishes from **Notificări** and can attach up to four
+optional photos from the camera or gallery. The separate camera control was
+also restored in the maintenance report form. Resident accounts receive
+the announcement in the app. Subscribed devices receive Web Push titled
+**Notificare de la Administrator** with a link to the notice.
+
+Residents can explicitly confirm that they read the announcement. The author
+can see the count and individual confirmations under **Anunțuri trimise**.
+The inbox's **OK** button continues to mark the message as read. Migration
+026 adds announcements, private photo references and confirmation timestamps.
+Publication creates recipient notices and push jobs in one transaction and
+deduplicates retries of the same submission. The Romanian guide explains the
+workflow in a separate section under **Notificări**.
+
+The PostgreSQL regression covers role checks, recipient visibility, private
+photos, cleanup after storage failure, concurrent publication retries, push
+payload and explicit confirmation. The backend tests, all three PostgreSQL
+suites, frontend build, ledger lint and diff check passed. The local inbox
+initially failed because the running backend image contained only migrations
+001 through 025. The rebuilt image applied migration 026 successfully.
+Frontend and backend Compose services were restarted, and the updated
+service worker and both camera controls were verified through the frontend.
+The owner confirmed that Administrator notifications work in the app.
+
 ## 2026-11-28 · Laundry end-of-use reminder and email fallback
 
 **Model:** GPT-6 (Codex).

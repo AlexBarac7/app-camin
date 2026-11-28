@@ -80,9 +80,18 @@ export function requestAccess(database, email, testAccounts, replacement) {
         delivery_state = NULL, delivery_hash = NULL`, [email]);
     if (!rowCount) return 'account_exists';
     await client.query(`
-      INSERT INTO laundry_notifications (user_id, kind, message, created_at)
-      SELECT id, 'access-request', 'Cerere nouă de acces.', clock_timestamp()
-      FROM users WHERE ${adminAccountsSql}`, [testAccounts, testAdminEmail]);
+      WITH notices AS (
+        INSERT INTO laundry_notifications (user_id, kind, message, created_at)
+        SELECT id, 'access-request', 'Cerere nouă de acces.', clock_timestamp()
+        FROM users WHERE ${adminAccountsSql}
+        RETURNING id, user_id
+      ), pushes AS (
+        INSERT INTO push_deliveries (notification_id, subscription_id)
+        SELECT notices.id, subscription.id FROM notices
+        JOIN push_subscriptions subscription USING (user_id)
+      )
+      INSERT INTO access_request_notice_emails (notification_id)
+      SELECT id FROM notices`, [testAccounts, testAdminEmail]);
     return replacement ? 'replacement_received' : 'received';
   });
 }

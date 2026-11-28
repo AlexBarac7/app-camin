@@ -129,3 +129,17 @@
 - **Why:** Admin can record a decision and inform the applicant immediately.
 - **Evidence:** The owner requested and approved the immediate rejection workflow.
 - **Confirmed:** 2026-11-27
+
+## D-037 · Alert Admin by Web Push and email about access requests
+- **Status:** approved
+- **Date:** 2026-11-28
+- **Rule:** When an access request enters the approval queue, keep the in-app
+  notice defined by D-022. Also queue Web Push for each subscribed device and
+  one email to the account address of each authorized Admin. Apply the same
+  rule to an explicit invitation replacement that reopens a request under
+  D-026. A duplicate submission while the request is pending queues no
+  deliveries. The email links to the protected access requests page.
+- **Why:** Admin can act on registration requests while away from the app.
+- **Evidence:** The owner requested both channels and confirmed the
+  implementation proposal.
+- **Confirmed:** 2026-11-28
