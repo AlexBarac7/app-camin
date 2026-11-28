@@ -65,10 +65,16 @@ export async function dispatchPushDeliveries(database, send) {
       COALESCE(offer.expires_at, queue.expires_at, CASE notice.kind
         WHEN 'reservation-reminder' THEN reservation.starts_at
         WHEN 'reservation-start' THEN LEAST(reservation.starts_at + interval '10 minutes', reservation.use_ends_at)
+        WHEN 'reservation-end-reminder' THEN reservation.use_ends_at
       END) AS expires_at,
       COALESCE(offer.status, queue.status,
-        CASE WHEN reservation.id IS NOT NULL AND reservation.cancelled_at IS NULL
-          AND reservation.confirmed_at IS NULL AND reservation.attendance_excused_at IS NULL THEN 'pending' END
+        CASE WHEN reservation.id IS NOT NULL AND reservation.cancelled_at IS NULL AND (
+          (notice.kind = 'reservation-end-reminder' AND reservation.finished_at IS NULL
+            AND (machine.technical_status = 'working' OR
+                 (machine.technical_status = 'inspection' AND machine.inspection_reservation_id = reservation.id)))
+          OR (notice.kind <> 'reservation-end-reminder'
+            AND reservation.confirmed_at IS NULL AND reservation.attendance_excused_at IS NULL)
+        ) THEN 'pending' END
       ) AS offer_status, statement_timestamp() AS now
     FROM leased JOIN push_subscriptions subscription ON subscription.id = leased.subscription_id
     LEFT JOIN laundry_restoration_offers offer ON offer.notification_id = leased.notification_id

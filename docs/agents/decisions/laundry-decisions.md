@@ -335,3 +335,36 @@
 - **Evidence:** The owner approved showing the holder's email in both views
   on 2026-11-28.
 - **Confirmed:** 2026-11-28
+
+## D-035 · Remind residents 15 minutes before laundry use ends
+- **Status:** approved
+- **Rule:** Send one in-app reminder to the Reservation holder 15 minutes
+  before use ends and deliver it through Web Push to opted-in devices. Use the
+  end of use before handover, or 20:00 for a closing block without handover.
+  The Reservation must be in its usage interval on equipment available for
+  that cycle. Exclude cancelled Reservations, early finishes, cycles shorter
+  than 15 minutes, and Reservations created after the reminder was due.
+  After a worker restart, process an unsent reminder while use is still in
+  progress. Stop pending push delivery when use ends. Remove expired push
+  subscriptions through the existing delivery flow. Email fallback is a
+  separate step.
+- **Why:** Residents have time to collect their laundry and free the equipment.
+- **Evidence:** The owner requested the 15-minute Web Push reminder in
+  [Issue #14](https://github.com/AlexBarac7/app-camin/issues/14) and approved
+  implementing push and the in-app notice first.
+- **Confirmed:** 2026-11-28
+
+## D-036 · Send the end-of-use reminder by email without a registered push device
+- **Status:** approved
+- **Rule:** When scheduling the D-035 reminder, select email if the
+  Reservation holder has zero registered Web Push subscriptions. Send the
+  same reminder to the account's email address through configured SMTP.
+  The notice remains available in the app. Remove expired subscriptions
+  through the existing Web Push flow. Their removal affects future reminders.
+  Stop pending email delivery when use ends, including on cancellation or
+  early finish. Retry an explicit temporary SMTP rejection while use continues.
+- **Why:** Residents without Web Push can receive the end-of-use reminder.
+- **Evidence:** The owner confirmed email only when no push subscription is
+  registered at the time of the reminder for
+  [Issue #14](https://github.com/AlexBarac7/app-camin/issues/14).
+- **Confirmed:** 2026-11-28

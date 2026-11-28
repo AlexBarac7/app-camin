@@ -32,6 +32,7 @@ export function createAuthMailer({ from, ...smtp }) {
   });
   async function send(to, { subject, heading, intro, action, expiry }, link) {
     const details = link ? [action + ': ' + link, expiry] : [];
+    const introHtml = intro.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
     const actionHtml = link ? `
           <p style="margin:24px 0"><a href="${link}" style="display:inline-block;padding:12px 20px;border-radius:8px;background:#0d4840;color:#ffffff;font-weight:bold;text-decoration:none">${action}</a></p>
           <p>${expiry}</p>` : '';
@@ -45,7 +46,7 @@ export function createAuthMailer({ from, ...smtp }) {
         <div style="max-width:520px;margin:24px auto;padding:28px;background:#ffffff;border-radius:16px">
           <p style="font-weight:bold;color:#0d4840">${appName}</p>
           <h1 style="margin:0 0 16px;font-size:28px">${heading}</h1>
-          <p>${intro}</p>${actionHtml}
+          <p>${introHtml}</p>${actionHtml}
           <p>Cu bine,<br>${appName}</p>
         </div>
       </body></html>`,
@@ -56,5 +57,10 @@ export function createAuthMailer({ from, ...smtp }) {
     sendInvitation: (to, link) => send(to, invitation, link),
     sendPasswordReset: (to, link) => send(to, passwordReset, link),
     sendAccessRejection: to => send(to, accessRejection),
+    sendEndReminder: (to, message) => send(to, {
+      subject: 'Utilizarea la spălătorie se încheie în curând · ' + appName,
+      heading: 'Se apropie finalul rezervării',
+      intro: message,
+    }),
   };
 }

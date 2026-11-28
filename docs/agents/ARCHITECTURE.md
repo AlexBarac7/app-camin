@@ -124,3 +124,13 @@ and start notifications are unique per Reservation and kind.
 Migration 020 adds operator strike notices to the inbox. Each new strike and
 its recipient notices are committed together. The admin history accepts an
 exact Reservation ID and applies the same role checks as the history list.
+
+Migration 024 records the creation time of new Reservations. The laundry
+worker schedules the end-of-use reminder from `use_ends_at` under the
+equipment lock. The worker creates one inbox notice and its push jobs in
+the same transaction. Pending push jobs expire when the usage interval ends.
+
+Migration 025 gives an end-of-use notice one email job when the recipient has
+zero registered push subscriptions. The job resolves the account address at
+dispatch and claims the attempt before contacting SMTP. An explicit temporary
+SMTP rejection can schedule another attempt before use ends.

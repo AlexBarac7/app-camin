@@ -4,6 +4,36 @@ This journal records the owner's requests, the assistant's work, and the checks 
 It adapts the Graffino session journal to the project's base setup.
 Add new entries at the top, in reverse chronological order.
 
+## 2026-11-28 · Laundry end-of-use reminder and email fallback
+
+**Model:** GPT-6 (Codex).
+
+The owner approved [Issue #14](https://github.com/AlexBarac7/app-camin/issues/14)
+and the rules in D-035 and D-036. The laundry worker schedules one in-app
+notice 15 minutes before use ends. The usual handover starts after use ends.
+For a closing block with use until 20:00, the reminder is due at 19:45.
+Cancelled Reservations, early finishes, cycles shorter than 15 minutes and
+late bookings are excluded. The notice tells the resident that at most
+15 minutes remain and asks them to prepare to free the equipment.
+
+At scheduling time, the worker selects Web Push for registered devices or
+email to the account address for residents with zero subscriptions. When the
+push provider rejects an expired subscription, the app removes it for future reminders. Migrations
+024 and 025 add the reminder and its email job and were applied locally.
+Email uses the existing SMTP transport. An explicit temporary SMTP rejection
+can be retried while the Reservation is still in use. An ambiguous result is
+left closed to avoid a duplicate send.
+
+The first integration runs reproduced a missing reminder and then a missing
+email job. The passing regressions cover the handover and closing deadlines,
+late and short bookings, cancellation, early finish, repeat worker runs and
+channel selection. The backend tests, all three PostgreSQL suites, frontend
+build, ledger lint and diff check passed. A Mailpit test produced one email
+with the same text as the in-app notice. The owner confirmed a push on a
+physical phone with the app closed and an email delivered to a real mailbox.
+The Romanian guide explains the timing, delivery channels and exceptions
+under Notificări.
+
 ## 2026-11-28 · Prevent overlapping bookings when accepting laundry offers
 
 **Model:** GPT-6 (Codex).

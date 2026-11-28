@@ -34,6 +34,8 @@
 - D-032 · Cancel only reservations starting during a laundry suspension · [Laundry decisions](decisions/laundry-decisions.md)
 - D-033 · Show each resident their strike count and notify them of corrections · [Laundry decisions](decisions/laundry-decisions.md)
 - D-034 · Show authorized operators whose reservation received a strike · [Laundry decisions](decisions/laundry-decisions.md)
+- D-035 · Remind residents 15 minutes before laundry use ends · [Laundry decisions](decisions/laundry-decisions.md)
+- D-036 · Send the end-of-use reminder by email without a registered push device · [Laundry decisions](decisions/laundry-decisions.md)
 
 ---
 

@@ -496,9 +496,25 @@ correct a strike with a reason under **Rezervări**. A correction that lifts
 the suspension allows new Reservations. The cancellations stay in history.
 [Issue #13](https://github.com/AlexBarac7/app-camin/issues/13)
 
+## End-of-use reminder
+
+An eligible Reservation receives a notice 15 minutes before use ends.
+Devices subscribed under **Notificări** also receive Web Push. When the account
+has no registered device, the backend sends the same reminder by email if SMTP
+is configured. The usual 10-minute handover starts after use ends. A closing
+block without handover ends at 20:00 and the reminder is due at 19:45. Apply
+migrations 024 and 025 before running the updated backend.
+
+For the phone check, follow [Web Push](#web-push), book an eligible test
+Reservation, confirm its start, and close the app. Check that the reminder
+arrives once and opens the Reservation in the calendar.
+[Issue #14](https://github.com/AlexBarac7/app-camin/issues/14)
+
+For an email check, use [Mailpit](#test-invitation-email-locally) with a test
+account that has no registered push devices and check for one matching email
+and one in-app notice.
+
 ## Roadmap
-- Add the reminder 15 minutes before use ends. Add email fallback in a later stage.
-  [Project brief](CONTEXT.md) · [Issue #14](https://github.com/AlexBarac7/app-camin/issues/14)
 - Define rolling fair-use quotas and configurable resource rules, including
   quiet hours and approved exceptions. Test the quota window, cancellations
   and concurrent requests. [Issue #15](https://github.com/AlexBarac7/app-camin/issues/15)

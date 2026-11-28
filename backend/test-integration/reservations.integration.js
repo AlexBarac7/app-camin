@@ -1135,5 +1135,144 @@ test('authenticated laundry reservations on disposable PostgreSQL', async t => {
     assert.equal(formerOperatorAlerts.length, missed.length);
     assert.ok(formerOperatorAlerts.every(item => !Object.hasOwn(item, 'residentEmail')));
     assert.equal((await send(target, 'GET', 0)).status, 403);
+
+    await t.test('the end-of-use reminder uses the handover boundary and sends once', async () => {
+      const { rows: [reminderMachine] } = await db.query(`
+        INSERT INTO laundry_machines (name, location, room, type, label, technical_status)
+        VALUES ('Reminder washer', 'Test location', '1', 'washer', 'REMINDER', 'working') RETURNING id`);
+      const reservationPath = '/api/laundry-machines/' + reminderMachine.id + '/reservations';
+      const endNotices = async id => (await noticesFor(id)).filter(item => item.kind === 'reservation-end-reminder');
+      const endPushes = id => pushes.filter(item => item.path?.endsWith('#rezervare-' + id));
+      const add = (start, minutes) => create(start, minutes, reminderMachine.id);
+      const start = id => send(reservationPath + '/' + id + '/confirm', 'POST');
+      const regular = await add(490, 30);
+      clock = at(490);
+      assert.equal((await start(regular)).status, 204);
+      clock = new Date(Date.parse(at(505)) - 1).toISOString();
+      await tick();
+      assert.deepEqual(await endNotices(regular), []);
+      clock = at(505);
+      await Promise.all([tick(), tick()]);
+      await tick();
+      const reminder = await endNotices(regular);
+      assert.deepEqual(reminder.map(item => item.createdAt), [at(505)]);
+      assert.equal(reminder[0].message,
+        'Mai ai cel mult 15 minute până la finalul utilizării. Pregătește-te să eliberezi echipamentul.');
+      assert.ok(!(await inbox(0)).items.some(item => item.id === reminder[0].id));
+      await dispatch();
+      await dispatch();
+      assert.deepEqual(endPushes(regular).map(item => [item.id, item.ttl, item.message]),
+        [[reminder[0].id, 900, reminder[0].message]]);
+
+      const cancelled = await add(560, 20);
+      assert.equal((await send(reservationPath + '/' + cancelled, 'DELETE')).status, 204);
+      const early = await add(530, 30);
+      clock = at(530);
+      assert.equal((await start(early)).status, 204);
+      clock = at(540);
+      assert.equal((await send(reservationPath + '/' + early + '/finish', 'POST')).status, 204);
+      clock = at(545);
+      await tick();
+      assert.deepEqual(await endNotices(early), []);
+      const late = await add(550, 20);
+      await db.query('UPDATE laundry_reservations SET created_at = $2 WHERE id = $1', [late, at(556)]);
+      clock = at(556);
+      assert.equal((await start(late)).status, 204);
+      await tick();
+      const short = await create(570, 5, otherMachine.id);
+      clock = at(570);
+      await tick();
+      for (const id of [cancelled, late, short]) assert.deepEqual(await endNotices(id), []);
+
+      const closingResponse = await send(reservationPath, 'POST', 1, { startsAt: at(580), endsAt: at(600) });
+      assert.equal(closingResponse.status, 201);
+      const { id: closing, useEndsAt } = await closingResponse.json();
+      assert.equal(useEndsAt, at(600));
+      clock = at(580);
+      assert.equal((await start(closing)).status, 204);
+      clock = new Date(Date.parse(at(585)) - 1).toISOString();
+      await tick();
+      assert.deepEqual(await endNotices(closing), []);
+      clock = at(585);
+      await tick();
+      assert.deepEqual((await endNotices(closing)).map(item => item.createdAt), [at(585)]);
+      clock = at(600);
+      await dispatch();
+      assert.deepEqual(endPushes(closing), []);
+    });
+
+    await t.test('the end-of-use reminder falls back to email only without a push subscription', async () => {
+      const { dispatchEndReminderEmails } = await import('../src/modules/notifications/end-reminder-email.js');
+      const emails = [];
+      const dispatchEmail = (sender = async (to, message) => emails.push({ to, message })) =>
+        dispatchEndReminderEmails(database, sender);
+
+      const { rows: [emailMachine] } = await db.query(`
+        INSERT INTO laundry_machines (name, location, room, type, label, technical_status)
+        VALUES ('Email washer', 'Test location', '1', 'washer', 'EMAIL', 'working') RETURNING id`);
+      const reservationPath = '/api/laundry-machines/' + emailMachine.id + '/reservations/';
+      const dueReminder = async (offset, minutes = 30) => {
+        const id = await create(offset, minutes, emailMachine.id);
+        clock = at(offset);
+        assert.equal((await send(reservationPath + id + '/confirm', 'POST')).status, 204);
+        clock = at(offset + minutes - 15);
+        await Promise.all([tick(), tick()]);
+        await tick();
+        return id;
+      };
+
+      await dueReminder(50);
+      await dispatchEmail();
+      assert.deepEqual(emails, [], 'a registered push device rules out email');
+      await db.query('DELETE FROM push_subscriptions WHERE user_id = $1', [resident.id]);
+      await tick();
+      await dispatchEmail();
+      assert.deepEqual(emails, [], 'removing a subscription does not change the selected channel');
+
+      const regular = await dueReminder(100);
+      const notices = (await noticesFor(regular)).filter(item => item.kind === 'reservation-end-reminder');
+      assert.equal(notices.length, 1);
+      assert.equal((await db.query('SELECT count(*) FROM push_deliveries WHERE notification_id = $1',
+        [notices[0].id])).rows[0].count, '0');
+      await Promise.all([dispatchEmail(), dispatchEmail()]);
+      await tick();
+      await dispatchEmail();
+      assert.deepEqual(emails, [{ to: resident.email, message: notices[0].message }]);
+
+      const cancelled = await dueReminder(150);
+      await db.query('UPDATE laundry_reservations SET cancelled_at = $2 WHERE id = $1', [cancelled, clock]);
+      await dispatchEmail();
+      const finished = await dueReminder(200);
+      assert.equal((await send(reservationPath + finished + '/finish', 'POST')).status, 204);
+      await dispatchEmail();
+      await dueReminder(250);
+      clock = at(280);
+      await dispatchEmail();
+      assert.equal(emails.length, 1);
+
+      await dueReminder(300);
+      let attempts = 0;
+      await dispatchEmail(async () => {
+        attempts++;
+        throw Object.assign(new Error('temporary SMTP rejection'), { responseCode: 451 });
+      });
+      await dispatchEmail();
+      assert.equal(attempts, 1);
+      assert.equal(emails.length, 1);
+      clock = at(316);
+      await dispatchEmail();
+      await dispatchEmail();
+      assert.equal(emails.length, 2);
+
+      await dueReminder(350);
+      await dispatchEmail(async () => {
+        attempts++;
+        throw new Error('SMTP result unknown');
+      });
+      clock = at(366);
+      await dispatchEmail();
+      assert.equal(attempts, 2);
+      assert.equal(emails.length, 2);
+    });
   });
 });
